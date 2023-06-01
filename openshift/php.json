@@ -4,36 +4,17 @@
   "labels": {
     "template": "${APP_NAME}"
   },
-  "message": "The following Site has been created in your project: ${APP_NAME}.\nDB: ${DB_NAME}.\n\n  URL: ${SITE_URL}",
+  "message": "${APP_NAME}",
   "metadata": {
     "annotations": {
-      "description": "PHP for Moodle application",
+      "description": "${APP_NAME} for Moodle",
       "openshift.io/display-name": "${APP_NAME}",
-      "openshift.io/long-description": "This template provides a Moodle buuld consisting of pods for: nginx, php, mysql, redis.",
+      "openshift.io/long-description": "This template provides a Moodle build consisting of pods for: nginx, php, mysql, redis.",
       "tags": "application,${APP_NAME}"
     },
     "name": "${APP_NAME}"
   },
   "objects": [
-    {
-			"apiVersion": "v1",
-			"kind": "Secret",
-			"metadata": {
-				"annotations": {
-					"template.openshift.io/expose-database_name": "{.data['database-name']}",
-					"template.openshift.io/expose-password": "{.data['database-password']}",
-					"template.openshift.io/expose-root_password": "{.data['database-root-password']}",
-					"template.openshift.io/expose-username": "{.data['database-user']}"
-				},
-				"name": "moodle-secrets"
-			},
-			"stringData": {
-				"database-name": "${DB_NAME}",
-				"database-password": "${DB_PASSWORD}",
-				"database-root-password": "${DB_ROOT_PASSWORD}",
-				"database-user": "${DB_USER}"
-			}
-    },
     {
       "apiVersion": "v1",
       "kind": "Service",
@@ -54,13 +35,47 @@
     },
     {
       "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "${DATA_MOUNT_PVC_NAME}"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "${VOLUME_SIZE}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "${APP_DATA_MOUNT_PVC_NAME}"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "${VOLUME_SIZE}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
       "kind": "DeploymentConfig",
       "metadata": {
         "annotations": {
           "template.alpha.openshift.io/wait-for-ready": "true"
         },
         "name": "${APP_NAME}",
-        "namespace": "${BUILD_NAMESPACE}",
+        "namespace": "${DEPLOY_NAMESPACE}",
         "labels": {
           "service": "${APP_NAME}"
         }
@@ -100,23 +115,43 @@
                 ],
                 "volumeMounts": [
                   {
-                    "mountPath": "${DATA_MOUNT_PATH}",
+                    "mountPath": "${MOODLE_DATA_PATH}",
                     "name": "${DATA_MOUNT_PVC_NAME}"
+                  },
+                  {
+                    "mountPath": "${MOODLE_APP_DATA_PATH}",
+                    "name": "${APP_DATA_MOUNT_PVC_NAME}"
                   },
                   {
                     "name": "env-data",
                     "mountPath": "/.env",
                     "subPath": ".env"
+                  },
+                  {
+                    "name": "php-config",
+                    "mountPath": "/php/conf.d/moodle-php.ini",
+                    "subPath": "moodle-php.ini"
                   }
                 ],
+                "lifecycle": {
+                  "postStart": {
+                    "exec": {
+                      "command": [
+                        "/bin/sh",
+                        "-c",
+                        "cp -ru /app/public/. /var/www/html 2>/dev/null || :"
+                      ]
+                    }
+                  }
+                },
                 "resources": {
                   "limits": {
                     "memory": "${MEMORY_LIMIT}",
-                    "cpu": "1500m"
+                    "cpu": "${CPU_LIMIT}"
                   },
                   "requests": {
-                    "memory": "1Gi",
-                    "cpu": "1000m"
+                    "memory": "${MEMORY_REQUEST}",
+                    "cpu": "${CPU_REQUEST}"
                   }
                 },
                 "env": [
@@ -127,97 +162,6 @@
                   {
                     "name": "SITE_URL",
                     "value": "${SITE_URL}"
-                  },
-                  {
-                    "name": "MEMORY_LIMIT",
-                    "value": "${MEMORY_LIMIT}"
-                  },
-                  {
-                    "name": "MOODLE_DATA_PATH",
-                    "value": "${MOODLE_DATA_PATH}"
-                  },
-                  {
-                    "name": "DB_HOST",
-                    "value": "${DB_HOST}"
-                  },
-		              {
-                    "name": "DB_SECONDARY_NAME",
-                    "value": "${DB_SECONDARY_NAME}"
-                  },
-
-                  {
-                    "name": "DB_PORT",
-                    "value": "${DB_PORT}"
-                  },
-                  {
-                    "name": "BUILD_NAMESPACE",
-                    "value": "${BUILD_NAMESPACE}"
-                  },
-                  {
-                    "name": "DB_NAME",
-                    "value": "${DB_NAME}"
-                  },
-                  {
-                    "name": "DB_USER",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "name": "moodle-secrets",
-                        "key": "database-user"
-                      }
-                    }
-                  },
-                  {
-                    "name": "DB_PASSWORD",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "name": "moodle-secrets",
-                        "key": "database-password"
-                      }
-                    }
-                  },
-                  {
-                    "name": "UPSTREAM_URI",
-                    "value": "http://moodle:8080"
-                  },
-                  {
-                    "name": "HOST_NAME",
-                    "value": "moodle-950003-dev.apps.silver.devops.gov.bc.ca"
-                  },
-                  {
-                    "name": "MYSQL_USER",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "key": "database-user",
-                        "name": "moodle-secrets"
-                      }
-                    }
-                  },
-                  {
-                    "name": "MYSQL_PASSWORD",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "key": "database-password",
-                        "name": "moodle-secrets"
-                      }
-                    }
-                  },
-                  {
-                    "name": "MYSQL_ROOT_PASSWORD",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "key": "database-root-password",
-                        "name": "moodle-secrets"
-                      }
-                    }
-                  },
-                  {
-                    "name": "MYSQL_DATABASE",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "key": "database-name",
-                        "name": "moodle-secrets"
-                      }
-                    }
                   }
                 ]
               }
@@ -227,6 +171,12 @@
                 "name": "${DATA_MOUNT_PVC_NAME}",
                 "persistentVolumeClaim": {
                   "claimName": "${DATA_MOUNT_PVC_NAME}"
+                }
+              },
+              {
+                "name": "${APP_DATA_MOUNT_PVC_NAME}",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_DATA_MOUNT_PVC_NAME}"
                 }
               },
               {
@@ -247,6 +197,13 @@
                     }
                   ]
                 }
+              },
+              {
+                "name": "php-config",
+                "configMap": {
+                  "name": "php-config",
+                  "defaultMode": 420
+                }
               }
             ]
           }
@@ -263,29 +220,32 @@
   ],
   "parameters": [
     {
-      "description": "Application name.",
+      "description": "Application name",
       "displayName": "App Name",
       "name": "APP_NAME",
-      "required": true,
-      "value": "${APP_NAME}"
+      "value": "Moodle"
+    },
+    {
+      "description": "Site URL",
+      "displayName": "URL",
+      "name": "SITE_URL",
+      "value": "https://moodle-950003-prod.apps.silver.devops.gov.bc.ca/"
     },
     {
       "description": "Moodle data path.",
       "displayName": "Moodle Data Path",
       "name": "MOODLE_DATA_PATH",
-      "required": true,
-      "value": "/app/moodledata"
+      "value": "/var/moodledata"
     },
     {
-      "description": "Website URL.",
-      "displayName": "URL",
-      "name": "SITE_URL",
-      "required": true,
-      "value": "https://moodle-e66ac2-dev.apps.silver.devops.gov.bc.ca"
+      "description": "Moodle app data path.",
+      "displayName": "Moodle App Data Path",
+      "name": "MOODLE_APP_DATA_PATH",
+      "value": "/var/www/html"
     },
     {
-      "description": "Image stream tag",
-      "displayName": "Image Stream Tag",
+      "description": "Image stream",
+      "displayName": "Image Stream",
       "required": true,
       "name": "IMAGE_STREAM"
     },
@@ -293,84 +253,73 @@
       "description": "Maximum amount of memory the container can use.",
       "displayName": "Memory Limit",
       "name": "MEMORY_LIMIT",
-      "required": true,
       "value": "1Gi"
     },
     {
       "description": "Maximum amount of memory the container can use.",
       "displayName": "Memory Request",
       "name": "MEMORY_REQUEST",
-      "required": true,
       "value": "1Gi"
     },
     {
-      "description": "Path where the persistent volume will be mounted",
-      "displayName": "Mount Path",
-      "name": "DATA_MOUNT_PATH",
-      "required": true,
-      "value": "/app"
+      "description": "Maximum CPU",
+      "displayName": "CPU Limit",
+      "name": "CPU_LIMIT",
+      "value": "1"
     },
     {
-      "description": "data PVC name",
+      "description": "Requested CPU",
+      "displayName": "CPU Request",
+      "name": "CPU_REQUEST",
+      "value": "0.5"
+    },
+    {
+      "description": "Moodle data. Saved user files, backups, etc.",
       "displayName": "Data PVC",
       "name": "DATA_MOUNT_PVC_NAME",
-      "required": true,
+      "value": "moodle-user-data"
+    },
+    {
+      "description": "Moodle app data. Shared between php, we and cron pods.",
+      "displayName": "Moodle App Data",
+      "name": "APP_DATA_MOUNT_PVC_NAME",
       "value": "moodle-app-data"
     },
     {
       "description": "Database host name.",
       "displayName": "DB Host",
       "name": "DB_HOST",
-      "required": true,
       "value": "mysql"
     },
     {
       "description": "Database secondary host name.",
       "displayName": "DB Secondary Host",
       "name": "DB_SECONDARY_NAME",
-      "required": true,
       "value": "mysql-read"
     },
     {
       "description": "Database Port opened for connections from other containers.",
       "displayName": "DB Port",
       "name": "DB_PORT",
-      "required": true,
       "value": "3306"
     },
     {
       "description": "The OpenShift Namespace where the ImageStream resides.",
       "displayName": "Namespace",
-      "name": "BUILD_NAMESPACE",
+      "name": "DEPLOY_NAMESPACE",
       "required": true
     },
     {
       "description": "Name of the MySQL database accessed.",
       "displayName": "MySQL Database Name",
       "name": "DB_NAME",
-      "required": true,
       "value": "moodle"
     },
     {
-      "description": "Username for MySQL user that will be used for accessing the database.",
-      "displayName": "MySQL Connection Username",
-      "name": "DB_USER",
-      "required": true,
-      "value": "moodle"
-    },
-    {
-      "description": "Password for the MySQL connection user.",
-      "displayName": "MySQL Connection Password",
-      "name": "DB_PASSWORD",
-      "required": true,
-      "value": ""
-    },
-    {
-      "description": "Root password for the MySQL connection user.",
-      "displayName": "MySQL Connection Password",
-      "name": "DB_ROOT_PASSWORD",
-      "required": true,
-      "value": ""
+      "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",
+      "displayName": "Moodle Volume Capacity",
+      "name": "VOLUME_SIZE",
+      "value": "5Gi"
     }
   ]
 }

@@ -54,13 +54,22 @@ objects:
       strategy:
         dockerStrategy:
           dockerfilePath: "${DOCKERFILE}"
+          buildArgs:
+          - name: "DB_HOST"
+            value: "${DB_HOST}"
+          - name: "DB_NAME"
+            value: "moodle"
+          - name: "DB_USER"
+            value: "moodle"
+          - name: "DB_PASSWORD"
+            value: "${DB_PASSWORD}"
         type: Docker
 parameters:
   - name: SUFFIX
   - name: SOURCE_CONTEXT_DIR
     value: .
   - name: DOCKERFILE
-    required: true
+    value: "Dockerfile"
   - name: SOURCE_REPOSITORY_URL
     value: https://github.com/bcgov/moodle-nginx.git
   - name: TAG
@@ -69,7 +78,7 @@ parameters:
   - name: BASE_IMAGE_NAME
     required: true
   - name: BASE_IMAGE_TAG
-    required: true
+    value: "prod"
   - name: CPU_LIMIT
     value: "1"
   - name: CPU_REQUEST
@@ -78,3 +87,7 @@ parameters:
     value: "2Gi"
   - name: MEMORY_REQUEST
     value: "128Mi"
+  - name: DB_HOST
+    value: "mariadb-sts-0.mariadb"
+  - name: DB_PASSWORD
+    value: "empty"

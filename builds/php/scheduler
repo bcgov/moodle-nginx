@@ -1,1 +1,1 @@
-* * * * * su -c '/usr/local/bin/php /app/public/admin/cli/cron.php >> /var/log/schedule.log 2>&1'
+* * * * * su -c '/usr/local/bin/php /var/www/html/admin/cli/cron.php >> /var/log/schedule.log 2>&1'

@@ -23,7 +23,7 @@ data:
   primary.sql: |
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';
     GRANT REPLICATION REPLICA ON *.* TO 'repluser'@'%';
-    CREATE DATABASE moodle;
+    CREATE DATABASE performance-db;
 
   secondary.sql: |
     # we have to know name of sts (`mariadb-sts`) and
@@ -124,17 +124,17 @@ spec:
         - name: MARIADB_DATABASE
           valueFrom:
             secretKeyRef:
-              name: moodle-secrets
+              name: mariadb-secrets
               key: database-name
         - name: MYSQL_USER
           valueFrom:
             secretKeyRef:
-              name: moodle-secrets
+              name: mariadb-secrets
               key: database-user
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: moodle-secrets
+              name: mariadb-secrets
               key: database-password
         - name: MYSQL_INITDB_SKIP_TZINFO
           value: "1"

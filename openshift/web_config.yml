@@ -19,7 +19,7 @@ objects:
       /etc/nginx/conf.d/default.conf: |-
         server {
           listen 8081 default_server;
-          root /app/public;
+          root /var/www/html;
 
           index index.php index.html index.htm;
 

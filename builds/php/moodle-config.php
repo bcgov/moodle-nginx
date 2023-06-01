@@ -9,7 +9,7 @@ unset($CFG);
 global $CFG;
 $CFG = new stdClass();
 
-$CFG->dbtype    = 'mysqli';
+$CFG->dbtype    = 'mariadb';
 $CFG->dblibrary = 'native';
 $CFG->dbhost    = 'DB_HOST';
 $CFG->dbname    = 'DB_NAME';
@@ -17,6 +17,7 @@ $CFG->dbuser    = 'DB_USER';
 $CFG->dbpass    = 'DB_PASSWORD';
 $CFG->moodleappdir    = 'MOODLE_APP_DIR';
 $CFG->prefix    = '';
+$CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
 $CFG->dboptions =  array (
   'dbpersist' => 0,
@@ -33,12 +34,12 @@ $CFG->dboptions =  array (
 //   'latency' => '2'
 // );
 
-$protocol = stripos($_SERVER['SERVER_PROTOCOL'], 'https') === 0 ? 'https://' : 'http://';
+$protocol = (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'https://' : 'http://';
 $moodle_dir = stripos($_SERVER['REQUEST_URI'], '/moodle') === 0 ? '/moodle' : ''; // for local dev in /moodle folder
 $requested_site_url = $protocol.$_SERVER['HTTP_HOST'].$moodle_dir;
 
 $CFG->wwwroot   = $requested_site_url;
-$CFG->dataroot  = '/vendor/moodle/moodledata/persistent';
+$CFG->dataroot  = '/var/moodledata';
 $CFG->admin     = 'admin';
 // $CFG->alternateloginurl  = (isset($_ENV['ALTERNATE_LOGIN_URL'])) ? $_ENV['ALTERNATE_LOGIN_URL'] : '';
 
@@ -47,6 +48,11 @@ $CFG->directorypermissions = 0777;
 $CFG->sslproxy = ( stristr($CFG->wwwroot, "gov.bc.ca") || stristr($CFG->wwwroot, "apps-crc.testing") ) ? true : false; // Only use in OCP environments
 
 $CFG->getremoteaddrconf = 0;
+
+if (isset($_REQUEST['debug'])) {
+  echo '<pre>',print_r($_SERVER),'</pre>';
+  echo '<pre>',print_r($CFG),'</pre>';
+}
 
 require_once(__DIR__ . '/lib/setup.php');
 

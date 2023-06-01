@@ -28,86 +28,6 @@ jobs:
           echo OC CLI Version: $(oc version)
           echo Git Branch name: ${{ github.ref_name }}
 
-  #Build the app
-
-  build:
-    name: Build APP
-    runs-on: ubuntu-latest
-    if: github.ref_name == 'dev' || github.ref_name  == 'test' || github.ref_name  == 'prod'
-    env:
-      BUILD_ID: ${{ github.event.number }}
-      BUILD_NAMESPACE: e66ac2-tools
-      BRANCH: ${{ github.ref_name }}
-      BUILD_TAG: ${{ github.ref_name }}
-      APP: moodle
-      DB_BACKUP_APP: db-backup
-    steps:
-      # Checkout the PR branch
-      - name: Print env
-        run: |
-          echo BUILD ID: $BUILD_ID
-          echo BUILD NAMESPACE: $BUILD_NAMESPACE
-          echo BRANCH: $BRANCH
-      - name: Checkout Target Branch
-        uses: actions/checkout@v1
-      # Log in to OpenShift.
-      # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
-      # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
-      - name: Log in to OpenShift
-        run: |
-          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
-
-      # Create Secrets
-      - name: Deploy Secrets
-        run: |
-          oc create secret generic moodle-secrets \
-            --from-literal=database-name=moodle \
-            --from-literal=database-user=moodle \
-            --from-literal=database-password=${{ secrets.DB_PASSWORD }} \
-            --from-literal=database-root-password=${{ secrets.DB_ROOT_PASSWORD }} \
-            || echo "Secrets already exists in $BUILD_NAMESPACE";
-
-      # Create Secrets
-      - name: Deploy Redis Caching
-        run: |
-          helm install redis bitnami/redis \
-          || echo "Redis already exists in $BUILD_NAMESPACE";
-
-      # Deploy Database
-      - name: Deploy MariaDB
-        working-directory: "./openshift"
-        run: |
-          oc create -f mariadb-sts-replication.yaml -n ${BUILD_NAMESPACE} \
-          || echo "MariaDB already exists in $BUILD_NAMESPACE";
-
-      # Build web deployment
-      - name: Build App images
-        working-directory: "./openshift"
-        run: |
-          test -n "${{BRANCH}}"
-          test -n "${{BUILD_NAMESPACE}}"
-          echo "BUILIDING ${{APP}} confifMap: web-config"
-          oc create configmap web-config \
-            --from-file=nginx.conf=../builds/web/nginx.conf
-          echo "BUILIDING ${{APP}} with tag: ${{BUILD_TAG}}"
-          oc -n ${BUILD_NAMESPACE} process -f docker-build.yml \
-            -p TAG=${BUILD_TAG} \
-            -p SOURCE_REPOSITORY_REF=${BRANCH} \
-            -p BASE_IMAGE_NAME="ngnix" \
-            -p BASE_IMAGE_TAG="8.0-fpm" \
-            -p SITE_URL="https://moodle-e66ac2-${BUILD_TAG}.apps.silver.devops.gov.bc.ca" \
-            -p BASE_IMAGE_REPO="aro.jfrog.io/moodle/" \
-            -p GITHUB_AUTH_TOKEN=${{ secrets.AUTH_TOKEN }} \
-            -p DB_HOST="mysql.mysql" \
-            -p DB_PASSWORD="${{ secrets.DB_PASSWORD_ESCAPED }}" \
-            -p DB_USER="moodle" \
-            -p DB_NAME="moodle" \
-            -p SOURCE_CONTEXT_DIR=. \
-            -p NAME=${APP} | oc -n ${BUILD_NAMESPACE} apply -f - \
-            || echo "${{APP}} already exists in $BUILD_NAMESPACE";
-          oc -n ${BUILD_NAMESPACE} start-build bc/${APP} --no-cache --wait \
-            || echo "bc/${{APP}} already exists in $BUILD_NAMESPACE";
-
   # Deploy App
   deploy:
     name: Deploy
@@ -115,17 +35,17 @@ jobs:
     env:
       BUILD_ID: ${{ github.event.number }}
       CRON_PASSWORD: ${{ secrets.CRON_PASSWORD }}
-      NAMESPACE: e66ac2-${{ github.ref_name }}
+      DEPLOY_NAMESPACE: e66ac2-${{ github.ref_name }}
       BUILD_NAMESPACE: e66ac2-tools
       BRANCH: ${{ github.ref_name }}
       APP: moodle
       APP_HOST: moodle-e66ac2-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
-      DB_HOST: mysql
-      DB_HOST_2: mysql-read
-      DB_BACKUP_APP: db-backup
       DB_NAME: moodle
-    needs:
-      - build
+      DB_USER: moodle
+      WEB_APP_NAME: web
+      PHP_APP_NAME: php
+      DB_APP_NAME: database
+      CACHE_APP_NAME: redis
     steps:
       - name: Checkout Target Branch
         uses: actions/checkout@v1
@@ -135,78 +55,39 @@ jobs:
        # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
       - name: Log in to OpenShift
         run: |
-          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
+          oc login --token=${{ secrets.AUTH_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
 
-      - name: Deploy Web Service
-        run: |
-          test -n "${NAMESPACE}"
-          test -n "${BUILD_NAMESPACE}"
-          test -n "${BRANCH}"
-          echo "Current namespace is ${NAMESPACE}"
-          oc -n ${NAMESPACE} process -f openshift/web.json \
-                -p APP_NAME=web \
-                -p SITE_URL=${APP_HOST} \
-                -p DB_HOST=${DB_HOST} \
-                -p DB_HOST_2=${DB_HOST_2} \
-                -p MEMORY_LIMIT=512Mi \
-                -p MEMORY_REQUEST=128Mi \
-                -p CPU_LIMIT=1 \
-                -p CPU_REQUEST=0.5 \
-                -p PROJECT_NAMESPACE=${NAMESPACE} \
-                -p VOLUME_SIZE=10Gi \
-                -p HTTP_PORT=8080 \
-                -p APACHE_DOCUMENT_ROOT="/app/public" \
-                -p SITE_NAME=Moodle \
-                -p MOODLE_DATA_PATH="/app/moodledata" \
-                -p MOODLE_DATA_MOUNT_PATH="/app" \
-                -p BUILD_NAMESPACE="${BUILD_NAMESPACE}" \
-                -p IMAGE_STREAM_TAG="moodle:${BRANCH}" \
-                -p GITHUB_AUTH_TOKEN="${{ secrets.AUTH_TOKEN }}" \
-                || echo "Web already exists in $BUILD_NAMESPACE";
-          oc -n ${NAMESPACE} apply -f - \
-            || echo "Web cannot be applied in $BUILD_NAMESPACE";
-          oc rollout latest dc/moodle -n ${NAMESPACE} \
-            || echo "Web rollout cannot be completed in $BUILD_NAMESPACE";
-          # Check deployment rollout status every 10 seconds (max 10 minutes) until complete.
-          ATTEMPTS=0
-          ROLLOUT_STATUS_CMD="oc rollout status dc/web -n ${NAMESPACE}"
-          until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 60 ]; do
-            $ROLLOUT_STATUS_CMD
-            ATTEMPTS=$((attempts + 1))
-            sleep 10
-          done
-
+      # Build PHP-FPM (Moodle)
       - name: Deploy PHP-FPM-Moodle
         run: |
-          test -n "${NAMESPACE}"
+          test -n "${DEPLOY_NAMESPACE}"
           test -n "${BUILD_NAMESPACE}"
           test -n "${BRANCH}"
-          echo "Current namespace is ${NAMESPACE}"
-          oc -n ${NAMESPACE} process -f openshift/php.json \
-                -p APP_NAME=php \
+          echo "Current namespace is ${DEPLOY_NAMESPACE}"
+          oc -n ${DEPLOY_NAMESPACE} process -f openshift/php.json \
+                -p APP_NAME=${PHP_APP_NAME} \
                 -p SITE_URL=${APP_HOST} \
                 -p MEMORY_LIMIT=1Gi \
                 -p MEMORY_REQUEST=128Mi \
                 -p CPU_LIMIT=1 \
                 -p CPU_REQUEST=0.2 \
-                -p PROJECT_NAMESPACE=${NAMESPACE} \
+                -p PROJECT_NAMESPACE=${DEPLOY_NAMESPACE} \
                 -p VOLUME_SIZE=10Gi \
                 -p HTTP_PORT=8080 \
                 -p DB_PORT=3306 \
                 -p APACHE_DOCUMENT_ROOT="/app/public" \
-                -p SITE_NAME=Moodle \
                 -p MOODLE_DATA_PATH="/app/moodledata" \
                 -p DATA_MOUNT_PATH="/app" \
                 -p BUILD_NAMESPACE="${BUILD_NAMESPACE}" \
                 -p IMAGE_STREAM_TAG="moodle:${BRANCH}" \
                 || echo "PHP already exists in $BUILD_NAMESPACE";
-          oc -n ${NAMESPACE} apply -f - \
-            || echo "PHP template cannot be applied in $BUILD_NAMESPACE";
-          oc rollout latest dc/php -n ${NAMESPACE} \
-            || echo "PHP rollout failed in $BUILD_NAMESPACE";
+          oc -n ${DEPLOY_NAMESPACE} apply -f - \
+            || echo "${PHP_APP_NAME} template cannot be applied in $BUILD_NAMESPACE";
+          oc rollout latest dc/${PHP_APP_NAME} -n ${DEPLOY_NAMESPACE} \
+            || echo "${PHP_APP_NAME} rollout failed in $DEPLOY_NAMESPACE";
           # Check deployment rollout status every 10 seconds (max 10 minutes) until complete.
           ATTEMPTS=0
-          ROLLOUT_STATUS_CMD="oc rollout status dc/php -n ${NAMESPACE}"
+          ROLLOUT_STATUS_CMD="oc rollout status dc/${PHP_APP_NAME} -n ${DEPLOY_NAMESPACE}"
           until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 60 ]; do
             $ROLLOUT_STATUS_CMD
             ATTEMPTS=$((attempts + 1))

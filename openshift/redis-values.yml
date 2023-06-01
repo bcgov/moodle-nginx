@@ -42,7 +42,7 @@ image:
 ## Cluster settings
 cluster:
   enabled: true
-  slaveCount: 2
+  slaveCount: 1
 
 ## Use redis sentinel in the redis pod. This will disable the master and slave services and
 ## create one redis service with ports to the sentinel and the redis instances
@@ -182,8 +182,8 @@ rbac:
 ## Redis pod Security Context
 securityContext:
   enabled: true
-  fsGroup: 1001
-  runAsUser: 1001
+  #fsGroup: 1001
+  #runAsUser: 1001
   ## sysctl settings for master and slave pods
   ##
   ## Uncomment the setting below to increase the net.core.somaxconn value
@@ -226,7 +226,7 @@ master:
   ##
   ## Can be used to specify command line arguments, for example:
   ##
-  command: "/run.sh"
+  command: ["/run.sh"]
   ## Additional Redis configuration for the master nodes
   ## ref: https://redis.io/topics/config
   ##
@@ -334,7 +334,7 @@ master:
     # storageClass: "-"
     accessModes:
     - ReadWriteOnce
-    size: 8Gi
+    size: 2Gi
     ## Persistent Volume selectors
     ## https://kubernetes.io/docs/concepts/storage/persistent-volumes/#selector
     matchLabels: {}
@@ -381,7 +381,7 @@ slave:
   port: 6379
   ## Can be used to specify command line arguments, for example:
   ##
-  command: "/run.sh"
+  command: ["/run.sh"]
   ## Additional Redis configuration for the slave nodes
   ## ref: https://redis.io/topics/config
   ##
@@ -458,7 +458,7 @@ slave:
     # storageClass: "-"
     accessModes:
     - ReadWriteOnce
-    size: 4Gi
+    size: 2Gi
     ## Persistent Volume selectors
     ## https://kubernetes.io/docs/concepts/storage/persistent-volumes/#selector
     matchLabels: {}

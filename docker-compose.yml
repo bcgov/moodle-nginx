@@ -7,17 +7,21 @@ services:
         volumes:
             - ./builds/web/nginx.conf:/etc/nginx/conf.d/default.conf:delegated
             - ./app:/app:delegated
+            - ./var/www/html:/var/www/html:delegated
     php:
         build:
             context: ./builds/php
         volumes:
             - ./app:/app:delegated
+            - ./var/www/html:/var/www/html:delegated
+        # command: bash -c "cp -ru /app/public/. /var/www/html 2>/dev/null || : && chown -R www-data:www-data /var/www/html/config.php"
     cron:
         build:
             context: .
             dockerfile: ./builds/cron/Dockerfile
         volumes:
             - ./app:/app:delegated
+            - ./var/www/html:/var/www/html:delegated
     mysql:
         image: mariadb:10.5
         environment:

@@ -2,70 +2,19 @@
   "apiVersion": "template.openshift.io/v1",
   "kind": "Template",
   "labels": {
-    "template": "${APP_NAME}"
+    "template": "${POD_NAME}"
   },
-  "message": "The following Site has been created in your project: ${APP_NAME}.\nDB: ${DB_NAME}.\n\n  URL: ${SITE_URL}",
+  "message": "Moodle cron job",
   "metadata": {
     "annotations": {
-      "description": "Moodle application",
+      "description": "Moodle cron job runner",
       "openshift.io/display-name": "Moodle",
       "openshift.io/long-description": "This template provides a Moodle buuld consisting of pods for: nginx, php, mysql, redis.",
-      "tags": "application,${APP_NAME}"
+      "tags": "application,${POD_NAME}"
     },
-    "name": "${APP_NAME}"
+    "name": "${POD_NAME}"
   },
   "objects": [
-    {
-      "apiVersion": "v1",
-      "kind": "Service",
-      "metadata": {
-        "name": "${APP_NAME}"
-      },
-      "spec": {
-        "ports": [
-          {
-            "name": "${APP_NAME}",
-            "port": 8081
-          }
-        ],
-        "selector": {
-          "deploymentconfig": "${APP_NAME}"
-        }
-      }
-    },
-    {
-			"apiVersion": "v1",
-			"kind": "Route",
-			"metadata": {
-        "name": "${APP_NAME}",
-        "namespace": "${PROJECT_NAMESPACE}",
-        "labels": {
-          "service": "${APP_NAME}"
-        }
-      },
-      "spec": {
-        "host": "${SITE_URL}",
-        "to": {
-          "kind": "Service",
-          "name": "moodle",
-          "weight": 100
-        },
-        "conditions": [
-          {
-            "type": "Admitted",
-            "status": "True"
-          }
-        ],
-        "tls": {
-          "termination": "edge",
-          "insecureEdgeTerminationPolicy": "Redirect"
-        },
-        "port": {
-          "targetPort": "8081"
-        },
-        "wildcardPolicy": "None"
-      }
-		},
     {
       "apiVersion": "v1",
       "kind": "PersistentVolumeClaim",
@@ -90,7 +39,7 @@
       "kind": "PersistentVolumeClaim",
       "apiVersion": "v1",
       "metadata": {
-        "name": "file-backup-data"
+        "name": "${BACKUP_DATA_MOUNT_PVC_NAME}"
       },
       "spec": {
         "accessModes": [
@@ -98,7 +47,7 @@
         ],
         "resources": {
           "requests": {
-            "storage": "25Gi"
+            "storage": "5Gi"
           }
         },
         "storageClassName": "netapp-file-backup"
@@ -111,16 +60,16 @@
         "annotations": {
           "template.alpha.openshift.io/wait-for-ready": "true"
         },
-        "name": "${APP_NAME}",
-        "namespace": "${PROJECT_NAMESPACE}",
+        "name": "${POD_NAME}",
+        "namespace": "${DEPLOY_NAMESPACE}",
         "labels": {
-          "service": "${APP_NAME}"
+          "service": "${POD_NAME}"
         }
       },
       "spec": {
         "replicas": 1,
         "selector": {
-          "deploymentconfig": "${APP_NAME}"
+          "deploymentconfig": "${POD_NAME}"
         },
         "strategy": {
           "type": "Rolling",
@@ -135,41 +84,28 @@
         "template": {
           "metadata": {
             "labels": {
-              "deploymentconfig": "${APP_NAME}"
+              "deploymentconfig": "${POD_NAME}"
             }
           },
           "spec": {
             "containers": [
               {
-                "image": "${IMAGE_REGISTRY}/${BUILD_NAMESPACE}/${IMAGE_STREAM_TAG}",
-                "name": "${APP_NAME}",
+                "image": "${IMAGE_STREAM}",
+                "name": "${POD_NAME}",
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
-                "livenessProbe": {
-                  "httpGet": {
-                    "path": "https://${SITE_URL}",
-                    "port": 8080,
-                    "scheme": "HTTP"
-                  },
-                  "initialDelaySeconds": 90,
-                  "periodSeconds": 60,
-                  "timeoutSeconds": 180,
-                  "successThreshold": 1,
-                  "failureThreshold": 3
-                },
-                "ports": [
-                  {
-                    "containerPort": 8080
-                  }
-                ],
                 "volumeMounts": [
                   {
-                    "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
-                    "name": "${APP_NAME}-data"
+                    "mountPath": "${MOODLE_DATA_PATH}",
+                    "name": "${DATA_MOUNT_PVC_NAME}"
                   },
                   {
-                    "mountPath": "/tmp/file-backups",
-                    "name": "file-backup-data"
+                    "mountPath": "${MOODLE_APP_DATA_PATH}",
+                    "name": "${APP_DATA_MOUNT_PVC_NAME}"
+                  },
+                  {
+                    "mountPath": "${MOODLE_BACKUP_DATA_PATH}",
+                    "name": "${BACKUP_DATA_MOUNT_PVC_NAME}"
                   },
                   {
                     "name": "env-data",
@@ -179,71 +115,18 @@
                 ],
                 "resources": {
                   "limits": {
-                    "memory": "${MOODLE_MEMORY_LIMIT}",
-                    "cpu": "1500m"
+                    "memory": "${MEMORY_LIMIT}",
+                    "cpu": "${CPU_LIMIT}"
                   },
                   "requests": {
-                    "memory": "4Gi",
-                    "cpu": "1000m"
+                    "memory": "${MEMORY_REQUEST}",
+                    "cpu": "${CPU_REQUEST}"
                   }
                 },
                 "env": [
                   {
                     "name": "APP_NAME",
                     "value": "${APP_NAME}"
-                  },
-                  {
-                    "name": "SITE_NAME",
-                    "value": "${SITE_NAME}"
-                  },
-                  {
-                    "name": "SITE_URL",
-                    "value": "https://${SITE_URL}"
-                  },
-                  {
-                    "name": "APACHE_DOCUMENT_ROOT",
-                    "value": "${APACHE_DOCUMENT_ROOT}"
-                  },
-                  {
-                    "name": "MOODLE_MEMORY_LIMIT",
-                    "value": "${MOODLE_MEMORY_LIMIT}"
-                  },
-                  {
-                    "name": "MOODLE_DATA_PATH",
-                    "value": "${MOODLE_DATA_PATH}"
-                  },
-                  {
-                    "name": "MOODLE_VOLUME_SIZE",
-                    "value": "${MOODLE_VOLUME_SIZE}"
-                  },
-                  {
-                    "name": "HTTP_PORT",
-                    "value": "${HTTP_PORT}"
-                  },
-                  {
-                    "name": "DB_SERVICE_NAME",
-                    "value": "${DB_SERVICE_NAME}"
-                  },
-                  {
-                    "name": "DB_HOST",
-                    "value": "${DB_HOST}"
-                  },
-		              {
-                    "name": "DB_SECONDARY_NAME",
-                    "value": "${DB_SECONDARY_NAME}"
-                  },
-
-                  {
-                    "name": "DB_PORT",
-                    "value": "${DB_PORT}"
-                  },
-                  {
-                    "name": "PROJECT_NAMESPACE",
-                    "value": "${PROJECT_NAMESPACE}"
-                  },
-                  {
-                    "name": "DB_NAME",
-                    "value": "${DB_NAME}"
                   },
                   {
                     "name": "DB_USER",
@@ -262,22 +145,6 @@
                         "key": "database-password"
                       }
                     }
-                  },
-                  {
-                    "name": "GIT_PROJECT",
-                    "value": "${GIT_PROJECT}"
-                  },
-                  {
-                    "name": "GIT_TAG",
-                    "value": "${GIT_TAG}"
-                  },
-                  {
-                    "name": "UPSTREAM_URI",
-                    "value": "http://moodle:8080"
-                  },
-                  {
-                    "name": "HOST_NAME",
-                    "value": "moodle-950003-dev.apps.silver.devops.gov.bc.ca"
                   },
                   {
                     "name": "MYSQL_USER",
@@ -320,21 +187,27 @@
             ],
             "volumes": [
               {
-                "name": "${APP_NAME}-data",
+                "name": "${DATA_MOUNT_PVC_NAME}",
                 "persistentVolumeClaim": {
-                  "claimName": "${APP_NAME}-data"
+                  "claimName": "${DATA_MOUNT_PVC_NAME}"
                 }
               },
               {
-                "name": "file-backup-data",
+                "name": "${APP_DATA_MOUNT_PVC_NAME}",
                 "persistentVolumeClaim": {
-                  "claimName": "file-backup-data"
+                  "claimName": "${APP_DATA_MOUNT_PVC_NAME}"
                 }
               },
               {
-                "name": "${APP_NAME}-config",
+                "name": "${BACKUP_DATA_MOUNT_PVC_NAME}",
+                "persistentVolumeClaim": {
+                  "claimName": "${BACKUP_DATA_MOUNT_PVC_NAME}"
+                }
+              },
+              {
+                "name": "${POD_NAME}-config",
                 "configMap": {
-                  "name": "${APP_NAME}-config",
+                  "name": "${POD_NAME}-config",
                   "defaultMode": 420
                 }
               },
@@ -368,8 +241,13 @@
       "description": "Application name.",
       "displayName": "App Name",
       "name": "APP_NAME",
-      "required": true,
-      "value": "${APP_NAME}"
+      "value": "moodle"
+    },
+    {
+      "description": "Pod name.",
+      "displayName": "Pod Name",
+      "name": "POD_NAME",
+      "value": "cron"
     },
     {
       "description": "Website name.",
@@ -382,15 +260,37 @@
       "description": "Moodle data path.",
       "displayName": "Moodle Data Path",
       "name": "MOODLE_DATA_PATH",
-      "required": true,
-      "value": "${MOODLE_DATA_PATH}"
+      "value": "/var/moodledata"
     },
     {
-      "description": "Website URL.",
-      "displayName": "URL",
-      "name": "SITE_URL",
-      "required": true,
-      "value": "${SITE_URL}"
+      "description": "Moodle app data path.",
+      "displayName": "Moodle App Data Path",
+      "name": "MOODLE_APP_DATA_PATH",
+      "value": "/var/www/html"
+    },
+    {
+      "description": "Moodle backup data path.",
+      "displayName": "Moodle Backup Data Path",
+      "name": "MOODLE_BACKUP_DATA_PATH",
+      "value": "/tmp/backups"
+    },
+    {
+      "description": "Moodle data. Saved user files, backups, etc.",
+      "displayName": "Data PVC",
+      "name": "DATA_MOUNT_PVC_NAME",
+      "value": "moodle-user-data"
+    },
+    {
+      "description": "Moodle app data. Shared between php, we and cron pods.",
+      "displayName": "Moodle App Data",
+      "name": "APP_DATA_MOUNT_PVC_NAME",
+      "value": "moodle-app-data"
+    },
+    {
+      "description": "Moodle file backups",
+      "displayName": "Backup Data PVC",
+      "name": "BACKUP_DATA_MOUNT_PVC_NAME",
+      "value": "moodle-backup-data"
     },
     {
       "description": "Image registry",
@@ -405,150 +305,40 @@
       "name": "BUILD_NAMESPACE"
     },
     {
+      "description": "Deploy namespace.",
+      "displayName": "Deploy Namespace",
+      "required": true,
+      "name": "DEPLOY_NAMESPACE"
+    },
+    {
       "description": "Image stream tag",
       "displayName": "Image Stream Tag",
       "required": true,
-      "name": "IMAGE_STREAM_TAG"
+      "name": "IMAGE_STREAM"
     },
     {
       "description": "Maximum amount of memory the container can use.",
       "displayName": "Memory Limit",
-      "name": "MOODLE_MEMORY_LIMIT",
-      "required": true,
-      "value": "${MOODLE_MEMORY_LIMIT}"
+      "name": "MEMORY_LIMIT",
+      "value": "2Gi"
     },
     {
-      "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",
-      "displayName": "Moodle Volume Capacity",
-      "name": "MOODLE_VOLUME_SIZE",
-      "required": true,
-      "value": "${MOODLE_VOLUME_SIZE}"
+      "description": "Maximum amount of memory the container can use.",
+      "displayName": "Memory Request",
+      "name": "MEMORY_REQUEST",
+      "value": "1Gi"
     },
     {
-      "description": "Volume for storing file backups",
-      "displayName": "Moodle File backups",
-      "name": "BACKUP_VOLUME_SIZE",
-      "required": true,
-      "value": "${BACKUP_VOLUME_SIZE}"
+      "description": "Maximum CPU",
+      "displayName": "CPU Limit",
+      "name": "CPU_LIMIT",
+      "value": "2"
     },
     {
-      "description": "Path where the persistent volume will be mounted",
-      "displayName": "Mount Path",
-      "name": "MOODLE_DATA_MOUNT_PATH",
-      "required": true,
-      "value": "${MOODLE_DATA_MOUNT_PATH}"
-    },
-    {
-      "description": "Ports opened for connections to the application from the Internet.",
-      "displayName": "App Port",
-      "name": "HTTP_PORT",
-      "required": true,
-      "value": "${HTTP_PORT}"
-    },
-    {
-      "description": "Container Ports opened for connections to the application from the Internet.",
-      "displayName": "Container Port",
-      "name": "CONTAINER_PORT",
-      "required": true,
-      "value": "${CONTAINER_PORT}"
-    },
-    {
-      "description": "Database service name.",
-      "displayName": "DB Service Name",
-      "name": "DB_SERVICE_NAME",
-      "required": true,
-      "value": "${DB_SERVICE_NAME}"
-    },
-    {
-      "description": "Database host name.",
-      "displayName": "DB Host",
-      "name": "DB_HOST",
-      "required": true,
-      "value": "${DB_HOST}"
-    },
-    {
-      "description": "Database secondary host name.",
-      "displayName": "DB Secondary Host",
-      "name": "DB_SECONDARY_NAME",
-      "required": true,
-      "value": "${DB_SECONDARY_NAME}"
-    },
-
-    {
-      "description": "Database Port opened for connections from other containers.",
-      "displayName": "DB Port",
-      "name": "DB_PORT",
-      "required": true,
-      "value": "${DB_PORT}"
-    },
-    {
-      "description": "The OpenShift Namespace where the ImageStream resides.",
-      "displayName": "Namespace",
-      "name": "PROJECT_NAMESPACE",
-      "value": "${PROJECT_NAMESPACE}"
-    },
-    {
-      "description": "Name of the MySQL database accessed.",
-      "displayName": "MySQL Database Name",
-      "name": "DB_NAME",
-      "required": true,
-      "value": "${DB_NAME}"
-    },
-    {
-      "description": "Username for MySQL user that will be used for accessing the database.",
-      "displayName": "MySQL Connection Username",
-      "name": "DB_USER",
-      "required": false,
-      "value": "${DB_USER}"
-    },
-    {
-      "description": "Password for the MySQL connection user.",
-      "displayName": "MySQL Connection Password",
-      "name": "DB_PASSWORD",
-      "required": false,
-      "value": "${DB_PASSWORD}"
-    },
-    {
-      "description": "Git project URL, where project source can be found.",
-      "displayName": "Git Project",
-      "name": "GIT_PROJECT",
-      "required": true,
-      "value": "${GIT_PROJECT}"
-    },
-    {
-      "description": "Git project URL.",
-      "displayName": "Git URL",
-      "name": "GIT_URL",
-      "required": true,
-      "value": "${GIT_URL}"
-    },
-    {
-      "description": "Git project tag to use for source.",
-      "displayName": "Git Tag",
-      "name": "GIT_TAG",
-      "required": true,
-      "value": "${GIT_TAG}"
-    },
-    {
-      "description": "Apache document root directory.",
-      "displayName": "Apache Root",
-      "name": "APACHE_DOCUMENT_ROOT",
-      "required": true,
-      "value": "${APACHE_DOCUMENT_ROOT}"
-    },
-    {
-      "description": "GitHub Authorization Token (oAuth)",
-      "displayName": "GitHub oAuth",
-      "name": "GITHUB_AUTH_TOKEN",
-      "required": true,
-      "value": "${GITHUB_AUTH_TOKEN}"
-    },
-    {
-      "description": "Cron Password",
-      "displayName": "Cron Password",
-      "name": "CRON_PASSWORD",
-      "required": true,
-      "value": "${CRON_PASSWORD}"
+      "description": "Requested CPU",
+      "displayName": "CPU Request",
+      "name": "CPU_REQUEST",
+      "value": "0.5"
     }
   ]
 }

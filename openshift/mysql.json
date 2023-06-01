@@ -90,7 +90,7 @@
       "apiVersion": "v1",
       "kind": "PersistentVolumeClaim",
       "metadata": {
-        "name": "moodle-web-run"
+        "name": "moodle-mysql"
       },
       "spec": {
         "accessModes": [
@@ -271,13 +271,6 @@
       "value": "e66ac2-dev"
     },
     {
-      "description": "Moodle data path.",
-      "displayName": "Moodle Data Path",
-      "name": "DB_DATA_PATH",
-      "required": true,
-      "value": "/var/lib/mysql"
-    },
-    {
       "description": "Image stream tag",
       "displayName": "Image Stream Tag",
       "required": true,
@@ -317,13 +310,6 @@
       "name": "VOLUME_SIZE",
       "required": true,
       "value": "10Gi"
-    },
-    {
-      "description": "Server document root.",
-      "displayName": "Server Root",
-      "name": "DOCUMENT_ROOT",
-      "required": true,
-      "value": "/app/public"
     }
   ]
 }
