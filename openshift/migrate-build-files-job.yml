@@ -68,7 +68,7 @@ objects:
 parameters:
   - name: IMAGE_REPO
     required: true
-    value: "image-registry.openshift-image-registry.svc:5000/"
+    value: "artifacts.developer.gov.bc.ca/m950-learning/"
   - name: BUILD_NAMESPACE
     required: true
     value: "e66ac2-tools"

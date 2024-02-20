@@ -1,0 +1,15 @@
+backupConfig:
+  mariadb=db/moodle
+  0 1 * * * default ./backup.sh -s
+  0 4 * * * default ./backup.sh -s -v all
+
+db:
+  secretName: moodle-secrets
+  usernameKey: database-user
+  passwordKey: database-password
+
+env:
+  DATABASE_SERVICE_NAME:
+    value: db
+  ENVIRONMENT_FRIENDLY_NAME:
+    value: "Moodle Backups"

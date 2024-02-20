@@ -9,6 +9,7 @@ env:
   USER: ${{ github.actor }}
 
 on:
+  workflow_call:
   push:
     branches:
       - dev
@@ -17,7 +18,7 @@ on:
     paths:
       - 'PHP.Dockerfile'
       - '**/config/**'
-      - '**/workflows/build-moodle-jfrog.yml'
+      - '**/workflows/php.yml'
   pull_request:
     branches:
       - dev

@@ -74,6 +74,12 @@ until $MIGRATE_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
   sleep $WAIT_TIME
 done
 
+# Check if the moodle-upgrade-job exists
+if oc get job moodle-upgrade-job; then
+  # If the job exists, delete it
+  oc delete job moodle-upgrade-job
+fi
+
 echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade-job.yml | oc create -f -
 

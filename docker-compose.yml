@@ -1,6 +1,9 @@
 version: '3'
 services:
     # OPTIONAL: Setup act for testing GitGub Actions locally
+    # You can also install on your workstation, for example:
+    # $ choco install act-cli
+    # $ act -s GITHUB_TOKEN="$(gh auth token)" --secret-file example.secrets -W './.github/workflows/db.yml'
     act:
         build:
             context: .
