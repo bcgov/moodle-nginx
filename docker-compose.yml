@@ -4,15 +4,15 @@ services:
     # You can also install on your workstation, for example:
     # $ choco install act-cli
     # $ act -s GITHUB_TOKEN="$(gh auth token)" --secret-file example.secrets -W './.github/workflows/db.yml'
-    act:
-        build:
-            context: .
-            dockerfile: ACT.Dockerfile
-            args:
-              TEST: 123
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-            - ./:/github/workspace
+    # act:
+    #     build:
+    #         context: .
+    #         dockerfile: ACT.Dockerfile
+    #         args:
+    #           TEST: 123
+    #     volumes:
+    #         - /var/run/docker.sock:/var/run/docker.sock
+    #         - ./:/github/workspace
     # Build moodle and plugins from repo, then save to shared volume on startup
     # After build, the moodle files need to be copied to the shared volume,
     # where they can be accessed by the php, cron and web containers.
@@ -28,7 +28,7 @@ services:
             dockerfile: Moodle.Dockerfile
             args:
               MOODLE_ENVIRONMENT: ${MOODLE_ENVIRONMENT:-local}
-              DOCKER_FROM_IMAGE: ${PHP_IMAGE:-php:8.0-fpm}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
               MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
               F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
               HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
@@ -86,7 +86,7 @@ services:
             context: .
             dockerfile: PHP.Dockerfile
             args:
-              DOCKER_FROM_IMAGE: ${PHP_IMAGE:-php:8.0-fpm}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
               PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
               MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
               F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
@@ -125,7 +125,7 @@ services:
             context: .
             dockerfile: CRON.Dockerfile
             args:
-              DOCKER_FROM_IMAGE: ${CRON_IMAGE:-php:8.0-cli}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
               PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
         volumes:
             - ./temp/var/www:/var/www:delegated

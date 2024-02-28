@@ -18,7 +18,7 @@ set php-container-name=moodle-nginx-php-1
 set enable-maintenance-command=/usr/local/bin/enable-maintenence.sh
 set migrate-build-files-command=/usr/local/bin/migrate-build-files.sh
 set test-migration-complete-command=/usr/local/bin/test-migration-complete.sh
-set upgrade-command=/usr/local/bin/run-upgrade.sh
+set upgrade-command=/usr/local/bin/moodle-upgrade-job.sh
 
 :: Build / upgrade moodle
 :: PHP pod

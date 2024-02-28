@@ -1,8 +1,8 @@
 name: 🔨 Build and publish DB image to Artifactory
 
 concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-github.ref }}
+  cancel-in-progress: false
 
 on:
   push:
@@ -35,11 +35,25 @@ jobs:
             example.env
             example.versions.env
 
-      - name: Set Env Vars
-        run: |
-          echo "Import .env to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
-          grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
-          grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
+      - name: Setup Env Vars
+        id: dotenv
+        uses: ./.github/actions/dotenv-action
+        with:
+          path: example.env
+          export-variables: true
+
+      # - name: Setup Env Version Vars
+      #   id: dotenv_versions
+      #   uses: ./.github/actions/dotenv-action
+      #   with:
+      #     path: example.versions.env
+      #     export-variables: true
+
+      # - name: Setup All Env Vars
+      #   run: |
+      #     echo "Import .env to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
+      #     grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
+      #     grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
 
   # Build DB Image
 
@@ -49,7 +63,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENSHIFT_NAMESPACE: e66ac2-dev
-      https_proxy: http://198.161.14.25:8080
+      # Proxy settings for local development / testing
+      #https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ secrets.OPENSHIFT_SERVER }}
     if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
@@ -63,9 +78,9 @@ jobs:
 
       - name: 🛠️ Pull latest DB base image then push to Artifactory
         run: |
-          docker pull ${{ env.DB_IMAGE }}
-          docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
+          docker pull ${{ steps.dotenv.outputs.DB_IMAGE }}
+          docker tag ${{ steps.dotenv.outputs.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ steps.dotenv.outputs.DB_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ steps.dotenv.outputs.DB_IMAGE }}
 
       - name: Install oc
         uses: redhat-actions/openshift-tools-installer@v1
@@ -83,20 +98,20 @@ jobs:
           reveal_cluster_name: false
           openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
-          namespace: ${{ env.OPENSHIFT_NAMESPACE }}
+          namespace: ${{ steps.dotenv.outputs.OPENSHIFT_NAMESPACE }}
 
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
+      # oc scale sts ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ env.DB_DEPLOYMENT_NAME  }} to ${{ env.OPENSHIFT_NAMESPACE }}
+      # helm delete --purge ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }}
+      - name: 🚀 Deploy ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} to ${{ steps.dotenv.outputs.OPENSHIFT_NAMESPACE }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ env.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ env.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ env.OPENSHIFT_NAMESPACE }}
+          if [[ `oc describe sts ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ steps.dotenv.outputs.OPENSHIFT_NAMESPACE }}
           else
-            echo "${{ env.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  sts/${{ env.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_NAMESPACE }}
-            oc rollout restart sts/${{ env.DB_DEPLOYMENT_NAME  }}
+            echo "${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc annotate --overwrite  sts/${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ steps.dotenv.outputs.OPENSHIFT_NAMESPACE }}
+            oc rollout restart sts/${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }}
           fi
