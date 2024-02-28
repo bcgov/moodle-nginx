@@ -58,6 +58,13 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_USER }}
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
+      - name: Setup Env Vars
+        id: dotenv
+        uses: ./.github/actions/dotenv-action
+        with:
+          path: example.env
+          export-variables: true
+
       # Pull latest PHP base image and push to Artifactory
       - name: 🛠️ Pull PHP base image and push to Artifactory
         run: |

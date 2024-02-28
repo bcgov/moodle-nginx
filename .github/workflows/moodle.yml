@@ -47,8 +47,8 @@ jobs:
     if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
-      - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v2
+      # - name: 📤 Checkout Target Branch
+      #   uses: actions/checkout@v2
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
@@ -57,6 +57,13 @@ jobs:
           registry: ${{ secrets.ARTIFACTORY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+      - name: Setup Env Vars
+        id: dotenv
+        uses: ./.github/actions/dotenv-action
+        with:
+          path: example.env
+          export-variables: true
 
       - name: 🛠️ Pull PHP base image
         run: |

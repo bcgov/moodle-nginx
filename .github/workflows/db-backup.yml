@@ -31,6 +31,14 @@ jobs:
         with:
           oc: 4.11.0
 
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            config/mariadb
+            example.env
+            example.versions.env
+
       - name: Setup Env Vars
         id: dotenv
         uses: ./.github/actions/dotenv-action
