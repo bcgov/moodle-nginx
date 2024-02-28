@@ -60,7 +60,7 @@ jobs:
 
       - name: Setup Env Vars
         id: dotenv
-        uses: ./.github/actions/dotenv-action
+        uses: falti/dotenv-action@v1
         with:
           path: example.env
           export-variables: true
