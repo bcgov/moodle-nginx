@@ -1,4 +1,4 @@
-name: 🔨 Build and publish Moodle images to Artifactory
+name: 🔨 Build Moodle Image and Push to Artifactory
 
 concurrency:
   group: moodle-${{ github.workflow }}-${{ github.ref }}
@@ -37,7 +37,7 @@ jobs:
   # Build Images
 
   build-images:
-    name: '🔨 Build Moodle image and push to Artifactory'
+    name: '🔨 Build Moodle Image and Push to Artifactory'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:

@@ -165,16 +165,16 @@ jobs:
             oc create configmap moodle-env --from-file=.env=./example.env
           fi
 
-      - name: 🚀 Deploy ${{ inputs.REDIS_DEPLOYMENT_NAME }} | ${{ inputs.REDIS_IMAGE }}
+      - name: 🚀 Deploy ${{ env.REDIS_DEPLOYMENT_NAME }} | ${{ env.REDIS_IMAGE }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ inputs.REDIS_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.REDIS_DEPLOYMENT_NAME  }} NOT FOUND: Beginning ${{ inputs.REDIS_DEPLOYMENT_NAME  }} deployment..."
-            helm install ${{ inputs.REDIS_DEPLOYMENT_NAME }} ${{ inputs.REDIS_REPO }}${{ inputs.REDIS_IMAGE }} --set redis.readinessProbe.enabled=false,redis.livenessProbe.enabled=false,podSecurityContext.enabled=false,containerSecurityContext.enabled=false,volumePermissions.containerSecurityContext.enabled=false -f ./config/redis/redis-cluster-values.yml
+          if [[ `oc describe sts ${{ env.REDIS_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ env.REDIS_DEPLOYMENT_NAME  }} NOT FOUND: Beginning ${{ env.REDIS_DEPLOYMENT_NAME  }} deployment..."
+            helm install ${{ env.REDIS_DEPLOYMENT_NAME }} ${{ env.REDIS_REPO }}${{ env.REDIS_IMAGE }} --set redis.readinessProbe.enabled=false,redis.livenessProbe.enabled=false,podSecurityContext.enabled=false,containerSecurityContext.enabled=false,volumePermissions.containerSecurityContext.enabled=false -f ./config/redis/redis-cluster-values.yml
           else
-            echo "${{ inputs.REDIS_DEPLOYMENT_NAME  }} Installation FOUND: Updating..."
-            helm upgrade --install ${{ inputs.REDIS_DEPLOYMENT_NAME }}  ${{ inputs.REDIS_REPO }}${{ inputs.REDIS_IMAGE }}
-            echo "${{ inputs.REDIS_DEPLOYMENT_NAME  }} Updates complete."
+            echo "${{ env.REDIS_DEPLOYMENT_NAME  }} Installation FOUND: Updating..."
+            helm upgrade --install ${{ env.REDIS_DEPLOYMENT_NAME }}  ${{ env.REDIS_REPO }}${{ env.REDIS_IMAGE }}
+            echo "${{ env.REDIS_DEPLOYMENT_NAME  }} Updates complete."
           fi
 
       - name: 🚀 Deploy Backup Container
@@ -208,36 +208,36 @@ jobs:
           fi
 
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=0
+      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ inputs.DB_DEPLOYMENT_NAME  }}
+      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
+      - name: 🚀 Deploy ${{ env.DB_DEPLOYMENT_NAME  }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
+          if [[ `oc describe sts ${{ env.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ env.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ env.DEPLOY_NAMESPACE }}
           else
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND: Skipping..."
+            echo "${{ env.DB_DEPLOYMENT_NAME  }} Installation FOUND: Skipping..."
           fi
 
-      - name: 🚀 Deploy OpenShift Template ( ${{ inputs.DEPLOY_NAMESPACE }} ) ${{ inputs.WEB_DEPLOYMENT_NAME }}, ${{ inputs.PHP_DEPLOYMENT_NAME }}, ${{ inputs.CRON_DEPLOYMENT_NAME }} - with routes, secrets, configmaps
+      - name: 🚀 Deploy OpenShift Template ( ${{ env.DEPLOY_NAMESPACE }} ) ${{ env.WEB_DEPLOYMENT_NAME }}, ${{ env.PHP_DEPLOYMENT_NAME }}, ${{ env.CRON_DEPLOYMENT_NAME }} - with routes, secrets, configmaps
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
-          APP: ${{ inputs.APP }}
-          DB_NAME: ${{ inputs.DB_NAME }}
-          DB_USER: ${{ inputs.DB_USER }}
+          APP: ${{ env.APP }}
+          DB_NAME: ${{ env.DB_NAME }}
+          DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          BUILD_TAG: ${{ inputs.BRANCH }}
-          APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
-          BUILD_NAMESPACE: ${{ inputs.BUILD_NAMESPACE }}
-          IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
-          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
-          BASE_IMAGE_TAG: ${{ inputs.BASE_IMAGE_TAG }}
-          WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
-          WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
-          PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
-          CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
-          CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
-          REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          BUILD_TAG: ${{ env.BRANCH }}
+          APP_HOST_URL: ${{ env.APP_HOST_URL }}
+          BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
+          DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
+          BASE_IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
+          WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
+          WEB_IMAGE: ${{ env.WEB_IMAGE }}
+          PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+          CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+          CRON_IMAGE: ${{ env.CRON_IMAGE }}
+          REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
