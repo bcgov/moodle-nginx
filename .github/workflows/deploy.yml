@@ -9,6 +9,9 @@ env:
 on:
   workflow_call:
     inputs:
+      OPENSHIFT_DEPLOY_PROJECT:
+        required: true
+        type: string
       APP:
         required: true
         type: string
