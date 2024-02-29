@@ -67,7 +67,7 @@ jobs:
           echo "-----------------------"
           echo URL: https://${{ env.APP_HOST_URL }}
           echo "CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}"
-          echo "SKIP_BUILDS: ${{ env.SKIP_BUILDS }}"
+          echo "SKIP_BUILDS: ${{ needs.checkEnv.SKIP_BUILDS }}"
 
   # Build PHP Image
   build-images:
@@ -109,12 +109,12 @@ jobs:
       # Build the Moodle image
       - name: 🚧 Build ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-moodle
-        if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
           echo "Building ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
           echo "Using ${{ env.PHP_IMAGE }}"
-          if ${{ env.SKIP_BUILDS != 'YES' }}; then
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
           else
@@ -134,12 +134,12 @@ jobs:
       # Build the PHP image
       - name: 🚧 Build ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-php
-        if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
           echo "Building ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
           echo "Using ${{ env.PHP_IMAGE }}"
-          if ${{ env.SKIP_BUILDS != 'YES' }}; then
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
           else
@@ -159,12 +159,12 @@ jobs:
       # Build the Cron image
       - name: 🚧 Build ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-cron
-        if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
           echo "Building ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
           echo "Using ${{ env.CRON_IMAGE }}"
-          if ${{ env.SKIP_BUILDS != 'YES' }}; then
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
           else

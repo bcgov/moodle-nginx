@@ -48,7 +48,7 @@ jobs:
     name: '🔨 Build Moodle and PHP images'
     needs: [checkEnv]
     runs-on: ubuntu-latest
-    if: ${{ env.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
