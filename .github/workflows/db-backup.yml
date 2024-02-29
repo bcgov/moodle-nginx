@@ -1,7 +1,7 @@
 name: 🚀 Deploy DB backups
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: db-backup-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 on:
