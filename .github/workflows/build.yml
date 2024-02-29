@@ -62,7 +62,7 @@ jobs:
       APP: ${{ env.APP }}
       APP_HOST_URL: ${{ env.APP_HOST_URL }}
       DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
-      BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+      BUILD_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
@@ -170,7 +170,7 @@ jobs:
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
       REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
       APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
       BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
