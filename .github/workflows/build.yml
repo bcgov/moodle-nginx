@@ -1,7 +1,7 @@
 name: 🚀 Deploy to OpenShift
 
 concurrency:
-  group: ${{ github.workflow }}-github.ref }}
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

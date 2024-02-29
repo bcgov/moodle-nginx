@@ -1,7 +1,7 @@
 name: 🔨 Build PHP and push to Artifactory
 
 concurrency:
-  group: ${{ github.workflow }}-github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
