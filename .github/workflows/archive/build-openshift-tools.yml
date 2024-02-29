@@ -13,7 +13,6 @@ env:
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "YES"
 
-  PROJECT: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
   APP_HOST_URL: moodle-${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
   BASE_IMAGE_TAG: ${{ github.ref_name }}
   BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-tools
@@ -63,7 +62,7 @@ jobs:
     steps:
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.DEPLOY_NAMESPACE }}
+          echo Deploying ${{ env.DEPLOY_NAMESPACE }} > ${{ env.APP }} on ${{ env.DEPLOY_NAMESPACE }}
           echo "-----------------------"
           echo URL: https://${{ env.APP_HOST_URL }}
           echo "CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}"
