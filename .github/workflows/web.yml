@@ -10,26 +10,26 @@ env:
 
 on:
   workflow_call:
-  push:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - 'PHP.Dockerfile'
-      - '**/config/nginx/**'
-      - '**/workflows/web.yml'
-      - '**/**.env'
-  pull_request:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - 'PHP.Dockerfile'
-      - '**/config/nginx/**'
-      - '**/workflows/web.yml'
-      - '**/**.env'
+  # push:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - 'PHP.Dockerfile'
+  #     - '**/config/nginx/**'
+  #     - '**/workflows/web.yml'
+  #     - '**/**.env'
+  # pull_request:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - 'PHP.Dockerfile'
+  #     - '**/config/nginx/**'
+  #     - '**/workflows/web.yml'
+  #     - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
@@ -43,7 +43,7 @@ jobs:
   # Build Images
 
   build-images:
-    name: '🔨 Build Moodle and PHP images'
+    name: '🔨 Build Web images and push to Artifactory'
     needs: [checkEnv]
     runs-on: ubuntu-latest
     if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')

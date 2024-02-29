@@ -5,16 +5,17 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  push:
-    branches:
-      - dev
-      #- test
-      #- prod
-  pull_request:
-    branches:
-      - dev
-      #- test
-      #- prod
+  workflow_call:
+  # push:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  # pull_request:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
 jobs:
   deploy:
     name: '🔨 Deploy DB backups'

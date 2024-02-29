@@ -6,12 +6,6 @@ concurrency:
 
 on:
   workflow_call:
-    inputs:
-      SKIP_BUILDS:
-        type: string
-        description: 'Skip builds if set to YES'
-        required: false
-        default: 'NO'
   # push:
   #   branches:
   #     - dev
@@ -42,7 +36,7 @@ jobs:
       # Proxy settings for local development / testing
       #https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ env.OPENSHIFT_SERVER }}
-    if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4

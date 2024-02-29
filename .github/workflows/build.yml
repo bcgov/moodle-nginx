@@ -80,6 +80,12 @@ jobs:
     uses: ./.github/workflows/db.yml
     secrets: inherit # pass all secrets
 
+  db-backup:
+    name: 🔨 Deploy DB backups
+    needs: [checkEnv]
+    uses: ./.github/workflows/db-backup.yml
+    secrets: inherit # pass all secrets
+
   php:
     name: 🔨 Build PHP image
     needs: [checkEnv]
