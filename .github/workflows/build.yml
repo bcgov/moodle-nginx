@@ -154,7 +154,6 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     with:
-      BASE_IMAGE_TAG: ${{ github.ref_name }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
       DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}

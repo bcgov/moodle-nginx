@@ -154,7 +154,6 @@ jobs:
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
           IMAGE_REPO: ${{ env.IMAGE_REPO }}
           DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-          BASE_IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
           WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ env.WEB_IMAGE }}
           PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
