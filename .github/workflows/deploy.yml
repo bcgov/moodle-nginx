@@ -1,6 +1,6 @@
 # Deploy On Openshift
 # Builds and Deploys merged PR's to persistent pods/services/routes/etc in the OpenShift environment.
-name: 🚀 Deploy on Openshift
+name: 🚀 Deploy to OpenShift
 
 env:
   APP: moodle
@@ -8,86 +8,6 @@ env:
 
 on:
   workflow_call:
-    inputs:
-      APP:
-        required: true
-        type: string
-      DB_NAME:
-        required: true
-        type: string
-      DB_USER:
-        required: true
-        type: string
-      DB_PASSWORD:
-        required: true
-        type: string
-      BASE_IMAGE_TAG:
-        required: true
-        type: string
-      IMAGE_REPO:
-        required: true
-        type: string
-      DB_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      DB_IMAGE:
-        required: true
-        type: string
-      BRANCH:
-        required: true
-        type: string
-      APP_HOST_URL:
-        required: true
-        type: string
-      BUILD_NAMESPACE:
-        required: true
-        type: string
-      DEPLOY_NAMESPACE:
-        required: true
-        type: string
-      WEB_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      WEB_IMAGE:
-        required: true
-        type: string
-      PHP_IMAGE:
-        required: true
-        type: string
-      PHP_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      CRON_IMAGE:
-        required: true
-        type: string
-      CRON_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      REDIS_REPO:
-        required: true
-        type: string
-      REDIS_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      REDIS_IMAGE:
-        required: true
-        type: string
-    secrets:
-      AUTH_TOKEN_DEV:
-        required: true
-      AUTH_TOKEN_TEST:
-        required: true
-      AUTH_TOKEN_PROD:
-        required: true
-    outputs:
-      # This is the name of the output set by the workflow_dispatch action.
-      # The value is the ID of the workflow run that was triggered.
-      deploy1:
-        description: "Deployment log"
-        value: ${{ jobs.deploy.outputs.output1 }}
-      deploy2:
-        description: "Deployment log"
-        value: ${{ jobs.deploy.outputs.output2 }}
   # push:
   #   paths:
   #     - './openshift/*'
@@ -216,12 +136,12 @@ jobs:
         run: |
           if [[ `oc describe sts ${{ env.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
             echo "${{ env.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ env.DEPLOY_NAMESPACE }}
+            oc create -f ./config/mariadb/config.yaml -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           else
             echo "${{ env.DB_DEPLOYMENT_NAME  }} Installation FOUND: Skipping..."
           fi
 
-      - name: 🚀 Deploy OpenShift Template ( ${{ env.DEPLOY_NAMESPACE }} ) ${{ env.WEB_DEPLOYMENT_NAME }}, ${{ env.PHP_DEPLOYMENT_NAME }}, ${{ env.CRON_DEPLOYMENT_NAME }} - with routes, secrets, configmaps
+      - name: 🚀 Deploy to OpenShift ( ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} )
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
@@ -229,11 +149,11 @@ jobs:
           DB_NAME: ${{ env.DB_NAME }}
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          BUILD_TAG: ${{ env.BRANCH }}
+          BUILD_TAG: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           APP_HOST_URL: ${{ env.APP_HOST_URL }}
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
           IMAGE_REPO: ${{ env.IMAGE_REPO }}
-          DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
+          DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           BASE_IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
           WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ env.WEB_IMAGE }}
