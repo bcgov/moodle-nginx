@@ -48,7 +48,7 @@ jobs:
     name: '🔨 Build Moodle and PHP images'
     needs: [checkEnv]
     runs-on: ubuntu-latest
-    if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    if: ${{ env.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
@@ -79,4 +79,4 @@ jobs:
 
       # Build PHP Image and push to Artifactory
       - name: 🛠️ Build PHP Image and push to Artifactory
-        run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ needs.checkEnv.PHP_DEPLOYMENT_NAME }}:${{ needs.checkEnv.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+        run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
