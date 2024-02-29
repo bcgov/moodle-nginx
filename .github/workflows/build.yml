@@ -127,7 +127,7 @@ jobs:
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle]
-    if: success() && ${{ env == 'YES' }}
+    if: success() && ${{ env.CLEAN_BUILDS == 'YES' }}
     with:
       APP: ${{ env.APP }}
       APP_HOST_URL: "https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
