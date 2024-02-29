@@ -59,8 +59,8 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
-      APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP_HOST_URL }}
+      APP: ${{ env.APP }}
+      APP_HOST_URL: ${{ env.APP_HOST_URL }}
       DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
       BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
