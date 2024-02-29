@@ -155,30 +155,30 @@ jobs:
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     with:
       BASE_IMAGE_TAG: ${{ github.ref_name }}
-      APP: ${{ env.APP }}
-      DB_NAME: ${{ env.DB_NAME }}
-      DB_USER: ${{ env.DB_USER }}
-      DB_PASSWORD: ${{ env.DB_PASSWORD }}
-      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
-      WEB_IMAGE: ${{ env.WEB_IMAGE }}
-      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
-      PHP_IMAGE: ${{ env.PHP_IMAGE }}
-      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
-      DB_IMAGE: ${{ env.DB_IMAGE }}
-      CRON_IMAGE: ${{ env.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
-      REDIS_REPO: ${{ env.REDIS_REPO }}
-      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
-      REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
-      APP_HOST_URL: ${{ env.APP_HOST_URL }}
-      BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
-      DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
-      IMAGE_REPO: ${{ env.IMAGE_REPO }}
-      BRANCH: ${{ env.BRANCH }}
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
+      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
+      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP_HOST_URL }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   notify:
     name: 📫 Send Notifications (via Rocket.Chat)
-    needs: [db, php, cron, moodle, call-deploy-workflow]
+    needs: [checkEnv, db, php, cron, moodle, call-deploy-workflow]
     if: success() || failure()
     runs-on: ubuntu-latest
     steps:
@@ -188,7 +188,7 @@ jobs:
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: '{
-            "alias":"FAILED GitHub Action by ${{ env.USER }}",
+            "alias":"FAILED GitHub Action by ${{ needs.checkEnv.outputs.USER }}",
             "text":"Job: ${{ github.job }} in
               ${{ github.workflow }} of
               ${{ github.repository }}:${{ github.ref_name }} >>
@@ -196,9 +196,9 @@ jobs:
               Deploy2: ${{ needs.call-deploy-workflow.outputs.deploy2 }}",
             "attachments":[{
               "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-              "title_link": "${{ env.INSPECT_JOB_URL }}",
+              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
               "text":"Failure detected in ${{ github.repository }}:${{ github.ref_name }}",
-              "image_url": "${{ env.FAIL_ICON_URL }}",
+              "image_url": "${{ needs.checkEnv.outputs.FAIL_ICON_URL }}",
               "color":"#e7e076"
             }]}'
       - name: ✅ Success
@@ -206,13 +206,13 @@ jobs:
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: '{
-            "alias":"Successful ${{ github.job }} by ${{ env.USER }}",
+            "alias":"Successful ${{ github.job }} by ${{ needs.checkEnv.outputs.USER }}",
             "text":"${{ github.job }} in ${{ github.workflow }}
               of ${{ github.repository }}:${{ github.ref_name }}",
             "attachments":[{
               "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-              "title_link": "${{ env.INSPECT_JOB_URL }}",
+              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
               "text":"Successful deployment of: ${{ github.repository }}:${{ github.ref_name }}",
-              "image_url": "${{ env.SUCCESS_ICON_URL }}",
+              "image_url": "${{ needs.checkEnv.outputs.SUCCESS_ICON_URL }}",
               "color":"#05a227"
             }]}'
