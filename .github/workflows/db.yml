@@ -65,7 +65,7 @@ jobs:
     name: '🔨 Build DB image'
     needs: [checkEnv]
     runs-on: ubuntu-latest
-    env:
+    #env:
       # Proxy settings for local development / testing
       #https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ env.OPENSHIFT_SERVER }}
