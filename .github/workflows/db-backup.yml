@@ -23,7 +23,7 @@ jobs:
       OPENSHIFT_DEPLOY_PROJECT: e66ac2-dev
       # Proxy settings for local development / testing
       # https_proxy: http://198.161.14.25:8080
-      # no_proxy: ${{ secrets.OPENSHIFT_SERVER }}
+      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
       BACKUP_IMAGE: bcgovimages/backup-container-mariadb
     steps:
       - name: Install oc
@@ -55,7 +55,7 @@ jobs:
         with:
           insecure_skip_tls_verify: false
           reveal_cluster_name: false
-          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
           namespace: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
 
