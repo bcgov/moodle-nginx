@@ -60,7 +60,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
-      APP_HOST_URL: ${{ env.APP_HOST_URL }}
       DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
       BUILD_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
@@ -97,7 +96,7 @@ jobs:
         run: |
           echo Deploying ${{ env.PROJECT }} > ${{ needs.checkEnv.outputs.APP }} on ${{ env.DEPLOY_NAMESPACE }}
           echo "-----------------------"
-          echo URL: https://${{ needs.checkEnv.outputs.APP_HOST_URL }}
+          echo URL: https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
   db:
@@ -140,7 +139,7 @@ jobs:
       APP: ${{ needs.checkEnv.outputs.APP }}
       APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
       BRANCH: ${{ github.ref_name }}
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
@@ -163,6 +162,7 @@ jobs:
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
       PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
@@ -170,7 +170,7 @@ jobs:
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
       REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
       APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
       BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
