@@ -9,9 +9,9 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  # SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
-  CLEAN_BUILDS: "YES"
+  # CLEAN_BUILDS: "YES"
   BUILD_ID: ${{ github.event.number }}
   BRANCH: ${{ github.ref_name }}
   SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
@@ -88,8 +88,6 @@ jobs:
           echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.DEPLOY_NAMESPACE }}
           echo "-----------------------"
           echo URL: https://${{ env.APP_HOST_URL }}
-          echo "CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}"
-          echo "SKIP_BUILDS: ${{ needs.checkEnv.SKIP_BUILDS }}"
 
   # Build Images and deploy to JFrog
   db:
@@ -123,11 +121,11 @@ jobs:
     secrets: inherit # pass all secrets
 
   call-cleanup-workflow:
-    name: 🧹️ Clean Build ( ${{ env.CLEAN_BUILDS }} )
+    name: 🧹️ Clean Build
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle]
-    if: success() && ${{ env.CLEAN_BUILDS == 'YES' }}
+    if: success()
     with:
       APP: ${{ env.APP }}
       APP_HOST_URL: "https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
@@ -145,7 +143,6 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
-    if: needs.build-jfrog-images.result == 'success' || needs.build-jfrog-images.result == 'skipped' || needs.checkEnv.outputs.SKIP_BUILDS == 'FALSE'
     with:
       BASE_IMAGE_TAG: ${{ github.ref_name }}
       APP: ${{ env.APP }}
