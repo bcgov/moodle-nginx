@@ -190,9 +190,7 @@ jobs:
             "alias":"FAILED GitHub Action by ${{ needs.checkEnv.outputs.USER }}",
             "text":"Job: ${{ github.job }} in
               ${{ github.workflow }} of
-              ${{ github.repository }}:${{ github.ref_name }} >>
-              Deploy1: ${{ needs.call-deploy-workflow.outputs.deploy1 }}
-              Deploy2: ${{ needs.call-deploy-workflow.outputs.deploy2 }}",
+              ${{ github.repository }}:${{ github.ref_name }}
             "attachments":[{
               "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
               "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",

@@ -8,6 +8,13 @@ env:
 
 on:
   workflow_call:
+    inputs:
+      APP:
+        required: true
+        type: string
+      DB_NAME:
+        required: true
+        type: string
   # push:
   #   paths:
   #     - './openshift/*'
