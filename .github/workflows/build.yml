@@ -58,6 +58,16 @@ jobs:
   checkEnv:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
+    outputs: # Define the output parameter
+      APP: ${{ env.APP }}
+      APP_HOST_URL: ${{ env.APP_HOST_URL }}
+      DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
+      BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
+      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
+      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -127,16 +137,16 @@ jobs:
     needs: [checkEnv, db, php, cron, moodle]
     if: success()
     with:
-      APP: ${{ env.APP }}
-      APP_HOST_URL: "https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
       BRANCH: ${{ github.ref_name }}
-      BUILD_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
-      DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
-      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
-      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
-      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
-      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
-      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
 
   call-deploy-workflow:
     name: 🚀 Deploy to OpenShift
