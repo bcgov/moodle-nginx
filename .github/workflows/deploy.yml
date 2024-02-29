@@ -15,6 +15,63 @@ on:
       DB_NAME:
         required: true
         type: string
+      DB_USER:
+        required: true
+        type: string
+      DB_PASSWORD:
+        required: true
+        type: string
+      WEB_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      WEB_IMAGE:
+        required: true
+        type: string
+      PHP_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      PHP_IMAGE:
+        required: true
+        type: string
+      DB_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      DB_IMAGE:
+        required: true
+        type: string
+      CRON_IMAGE:
+        required: true
+        type: string
+      CRON_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      REDIS_REPO:
+        required: true
+        type: string
+      REDIS_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      REDIS_IMAGE:
+        required: true
+        type: string
+      APP_HOST_URL:
+        required: true
+        type: string
+      BUILD_NAMESPACE:
+        required: true
+        type: string
+      DEPLOY_NAMESPACE:
+        required: true
+        type: string
+      IMAGE_REPO:
+        required: true
+        type: string
+      BRANCH:
+        required: true
+        type: string
+      COMMIT_SHA:
+        required: true
+        type: string
   # push:
   #   paths:
   #     - './openshift/*'
