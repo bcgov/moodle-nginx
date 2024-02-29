@@ -25,10 +25,17 @@ on:
       - '**/workflows/**'
       - '**/**.env'
 jobs:
-  #Print variables for logging and debugging purposes
-  checkEnv:
-    name: 📋 Environment Check
+
+  # Build DB Image
+
+  build-images:
+    name: '🔨 Build DB image'
     runs-on: ubuntu-latest
+    #env:
+      # Proxy settings for local development / testing
+      #https_proxy: http://198.161.14.25:8080
+      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
+    if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -65,18 +72,6 @@ jobs:
         run: |
           echo Building and pushing DB_IMAGE: ${{ env.DB_IMAGE }}
 
-  # Build DB Image
-
-  build-images:
-    name: '🔨 Build DB image'
-    needs: [checkEnv]
-    runs-on: ubuntu-latest
-    #env:
-      # Proxy settings for local development / testing
-      #https_proxy: http://198.161.14.25:8080
-      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
-    if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
-    steps:
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
         uses: docker/login-action@v3

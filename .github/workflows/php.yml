@@ -40,7 +40,7 @@ jobs:
     steps:
       - name: Check Env Vars
         run: |
-          echo Building ${{ env.APP }}:${{ github.ref_name }}
+          echo Building ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
 
   # Build Images
 
@@ -66,7 +66,7 @@ jobs:
         id: dotenv
         uses: falti/dotenv-action@v1
         with:
-          path: example.versions.env
+          path: example.env
           export-variables: true
           keys-case: upper
 
@@ -81,9 +81,9 @@ jobs:
       # Pull latest PHP base image and push to Artifactory
       - name: 🛠️ Pull PHP base image and push to Artifactory
         run: |
-          docker pull ${{env.PHP_IMAGE}}
-          docker tag ${{env.PHP_IMAGE}} ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
+          docker pull ${{ env.PHP_IMAGE }}
+          docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
 
       # Build PHP Image and push to Artifactory
       - name: 🛠️ Build PHP Image and push to Artifactory

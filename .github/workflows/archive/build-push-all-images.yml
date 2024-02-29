@@ -97,9 +97,9 @@ jobs:
 
       - name: 🛠️ Pull PHP Image
         run: |
-          docker pull ${{env.PHP_IMAGE}}
-          docker tag ${{env.PHP_IMAGE}} ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
+          docker pull ${{ env.PHP_IMAGE }}
+          docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
 
       # Build / push images to Artifactory
       - name: 🛠️ Build Moodle Image

@@ -80,9 +80,9 @@ jobs:
 
       - name: 🛠️ Pull PHP base image
         run: |
-          docker pull ${{env.PHP_IMAGE}}
-          docker tag ${{env.PHP_IMAGE}} ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
+          docker pull ${{ env.PHP_IMAGE }}
+          docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
 
       - name: 🛠️ Build Moodle Image and push to Artifactory
         run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
