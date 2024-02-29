@@ -13,11 +13,11 @@ env:
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "YES"
 
-  PROJECT: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}
-  APP_HOST_URL: moodle-${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+  PROJECT: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
+  APP_HOST_URL: moodle-${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
   BASE_IMAGE_TAG: ${{ github.ref_name }}
-  BUILD_NAMESPACE: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-tools
-  DEPLOY_NAMESPACE: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+  BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-tools
+  DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
   BUILD_ID: ${{ github.event.number }}
   BRANCH: ${{ github.ref_name }}
   SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"

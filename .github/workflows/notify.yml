@@ -5,17 +5,10 @@ name: Deploy on Openshift
 env:
   APP: moodle
   USER: ${{ github.actor }}
-
-  PROJECT: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}
-  APP_HOST_URL: moodle-${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
-  BASE_IMAGE_TAG: ${{ github.ref_name }}
-  BUILD_NAMESPACE: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-tools
-  DEPLOY_NAMESPACE: ${{ vars.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
   BUILD_ID: ${{ github.event.number }}
   BRANCH: ${{ github.ref_name }}
   SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
   INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
   BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
   SUCCESS_ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
   FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
