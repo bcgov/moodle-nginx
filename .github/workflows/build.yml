@@ -110,7 +110,6 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle]
     if: success() && ${{ env == 'YES' }}
-    secrets: inherit
     with:
       APP: ${{ env.APP }}
       APP_HOST_URL: "https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
@@ -129,7 +128,6 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     if: needs.build-jfrog-images.result == 'success' || needs.build-jfrog-images.result == 'skipped' || needs.checkEnv.outputs.SKIP_BUILDS == 'FALSE'
-    secrets: inherit
     with:
       BASE_IMAGE_TAG: ${{ github.ref_name }}
       APP: ${{ env.APP }}
