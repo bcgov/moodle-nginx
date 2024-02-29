@@ -84,9 +84,9 @@ jobs:
 
       - name: 🛠️ Pull Cron base image
         run: |
-          docker pull ${{env.CRON_IMAGE}}
-          docker tag ${{env.CRON_IMAGE}} ${{ secrets.ARTIFACTORY_URL }}/${{env.CRON_IMAGE}}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.CRON_IMAGE}}
+          docker pull ${{ env.CRON_IMAGE }}
+          docker tag ${{ env.CRON_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
 
       - name: 🛠️ Build and push CRON Image
-        run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .
+        run: docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .

@@ -85,9 +85,9 @@ jobs:
 
       - name: 🛠️ Pull Cron Image
         run: |
-          docker pull ${{env.CRON_IMAGE}}
-          docker tag ${{env.CRON_IMAGE}} ${{ secrets.ARTIFACTORY_URL }}/${{env.CRON_IMAGE}}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.CRON_IMAGE}}
+          docker pull ${{ env.CRON_IMAGE }}
+          docker tag ${{ env.CRON_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
 
       - name: 🛠️ Pull DB Image
         run: |
