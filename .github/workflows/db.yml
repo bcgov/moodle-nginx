@@ -41,6 +41,7 @@ jobs:
         with:
           path: example.env
           export-variables: true
+          keys-case: upper
 
       # - name: Setup Env Version Vars
       #   id: dotenv_versions

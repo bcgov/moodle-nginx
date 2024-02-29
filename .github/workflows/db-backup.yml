@@ -45,6 +45,7 @@ jobs:
         with:
           path: example.env
           export-variables: true
+          keys-case: upper
 
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.

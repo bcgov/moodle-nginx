@@ -64,6 +64,7 @@ jobs:
         with:
           path: example.env
           export-variables: true
+          keys-case: upper
 
       # Pull latest PHP base image and push to Artifactory
       - name: 🛠️ Pull PHP base image and push to Artifactory

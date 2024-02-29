@@ -64,6 +64,7 @@ jobs:
         with:
           path: example.env
           export-variables: true
+          keys-case: upper
 
       - name: 🛠️ Pull PHP base image
         run: |
