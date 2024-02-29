@@ -113,5 +113,5 @@ jobs:
           else
             echo "${{ env.WEB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
             oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-            oc rollout restart dc/${{ env.WEB_DEPLOYMENT_NAME  }}
+            oc rollout latest dc/${{ env.WEB_DEPLOYMENT_NAME  }}
           fi
