@@ -33,16 +33,16 @@ on:
       - dev
       # - test
       # - prod
-    paths:
-      - '**.Dockerfile'
-      - '**.conf'
-      - '**.env'
-      - '**.ini'
-      - '**.php'
-      - '**.yml'
-      - '**.json'
-      - '**.sh'
-      - '**.txt'
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.env'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - '**.json'
+    #   - '**.sh'
+    #   - '**.txt'
   pull_request:
     branches:
       - dev
