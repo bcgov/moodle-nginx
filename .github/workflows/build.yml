@@ -59,8 +59,8 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
-      APP: ${{ env.APP }}
-      APP_HOST_URL: ${{ env.APP_HOST_URL }}
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP_HOST_URL }}
       DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
       BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
@@ -95,9 +95,9 @@ jobs:
 
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.DEPLOY_NAMESPACE }}
+          echo Deploying ${{ env.PROJECT }} > ${{ needs.checkEnv.outputs.APP }} on ${{ env.DEPLOY_NAMESPACE }}
           echo "-----------------------"
-          echo URL: https://${{ env.APP_HOST_URL }}
+          echo URL: https://${{ needs.checkEnv.outputs.APP_HOST_URL }}
 
   # Build Images and deploy to JFrog
   db:
@@ -137,7 +137,7 @@ jobs:
     needs: [checkEnv, db, php, cron, moodle]
     if: success()
     with:
-      APP: ${{ env.APP }}
+      APP: ${{ needs.checkEnv.outputs.APP }}
       APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
       BRANCH: ${{ github.ref_name }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
@@ -154,7 +154,7 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     with:
-      APP: ${{ env.APP }}
+      APP: ${{ needs.checkEnv.outputs.APP }}
       DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
       DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
       DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
