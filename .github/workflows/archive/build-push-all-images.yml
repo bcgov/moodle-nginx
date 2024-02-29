@@ -57,6 +57,24 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_USER }}
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
+      # Get Environment Variables from file
+      - name: 📋 Setup Environment from File
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          log-variables: true
+          keys-case: upper
+      - name: 📋 Setup Version Environment from File
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          log-variables: true
+          keys-case: upper
+
       # Pull/tag base images
       - name: 🛠️ Pull Web Image
         shell: bash

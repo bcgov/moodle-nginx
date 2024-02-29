@@ -97,14 +97,23 @@ jobs:
           log-variables: true
           keys-case: upper
 
+      - name: 📋 Setup Version Environment from File
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          log-variables: true
+          keys-case: upper
+
       # Build the Moodle image
-      - name: 🚧 Build ${{ steps.dotenv.outputs.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+      - name: 🚧 Build ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-moodle
         if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
-          echo "Building ${{ steps.dotenv.outputs.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
-          echo "Using ${{ steps.dotenv.outputs.PHP_IMAGE }}"
+          echo "Building ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.PHP_IMAGE }}"
           if ${{ env.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
@@ -112,24 +121,24 @@ jobs:
             echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
           fi
         env:
-          DOCKER_FROM_IMAGE: ${{ steps.dotenv.outputs.PHP_IMAGE }}
+          DOCKER_FROM_IMAGE: ${{ env.PHP_IMAGE }}
           DOCKER_FILE_PATH: ${{ env.MOODLE_DOCKER_FILE_PATH }}
-          DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.MOODLE_DEPLOYMENT_NAME }}
+          DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
           SOURCE_CONTEXT_DIR: ${{ env.PHP_SOURCE_CONTEXT_DIR }}
           BRANCH: ${{ env.BRANCH }}
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
-          IMAGE_REPO: ${{ steps.dotenv.outputs.IMAGE_REPO }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
           IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
           SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
 
       # Build the PHP image
-      - name: 🚧 Build ${{ steps.dotenv.outputs.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+      - name: 🚧 Build ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-php
         if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
-          echo "Building ${{ steps.dotenv.outputs.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
-          echo "Using ${{ steps.dotenv.outputs.PHP_IMAGE }}"
+          echo "Building ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.PHP_IMAGE }}"
           if ${{ env.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
@@ -137,24 +146,24 @@ jobs:
             echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
           fi
         env:
-          DOCKER_FROM_IMAGE: ${{ steps.dotenv.outputs.PHP_IMAGE }}
+          DOCKER_FROM_IMAGE: ${{ env.PHP_IMAGE }}
           DOCKER_FILE_PATH: ${{ env.PHP_DOCKER_FILE_PATH }}
-          DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.PHP_DEPLOYMENT_NAME }}
+          DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
           SOURCE_CONTEXT_DIR: ${{ env.PHP_SOURCE_CONTEXT_DIR }}
           BRANCH: ${{ env.BRANCH }}
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
-          IMAGE_REPO: ${{ steps.dotenv.outputs.IMAGE_REPO }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
           IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
           SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
 
       # Build the Cron image
-      - name: 🚧 Build ${{ steps.dotenv.outputs.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+      - name: 🚧 Build ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
         id: build-cron
         if: success() && ${{ env.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
-          echo "Building ${{ steps.dotenv.outputs.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
-          echo "Using ${{ steps.dotenv.outputs.CRON_IMAGE }}"
+          echo "Building ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.CRON_IMAGE }}"
           if ${{ env.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
             sh ./openshift/scripts/build-docker-image.sh
@@ -162,32 +171,32 @@ jobs:
             echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
           fi
         env:
-          DOCKER_FROM_IMAGE: ${{ steps.dotenv.outputs.CRON_IMAGE }}
+          DOCKER_FROM_IMAGE: ${{ env.CRON_IMAGE }}
           DOCKER_FILE_PATH: ${{ env.CRON_DOCKER_FILE_PATH }}
-          DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.CRON_DEPLOYMENT_NAME }}
+          DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
           SOURCE_CONTEXT_DIR: ${{ env.CRON_SOURCE_CONTEXT_DIR }}
           BRANCH: ${{ env.BRANCH }}
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
-          IMAGE_REPO: ${{ steps.dotenv.outputs.IMAGE_REPO }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
           IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
           SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
     outputs:
-      APP: ${{ steps.dotenv.outputs.APP }}
-      DB_NAME: ${{ steps.dotenv.outputs.DB_NAME }}
-      DB_USER: ${{ steps.dotenv.outputs.DB_USER }}
-      DB_PASSWORD: ${{ steps.dotenv.outputs.DB_PASSWORD }}
-      IMAGE_REPO: ${{ steps.dotenv.outputs.IMAGE_REPO }}
-      WEB_DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.WEB_DEPLOYMENT_NAME }}
-      DB_DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME }}
-      PHP_IMAGE: ${{ steps.dotenv.outputs.PHP_IMAGE }}
-      PHP_DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.PHP_DEPLOYMENT_NAME }}
-      CRON_IMAGE: ${{ steps.dotenv.outputs.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_REPO: ${{ steps.dotenv.outputs.REDIS_REPO }}
-      REDIS_DEPLOYMENT_NAME: ${{ steps.dotenv.outputs.REDIS_DEPLOYMENT_NAME }}
-      REDIS_IMAGE: ${{ steps.dotenv.outputs.REDIS_IMAGE }}
-      WEB_IMAGE: ${{ steps.dotenv.outputs.WEB_IMAGE }}
-      DB_IMAGE: ${{ steps.dotenv.outputs.DB_IMAGE }}
+      APP: ${{ env.APP }}
+      DB_NAME: ${{ env.DB_NAME }}
+      DB_USER: ${{ env.DB_USER }}
+      DB_PASSWORD: ${{ env.DB_PASSWORD }}
+      IMAGE_REPO: ${{ env.IMAGE_REPO }}
+      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
+      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ env.PHP_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+      CRON_IMAGE: ${{ env.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ env.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
+      WEB_IMAGE: ${{ env.WEB_IMAGE }}
+      DB_IMAGE: ${{ env.DB_IMAGE }}
       APP_HOST_URL: ${{ env.APP_HOST_URL }}
       BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
