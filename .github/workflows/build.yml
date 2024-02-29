@@ -12,12 +12,6 @@ env:
   SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "YES"
-
-  PROJECT: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
-  APP_HOST_URL: moodle-${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
-  BASE_IMAGE_TAG: ${{ github.ref_name }}
-  BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-tools
-  DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
   BUILD_ID: ${{ github.event.number }}
   BRANCH: ${{ github.ref_name }}
   SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
@@ -65,6 +59,30 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     steps:
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            config/mariadb
+            example.env
+            example.versions.env
+
+      - name: Setup Env Vars
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Setup Env Version Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
+
       - name: Print Env Vars
         run: |
           echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.DEPLOY_NAMESPACE }}
