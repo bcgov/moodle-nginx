@@ -52,6 +52,7 @@ jobs:
       #   with:
       #     path: example.versions.env
       #     export-variables: true
+      #     keys-case: upper
 
       - name: Setup All Env Vars
         run: |
@@ -81,9 +82,9 @@ jobs:
 
       - name: 🛠️ Pull latest DB base image then push to Artifactory
         run: |
-          docker pull ${{ steps.dotenv.outputs.DB_IMAGE }}
-          docker tag ${{ steps.dotenv.outputs.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ steps.dotenv.outputs.DB_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ steps.dotenv.outputs.DB_IMAGE }}
+          docker pull ${{ env.DB_IMAGE }}
+          docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
 
       - name: Install oc
         uses: redhat-actions/openshift-tools-installer@v1
@@ -101,20 +102,20 @@ jobs:
           reveal_cluster_name: false
           openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
-          namespace: ${{ steps.dotenv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+          namespace: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
 
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} --replicas=0
+      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} to ${{ steps.dotenv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
+      - name: 🚀 Deploy ${{ env.DB_DEPLOYMENT_NAME  }} to ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ steps.dotenv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+          if [[ `oc describe sts ${{ env.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ env.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
           else
-            echo "${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  sts/${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ steps.dotenv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
-            oc rollout restart sts/${{ steps.dotenv.outputs.DB_DEPLOYMENT_NAME  }}
+            echo "${{ env.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc annotate --overwrite  sts/${{ env.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}
+            oc rollout restart sts/${{ env.DB_DEPLOYMENT_NAME  }}
           fi
