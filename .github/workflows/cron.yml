@@ -10,27 +10,27 @@ env:
 
 on:
   workflow_call:
-  push:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - 'CRON.Dockerfile'
-      - '**/config/cron/**'
-      - '**/workflows/**'
-      - '**/**.env'
-  pull_request:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - 'CRON.Dockerfile'
-      - '**/config/cron/**'
-      #- '**/workflows/build-push-cron-image.yml'
-      - '**/workflows/**'
-      - '**/**.env'
+  # push:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - 'CRON.Dockerfile'
+  #     - '**/config/cron/**'
+  #     - '**/workflows/**'
+  #     - '**/**.env'
+  # pull_request:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - 'CRON.Dockerfile'
+  #     - '**/config/cron/**'
+  #     #- '**/workflows/build-push-cron-image.yml'
+  #     - '**/workflows/**'
+  #     - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:

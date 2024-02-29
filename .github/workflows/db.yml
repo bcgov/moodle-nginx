@@ -5,25 +5,32 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  push:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - '**/config/mariadb/**'
-      - '**/workflows/**'
-      - '**/**.env'
-  pull_request:
-    branches:
-      - dev
-      #- test
-      #- prod
-    paths:
-      - '**/config/mariadb/**'
-      #- '**/workflows/build-push-db-image.yml'
-      - '**/workflows/**'
-      - '**/**.env'
+  workflow_call:
+    inputs:
+      SKIP_BUILDS:
+        type: string
+        description: 'Skip builds if set to YES'
+        required: false
+        default: 'NO'
+  # push:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - '**/config/mariadb/**'
+  #     - '**/workflows/**'
+  #     - '**/**.env'
+  # pull_request:
+  #   branches:
+  #     - dev
+  #     #- test
+  #     #- prod
+  #   paths:
+  #     - '**/config/mariadb/**'
+  #     #- '**/workflows/build-push-db-image.yml'
+  #     - '**/workflows/**'
+  #     - '**/**.env'
 jobs:
 
   # Build DB Image
