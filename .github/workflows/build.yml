@@ -2,7 +2,7 @@ name: 🚀 Deploy to OpenShift
 
 concurrency:
   group: ${{ github.workflow }}-github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   APP: moodle
