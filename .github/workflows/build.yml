@@ -137,7 +137,7 @@ jobs:
     needs: [checkEnv, db, php, cron, moodle]
     if: success()
     with:
-      APP: ${{ needs.checkEnv.outputs.APP }}
+      APP: ${{ env.APP }}
       APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
       BRANCH: ${{ github.ref_name }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
@@ -154,7 +154,7 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     with:
-      APP: ${{ needs.checkEnv.outputs.APP }}
+      APP: ${{ env.APP }}
       DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
       DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
       DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
