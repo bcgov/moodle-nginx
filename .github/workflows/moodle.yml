@@ -51,8 +51,8 @@ jobs:
     if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
-      # - name: 📤 Checkout Target Branch
-      #   uses: actions/checkout@v2
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v2
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
@@ -77,5 +77,5 @@ jobs:
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{env.PHP_IMAGE}}
 
       - name: 🛠️ Build Moodle Image and push to Artifactory
-        run: docker buildx build -t ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
+        run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
 

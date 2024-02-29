@@ -79,4 +79,4 @@ jobs:
 
       # Build PHP Image and push to Artifactory
       - name: 🛠️ Build PHP Image and push to Artifactory
-        run: docker buildx -t ${{ secrets.ARTIFACTORY_URL }}/${{ needs.checkEnv.PHP_DEPLOYMENT_NAME }}:${{ needs.checkEnv.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+        run: docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ needs.checkEnv.PHP_DEPLOYMENT_NAME }}:${{ needs.checkEnv.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
