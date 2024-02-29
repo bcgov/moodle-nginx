@@ -12,7 +12,8 @@ on:
       #- prod
     paths:
       - '**/config/mariadb/**'
-      - '**/workflows/build-push-db-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
   pull_request:
     branches:
       - dev
@@ -20,7 +21,9 @@ on:
       #- prod
     paths:
       - '**/config/mariadb/**'
-      - '**/workflows/build-push-db-image.yml'
+      #- '**/workflows/build-push-db-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
@@ -35,13 +38,13 @@ jobs:
             example.env
             example.versions.env
 
-      - name: Setup Env Vars
-        id: dotenv
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.env
-          export-variables: true
-          keys-case: upper
+      # - name: Setup Env Vars
+      #   id: dotenv
+      #   uses: falti/dotenv-action@v1
+      #   with:
+      #     path: example.env
+      #     export-variables: true
+      #     keys-case: upper
 
       # - name: Setup Env Version Vars
       #   id: dotenv_versions
@@ -50,11 +53,11 @@ jobs:
       #     path: example.versions.env
       #     export-variables: true
 
-      # - name: Setup All Env Vars
-      #   run: |
-      #     echo "Import .env to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
-      #     grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
-      #     grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
+      - name: Setup All Env Vars
+        run: |
+          echo "Import .env to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
+          grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
+          grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
 
   # Build DB Image
 

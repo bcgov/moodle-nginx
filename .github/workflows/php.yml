@@ -18,7 +18,9 @@ on:
     paths:
       - 'PHP.Dockerfile'
       - '**/config/**'
-      - '**/workflows/php.yml'
+      #- '**/workflows/php.yml'
+      - '**/workflows/**'
+      - '**/**.env'
   pull_request:
     branches:
       - dev
@@ -27,7 +29,9 @@ on:
     paths:
       - '**.Dockerfile'
       - '**/config/**'
-      - '**/workflows/build-moodle-jfrog.yml'
+      #- '**/workflows/build-moodle-jfrog.yml'
+      - '**/workflows/**'
+      - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:

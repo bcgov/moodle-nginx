@@ -18,7 +18,8 @@ on:
     paths:
       - 'CRON.Dockerfile'
       - '**/config/cron/**'
-      - '**/workflows/build-push-cron-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
   pull_request:
     branches:
       - dev
@@ -27,7 +28,9 @@ on:
     paths:
       - 'CRON.Dockerfile'
       - '**/config/cron/**'
-      - '**/workflows/build-push-cron-image.yml'
+      #- '**/workflows/build-push-cron-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:

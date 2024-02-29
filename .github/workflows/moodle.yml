@@ -18,7 +18,9 @@ on:
     paths:
       - 'Moodle.Dockerfile'
       - '**/config/moodle/**'
-      - '**/workflows/build-push-moodle-image.yml'
+      #- '**/workflows/build-push-moodle-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
   pull_request:
     branches:
       - dev
@@ -27,7 +29,9 @@ on:
     paths:
       - 'Moodle.Dockerfile'
       - '**/config/moodle/**'
-      - '**/workflows/build-push-moodle-image.yml'
+      #- '**/workflows/build-push-moodle-image.yml'
+      - '**/workflows/**'
+      - '**/**.env'
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
