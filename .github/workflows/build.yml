@@ -48,16 +48,16 @@ on:
       - dev
       #- test
       #- prod
-    paths:
-      - '**.Dockerfile'
-      - '**.conf'
-      - '**.env'
-      - '**.ini'
-      - '**.php'
-      - '**.yml'
-      - '**.json'
-      - '**.sh'
-      - '**.txt'
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.env'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - '**.json'
+    #   - '**.sh'
+    #   - '**.txt'
 
 jobs:
   #Print variables for logging and debugging purposes
