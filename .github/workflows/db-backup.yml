@@ -24,7 +24,6 @@ jobs:
       # Proxy settings for local development / testing
       # https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ env.OPENSHIFT_SERVER }}
-      BACKUP_IMAGE: bcgovimages/backup-container-mariadb
     steps:
       - name: Install oc
         uses: redhat-actions/openshift-tools-installer@v1
@@ -44,6 +43,14 @@ jobs:
         uses: falti/dotenv-action@v1
         with:
           path: example.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Setup Versions Env Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
           export-variables: true
           keys-case: upper
 
@@ -89,6 +96,9 @@ jobs:
               helm upgrade --install moodle -f config.yaml ${{ env.BACKUP_IMAGE }}
             else
               echo "Backup container installation FOUND. Updating..."
-              helm upgrade --reuse-values moodle ${{ env.BACKUP_IMAGE }}
+              if [[ `helm upgrade --reuse-values moodle ${{ env.BACKUP_IMAGE }} 2>&1` =~ "Error" ]]; then
+                echo "Backup container update FAILED."
+                exit 1
+              fi
               echo "Backup container updates completed."
             fi
