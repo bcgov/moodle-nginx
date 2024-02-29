@@ -56,9 +56,14 @@ jobs:
 
       - name: Setup All Env Vars
         run: |
-          echo "Import .env to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
+          echo "Import .env files to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
           grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
           grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
+          cat /.env
+
+      - name: Check Env Vars
+        run: |
+          echo Building and pushing DB_IMAGE: ${{ env.DB_IMAGE }}
 
   # Build DB Image
 
