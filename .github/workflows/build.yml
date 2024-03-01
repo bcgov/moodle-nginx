@@ -162,7 +162,7 @@ jobs:
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
       PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
