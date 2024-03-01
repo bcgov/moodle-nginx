@@ -150,3 +150,39 @@ jobs:
           CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+
+      - name: 🚀 Deploy DB Backups
+        uses: WyriHaximus/github-action-helm3@v3
+        with:
+          exec:  |
+            helm repo add bcgov http://bcgov.github.io/helm-charts
+            helm repo update
+            if [[ `oc describe deployment moodle-backup-storage 2>&1` =~ "NotFound" ]]; then
+              echo "Backup container NOT FOUND. Begin backup container deployment..."
+              echo '
+                backupConfig: |
+                  mariadb=db/moodle
+
+                  0 1 * * * default ./backup.sh -s
+                  0 4 * * * default ./backup.sh -s -v all
+
+                db:
+                  secretName: moodle-secrets
+                  usernameKey: database-user
+                  passwordKey: database-password
+
+                env:
+                  DATABASE_SERVICE_NAME:
+                    value: db
+                  ENVIRONMENT_FRIENDLY_NAME:
+                    value: "DB Backups"
+                ' > config.yaml
+              helm upgrade --install moodle -f config.yaml ${{ env.BACKUP_IMAGE }}
+            else
+              echo "Backup container installation FOUND. Updating..."
+              if [[ `helm upgrade --reuse-values moodle ${{ env.BACKUP_IMAGE }} 2>&1` =~ "Error" ]]; then
+                echo "Backup container update FAILED."
+                exit 1
+              fi
+              echo "Backup container updates completed."
+            fi
