@@ -60,8 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
-      DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
-      BUILD_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
@@ -94,9 +94,9 @@ jobs:
 
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ needs.checkEnv.outputs.APP }} on ${{ env.DEPLOY_NAMESPACE }}
+          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           echo "-----------------------"
-          echo URL: https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
   db:
