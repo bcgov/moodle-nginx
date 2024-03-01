@@ -200,12 +200,12 @@ jobs:
         run: |
           if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND: Skipping..."
           fi
 
-      - name: 🚀 Deploy to OpenShift ( ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} )
+      - name: 🚀 Deploy to OpenShift ( ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }} )
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
@@ -213,11 +213,11 @@ jobs:
           DB_NAME: ${{ inputs.DB_NAME }}
           DB_USER: ${{ inputs.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          BUILD_TAG: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          BUILD_TAG: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
-          BUILD_NAMESPACE: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          BUILD_NAMESPACE: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
-          DEPLOY_NAMESPACE: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          DEPLOY_NAMESPACE: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
