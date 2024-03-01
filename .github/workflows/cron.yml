@@ -1,4 +1,4 @@
-name: 🔨 Cron
+name: Cron
 
 concurrency:
   group: cron-${{ github.workflow }}-${{ github.ref }}
@@ -36,7 +36,7 @@ jobs:
   # Build Images
 
   build-images:
-    name: '🔨 Build Cron image'
+    name: '🔨 Build'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:

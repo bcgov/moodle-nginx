@@ -1,4 +1,4 @@
-name: 🔨 DB
+name: DB
 
 concurrency:
   group: db-${{ github.workflow }}-${{ github.ref }}

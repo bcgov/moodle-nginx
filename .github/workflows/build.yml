@@ -170,6 +170,7 @@ jobs:
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     with:
+      MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
       DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}

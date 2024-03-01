@@ -1,6 +1,6 @@
 # Deploy On Openshift
 # Builds and Deploys merged PR's to persistent pods/services/routes/etc in the OpenShift environment.
-name: 🚀 Deploy to OpenShift
+name: 🚀 Deploy
 
 env:
   APP: moodle
@@ -9,6 +9,9 @@ env:
 on:
   workflow_call:
     inputs:
+      MOODLE_ENVIRONMENT:
+        required: true
+        type: string
       OPENSHIFT_DEPLOY_PROJECT:
         required: true
         type: string
@@ -87,7 +90,7 @@ permissions:
 jobs:
   # Deploy to Openshift
   deploy:
-    name: 🚀 Deploy to OpenShift (${{ github.ref_name }})
+    name: OpenShift (${{ github.ref_name }})
     runs-on: ubuntu-latest
     if: |
       always()
@@ -97,9 +100,6 @@ jobs:
         contains(github.event.workflow_run.conclusion, 'success')
         && !contains(github.event.workflow_run.conclusion, 'failure')
       )
-    outputs:
-      output1: ${{ steps.deploy-to-os.outputs.deploy1 }}
-      output2: ${{ steps.deploy-to-os.outputs.deploy2 }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v2
@@ -121,7 +121,7 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      - name: Deploy Environment ConfigMap (moodle-env)
+      - name: ConfigMap (moodle-env)
         if: success()
         run: |
           if [[ `oc describe configmap moodle-env 2>&1` =~ "NotFound" ]]; then
@@ -135,7 +135,7 @@ jobs:
       # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ inputs.DB_DEPLOYMENT_NAME  }} to ${{ inputs.DEPLOY_NAMESPACE }}
+      - name: ${{ inputs.DB_DEPLOYMENT_NAME  }}
         if: success()
         run: |
           if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
@@ -147,10 +147,11 @@ jobs:
             oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
 
-      - name: 🚀 Deploy Template ( ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }} )
+      - name: Template
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
+          MOODLE_ENVIRONMENT: ${{ inputs.MOODLE_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
           DB_NAME: ${{ inputs.DB_NAME }}
           DB_USER: ${{ inputs.DB_USER }}
@@ -167,7 +168,7 @@ jobs:
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
 
-      - name: 🚀 Deploy DB Backups
+      - name: Backups
         uses: WyriHaximus/github-action-helm3@v3
         with:
           exec:  |
