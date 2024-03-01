@@ -106,12 +106,6 @@ jobs:
     uses: ./.github/workflows/db.yml
     secrets: inherit # pass all secrets
 
-  db-backup:
-    name: 🔨 Deploy DB backups
-    needs: [checkEnv]
-    uses: ./.github/workflows/db-backup.yml
-    secrets: inherit # pass all secrets
-
   php:
     name: 🔨 Build PHP image
     needs: [checkEnv]
@@ -138,7 +132,7 @@ jobs:
     if: success()
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
       BRANCH: ${{ github.ref_name }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
@@ -170,7 +164,7 @@ jobs:
       REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
       REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
-      APP_HOST_URL: "https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca"
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}

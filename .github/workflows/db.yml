@@ -87,6 +87,16 @@ jobs:
           docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
 
+  # Deploy DB to OpenShift
+  deploy-db:
+    name: '🚀 Deploy DB'
+    runs-on: ubuntu-latest
+    #env:
+      # Proxy settings for local development / testing
+      #https_proxy: http://198.161.14.25:8080
+      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
+    if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    steps:
       - name: Install oc
         uses: redhat-actions/openshift-tools-installer@v1
         with:
@@ -120,3 +130,8 @@ jobs:
             oc annotate --overwrite  sts/${{ env.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
             oc rollout restart sts/${{ env.DB_DEPLOYMENT_NAME  }}
           fi
+
+  db-backup:
+    name: 🔨 Deploy DB backups
+    uses: ./.github/workflows/db-backup.yml
+    secrets: inherit # pass all secrets
