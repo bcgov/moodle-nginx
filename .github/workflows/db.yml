@@ -124,19 +124,20 @@ jobs:
       # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ env.DB_DEPLOYMENT_NAME  }} to ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      - name: 🚀 Deploy ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} to ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ env.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ env.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          if [[ `oc describe sts ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           else
-            echo "${{ env.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  sts/${{ env.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-            oc rollout restart sts/${{ env.DB_DEPLOYMENT_NAME  }}
+            echo "${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc annotate --overwrite  sts/${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+            oc rollout restart sts/${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }}
           fi
 
   db-backup:
-    name: 🔨 Deploy DB backups
+    name: 🔨 DB Backups
     uses: ./.github/workflows/db-backup.yml
     secrets: inherit # pass all secrets
+    needs: [deploy-db]

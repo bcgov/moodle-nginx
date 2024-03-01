@@ -101,31 +101,31 @@ jobs:
 
   # Build Images and deploy to JFrog
   db:
-    name: 🔨 Build DB image
+    name: 🔨 DB
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
     secrets: inherit # pass all secrets
 
   php:
-    name: 🔨 Build PHP image
+    name: 🔨 PHP
     needs: [checkEnv]
     uses: ./.github/workflows/php.yml
     secrets: inherit # pass all secrets
 
   cron:
-    name: 🔨 Build CRON image
+    name: 🔨 Cron
     needs: [checkEnv]
     uses: ./.github/workflows/cron.yml
     secrets: inherit # pass all secrets
 
   moodle:
-    name: 🔨 Build Moodle image
+    name: 🔨 Moodle
     needs: [checkEnv]
     uses: ./.github/workflows/moodle.yml
     secrets: inherit # pass all secrets
 
   call-cleanup-workflow:
-    name: 🧹️ Clean Build
+    name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle]
@@ -143,7 +143,7 @@ jobs:
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
 
   call-deploy-workflow:
-    name: 🚀 Deploy to OpenShift
+    name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
     secrets: inherit # pass all secrets
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
@@ -171,7 +171,7 @@ jobs:
       BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   notify:
-    name: 📫 Send Notifications (via Rocket.Chat)
+    name: 📫 Notify
     needs: [checkEnv, db, php, cron, moodle, call-deploy-workflow]
     if: success() || failure()
     runs-on: ubuntu-latest
