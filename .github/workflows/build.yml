@@ -105,6 +105,28 @@ jobs:
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
     secrets: inherit # pass all secrets
+    with:
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
+      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
+      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   php:
     name: 🔨 PHP
