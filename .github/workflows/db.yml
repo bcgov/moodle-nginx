@@ -1,4 +1,4 @@
-name: 🔨 Build and publish DB image to Artifactory
+name: 🔨 Build and deploy DB
 
 concurrency:
   group: db-${{ github.workflow }}-${{ github.ref }}
