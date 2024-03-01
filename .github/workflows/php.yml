@@ -21,6 +21,8 @@ jobs:
     name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    outputs:
+      JFROG_PHP_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch

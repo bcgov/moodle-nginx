@@ -10,6 +10,10 @@ env:
 
 on:
   workflow_call:
+    inputs:
+      JFROG_PHP_IMAGE:
+        required: true
+        type: string
 jobs:
   build-images:
     name: '🐸 Build to JFrog'
@@ -36,17 +40,6 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: Setup Versions Env Vars
-        id: dotenv_versions
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.versions.env
-          export-variables: true
-          keys-case: upper
+      - name: 🐸 Buld to JFrog
+        run: docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ inputs.JFROG_PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ inputs.MOODLE_DOCKER_FILE_PATH }} .
 
-      - name: 🐸 Buld and Push to JFrog
-        run: |
-          docker pull ${{ env.PHP_IMAGE }}
-          docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
-          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
