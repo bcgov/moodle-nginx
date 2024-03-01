@@ -36,7 +36,7 @@ jobs:
   # Build Images
 
   build-images:
-    name: '🔨 Build'
+    name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
@@ -73,11 +73,12 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: 🛠️ Pull Cron base image
+      - name: 🛠️ Pull Base Image
         run: |
           docker pull ${{ env.CRON_IMAGE }}
+
+      - name: 🐸 Push to JFrog
+        run: |
           docker tag ${{ env.CRON_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
-
-      - name: 🛠️ Build and push CRON Image
-        run: docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .
+          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .

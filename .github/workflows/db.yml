@@ -94,7 +94,7 @@ jobs:
   # Build DB Image
 
   build-images:
-    name: '🔨 Build'
+    name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     #env:
       # Proxy settings for local development / testing

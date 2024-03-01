@@ -59,6 +59,7 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
+      MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
       APP: ${{ env.APP }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
       BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
