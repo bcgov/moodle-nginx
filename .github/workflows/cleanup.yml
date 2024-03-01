@@ -57,7 +57,7 @@ jobs:
   # Clean Openshift
   # Not configured for prod deployments (to be safe)
   clean:
-    name: 🧹️ OpenShift
+    name: OpenShift
     runs-on: ubuntu-latest
     if: |
       always()

@@ -44,12 +44,9 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: 🛠️ Pull PHP base image
+      - name: 🐸 Buld and Push to JFrog
         run: |
           docker pull ${{ env.PHP_IMAGE }}
           docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
-
-      - name: 🛠️ Build Moodle and Push to Artifactory
-        run: docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
-
+          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
