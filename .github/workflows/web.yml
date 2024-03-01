@@ -41,7 +41,7 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
