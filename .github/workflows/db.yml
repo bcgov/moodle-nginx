@@ -136,6 +136,3 @@ jobs:
     name: 🔨 Deploy DB backups
     uses: ./.github/workflows/db-backup.yml
     secrets: inherit # pass all secrets
-    with:
-      OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}

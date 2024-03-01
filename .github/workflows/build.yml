@@ -105,9 +105,6 @@ jobs:
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
     secrets: inherit # pass all secrets
-    with:
-      OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
 
   php:
     name: 🔨 Build PHP image
