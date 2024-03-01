@@ -6,12 +6,6 @@ concurrency:
 
 on:
   workflow_call:
-    inputs:
-      OPENSHIFT_SERVER:
-        required: true
-        type: string
-      OPENSHIFT_DEPLOY_PROJECT:
-        required: true
         type: string
   # push:
   #   branches:
@@ -42,7 +36,7 @@ jobs:
     #env:
       # Proxy settings for local development / testing
       #https_proxy: http://198.161.14.25:8080
-      # no_proxy: ${{ inputs.OPENSHIFT_SERVER }}
+      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       - name: 📤 Checkout Target Branch
@@ -104,10 +98,10 @@ jobs:
       # no_proxy: ${{ inputs.OPENSHIFT_SERVER }}
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
-      - name: Install oc
-        uses: redhat-actions/openshift-tools-installer@v1
-        with:
-          oc: 4.11.0
+      # - name: Install oc
+      #   uses: redhat-actions/openshift-tools-installer@v1
+      #   with:
+      #     oc: 4.11.0
 
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
@@ -118,9 +112,9 @@ jobs:
         with:
           insecure_skip_tls_verify: false
           reveal_cluster_name: false
-          openshift_server_url: ${{ inputs.OPENSHIFT_SERVER }}
+          openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
-          namespace: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          namespace: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
 
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
       # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0

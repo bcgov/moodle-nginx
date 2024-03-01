@@ -6,13 +6,6 @@ concurrency:
 
 on:
   workflow_call:
-    inputs:
-      OPENSHIFT_SERVER:
-        required: true
-        type: string
-      OPENSHIFT_DEPLOY_PROJECT:
-        required: true
-        type: string
   # push:
   #   branches:
   #     - dev
@@ -32,10 +25,10 @@ jobs:
       # https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ inputs.OPENSHIFT_SERVER }}
     steps:
-      - name: Install oc
-        uses: redhat-actions/openshift-tools-installer@v1
-        with:
-          oc: 4.11.0
+      # - name: Install oc
+      #   uses: redhat-actions/openshift-tools-installer@v1
+      #   with:
+      #     oc: 4.11.0
 
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -70,9 +63,9 @@ jobs:
         with:
           insecure_skip_tls_verify: false
           reveal_cluster_name: false
-          openshift_server_url: ${{ inputs.OPENSHIFT_SERVER }}
+          openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
-          namespace: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          namespace: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
 
       - name: 🚀 Deploy Backup Container
         uses: WyriHaximus/github-action-helm3@v3
