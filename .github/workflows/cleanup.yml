@@ -1,6 +1,6 @@
 # Clean Openshift
 # Deletes all resources from OpenShift to prepare for a fresh deployment
-name: 🧹️ Clean Openshift Project
+name: 🧹️ Clean-up
 
 env:
   APP: ${{ github.repository }}
@@ -57,7 +57,7 @@ jobs:
   # Clean Openshift
   # Not configured for prod deployments (to be safe)
   clean:
-    name: 🧹️ Clean OpenShift Environment
+    name: 🧹️ OpenShift
     runs-on: ubuntu-latest
     if: |
       always()

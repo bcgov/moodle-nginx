@@ -1,4 +1,4 @@
-name: 🚀 Deploy DB backups
+name: 🚀 DB Backups
 
 concurrency:
   group: db-backup-${{ github.workflow }}-${{ github.ref }}
@@ -18,7 +18,7 @@ on:
   #     #- prod
 jobs:
   deploy:
-    name: '🔨 Deploy DB backups'
+    name: '🚀 Deploy'
     runs-on: ubuntu-latest
     #env:
       # Proxy settings for local development / testing
@@ -67,7 +67,7 @@ jobs:
           openshift_token: ${{ secrets.AUTH_TOKEN_DEV }}
           namespace: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
 
-      - name: 🚀 Deploy Backup Container
+      - name: 🚀 Deploy Backups
         uses: WyriHaximus/github-action-helm3@v3
         with:
           exec:  |

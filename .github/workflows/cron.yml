@@ -1,4 +1,4 @@
-name: 🔨 Build and publish Cron image to Artifactory
+name: 🔨 Cron
 
 concurrency:
   group: cron-${{ github.workflow }}-${{ github.ref }}

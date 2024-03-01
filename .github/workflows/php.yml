@@ -1,4 +1,4 @@
-name: 🔨 Build PHP Image and Push to Artifactory
+name: 🔨 PHP
 
 concurrency:
   group: php-${{ github.workflow }}-${{ github.ref }}
