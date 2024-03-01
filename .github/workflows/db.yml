@@ -6,7 +6,6 @@ concurrency:
 
 on:
   workflow_call:
-        type: string
   # push:
   #   branches:
   #     - dev
