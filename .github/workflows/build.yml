@@ -132,7 +132,7 @@ jobs:
     name: 🔨 DB Backups
     uses: ./.github/workflows/db-backup.yml
     secrets: inherit # pass all secrets
-    needs: [checkEnv, db]
+    needs: [checkEnv, db, call-cleanup-workflow]
 
   php:
     name: 🔨 PHP
