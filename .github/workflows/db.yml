@@ -46,28 +46,28 @@ jobs:
             example.env
             example.versions.env
 
-      # - name: Setup Env Vars
-      #   id: dotenv
-      #   uses: falti/dotenv-action@v1
-      #   with:
-      #     path: example.env
-      #     export-variables: true
-      #     keys-case: upper
+      - name: Setup Env Vars
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          keys-case: upper
 
-      # - name: Setup Env Version Vars
-      #   id: dotenv_versions
-      #   uses: falti/dotenv-action@v1
-      #   with:
-      #     path: example.versions.env
-      #     export-variables: true
-      #     keys-case: upper
+      - name: Setup Env Version Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
 
-      - name: Setup All Env Vars
-        run: |
-          echo "Import .env files to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
-          grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
-          grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
-          echo $GITHUB_ENV
+      # - name: Setup All Env Vars
+      #   run: |
+      #     echo "Import .env files to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
+      #     grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
+      #     grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
+      #     echo $GITHUB_ENV
 
       - name: Check Env Vars
         run: |
