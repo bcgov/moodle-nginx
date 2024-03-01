@@ -131,7 +131,23 @@ jobs:
             oc create configmap moodle-env --from-file=.env=./example.env
           fi
 
-      - name: 🚀 Deploy to OpenShift ( ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} )
+      # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
+      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
+      # To uninstall/delete the my-release release:
+      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
+      - name: 🚀 Deploy ${{ inputs.DB_DEPLOYMENT_NAME  }} to ${{ inputs.DEPLOY_NAMESPACE }}
+        if: success()
+        run: |
+          if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
+          else
+            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+            oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
+          fi
+
+      - name: 🚀 Deploy Template ( ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }} )
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:

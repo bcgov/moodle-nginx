@@ -143,19 +143,3 @@ jobs:
           docker pull ${{ env.DB_IMAGE }}
           docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
-
-      # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
-      # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ inputs.DB_DEPLOYMENT_NAME  }} to ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-        if: success()
-        run: |
-          if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-          else
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-            oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
-          fi

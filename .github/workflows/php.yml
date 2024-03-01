@@ -1,4 +1,4 @@
-name: 🔨 PHP
+name: PHP
 
 concurrency:
   group: php-${{ github.workflow }}-${{ github.ref }}
@@ -43,7 +43,7 @@ jobs:
   # Build Images
 
   build-images:
-    name: '🔨 Build PHP Image and Push to Artifactory'
+    name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
