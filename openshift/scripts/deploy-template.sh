@@ -34,7 +34,7 @@ oc rollout latest dc/$PHP_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
 # echo "Rolling out $CRON_DEPLOYMENT_NAME..."
 # oc rollout latest dc/$CRON_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
 
-Check PHP deployment rollout status until complete.
+# Check PHP deployment rollout status until complete.
 ATTEMPTS=0
 WAIT_TIME=5
 ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE"
