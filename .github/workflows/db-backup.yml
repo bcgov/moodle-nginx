@@ -25,11 +25,6 @@ jobs:
       # https_proxy: http://198.161.14.25:8080
       # no_proxy: ${{ inputs.OPENSHIFT_SERVER }}
     steps:
-      # - name: Install oc
-      #   uses: redhat-actions/openshift-tools-installer@v1
-      #   with:
-      #     oc: 4.11.0
-
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
@@ -37,22 +32,6 @@ jobs:
             config/backup
             example.env
             example.versions.env
-
-      - name: Setup Env Vars
-        id: dotenv
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.env
-          export-variables: true
-          keys-case: upper
-
-      - name: Setup Versions Env Vars
-        id: dotenv_versions
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.versions.env
-          export-variables: true
-          keys-case: upper
 
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.

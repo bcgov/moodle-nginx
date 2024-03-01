@@ -6,6 +6,70 @@ concurrency:
 
 on:
   workflow_call:
+    inputs:
+      OPENSHIFT_DEPLOY_PROJECT:
+        required: true
+        type: string
+      APP:
+        required: true
+        type: string
+      DB_NAME:
+        required: true
+        type: string
+      DB_USER:
+        required: true
+        type: string
+      DB_PASSWORD:
+        required: true
+        type: string
+      WEB_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      WEB_IMAGE:
+        required: true
+        type: string
+      PHP_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      PHP_IMAGE:
+        required: true
+        type: string
+      DB_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      DB_IMAGE:
+        required: true
+        type: string
+      CRON_IMAGE:
+        required: true
+        type: string
+      CRON_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      REDIS_REPO:
+        required: true
+        type: string
+      REDIS_DEPLOYMENT_NAME:
+        required: true
+        type: string
+      REDIS_IMAGE:
+        required: true
+        type: string
+      APP_HOST_URL:
+        required: true
+        type: string
+      BUILD_NAMESPACE:
+        required: true
+        type: string
+      DEPLOY_NAMESPACE:
+        required: true
+        type: string
+      IMAGE_REPO:
+        required: true
+        type: string
+      BRANCH:
+        required: true
+        type: string
   # push:
   #   branches:
   #     - dev
@@ -30,7 +94,7 @@ jobs:
   # Build DB Image
 
   build-images:
-    name: '🔨 Build image'
+    name: '🔨 Build'
     runs-on: ubuntu-latest
     #env:
       # Proxy settings for local development / testing
@@ -61,13 +125,6 @@ jobs:
           path: example.versions.env
           export-variables: true
           keys-case: upper
-
-      # - name: Setup All Env Vars
-      #   run: |
-      #     echo "Import .env files to $GITHUB_ENV (ignoring any commented [#] or empty lines)"
-      #     grep -v '^#' ./example.env | grep -v '^$' >> $GITHUB_ENV
-      #     grep -v '^#' ./example.versions.env | grep -v '^$' >> $GITHUB_ENV
-      #     echo $GITHUB_ENV
 
       - name: Check Env Vars
         run: |
@@ -124,20 +181,20 @@ jobs:
       # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} to ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      - name: 🚀 Deploy ${{ inputs.DB_DEPLOYMENT_NAME  }} to ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
         if: success()
         run: |
-          if [[ `oc describe sts ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           else
-            echo "${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  sts/${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ needs.build-images.outputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-            oc rollout restart sts/${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME  }}
+            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+            oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
 
   db-backup:
     name: 🔨 DB Backups
     uses: ./.github/workflows/db-backup.yml
     secrets: inherit # pass all secrets
-    needs: [deploy-db]
+    needs: [build-images, deploy-db]
