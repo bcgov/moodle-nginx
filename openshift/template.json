@@ -499,7 +499,7 @@
       "description": "Web Image Name",
       "displayName": "Web Image",
       "name": "WEB_IMAGE",
-      "value": "nginx"
+      "value": "nginxinc/nginx-unprivileged"
     },
     {
       "description": "Image registry",
