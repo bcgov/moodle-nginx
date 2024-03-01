@@ -150,9 +150,6 @@ jobs:
     secrets: inherit # pass all secrets
     with:
       JFROG_PHP_IMAGE: ${{ needs.php.outputs.JFROG_PHP_IMAGE }}
-      MOODLE_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.MOODLE_DEPLOYMENT_NAME }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
-      MOODLE_DOCKER_FILE_PATH: ${{ needs.checkEnv.outputs.MOODLE_DOCKER_FILE_PATH }}
 
   call-cleanup-workflow:
     name: 🧹️ Clean-up
