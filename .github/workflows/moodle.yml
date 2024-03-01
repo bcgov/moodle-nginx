@@ -10,34 +10,9 @@ env:
 
 on:
   workflow_call:
-  # push:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - 'Moodle.Dockerfile'
-  #     - '**/config/moodle/**'
-  #     #- '**/workflows/build-push-moodle-image.yml'
-  #     - '**/workflows/**'
-  #     - '**/**.env'
-  # pull_request:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - 'Moodle.Dockerfile'
-  #     - '**/config/moodle/**'
-  #     #- '**/workflows/build-push-moodle-image.yml'
-  #     - '**/workflows/**'
-  #     - '**/**.env'
 jobs:
-
-  # Build Images
-
   build-images:
-    name: '🔨 Build'
+    name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:

@@ -75,14 +75,6 @@ on:
       BRANCH:
         required: true
         type: string
-  # push:
-  #   paths:
-  #     - './openshift/*'
-  #     - '**.Dockerfile'
-  #     - '**.yml'
-  #     - '**.conf'
-  #     - '**.ini'
-  #     - '**.php'
 permissions:
   contents: read
   id-token: write

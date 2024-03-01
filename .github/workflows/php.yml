@@ -16,32 +16,7 @@ on:
         description: 'Skip builds if set to YES'
         required: false
         default: 'NO'
-  # push:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - 'PHP.Dockerfile'
-  #     - '**/config/**'
-  #     #- '**/workflows/php.yml'
-  #     - '**/workflows/**'
-  #     - '**/**.env'
-  # pull_request:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - '**.Dockerfile'
-  #     - '**/config/**'
-  #     #- '**/workflows/build-moodle-jfrog.yml'
-  #     - '**/workflows/**'
-  #     - '**/**.env'
 jobs:
-
-  # Build Images
-
   build-images:
     name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest

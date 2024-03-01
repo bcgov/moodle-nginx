@@ -96,9 +96,6 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      # - name: Uninstall ${{ inputs.REDIS_DEPLOYMENT_NAME }}
-      #   run: helm uninstall ${{ inputs.REDIS_DEPLOYMENT_NAME }} -n ${{ inputs.DEPLOY_NAMESPACE }}
-
       - name: 🧹️ Clean ${{ inputs.REDIS_DEPLOYMENT_NAME }}-redis-cluster
         run: |
           if [[ `oc describe sts ${{ inputs.REDIS_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
