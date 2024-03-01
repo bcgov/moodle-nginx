@@ -22,6 +22,7 @@ jobs:
         with:
           sparse-checkout: |
             config/cron
+            config/php
             example.env
             example.versions.env
 
