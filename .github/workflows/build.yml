@@ -128,6 +128,12 @@ jobs:
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
       BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
+  db-backup:
+    name: 🔨 DB Backups
+    uses: ./.github/workflows/db-backup.yml
+    secrets: inherit # pass all secrets
+    needs: [checkEnv, db]
+
   php:
     name: 🔨 PHP
     needs: [checkEnv]

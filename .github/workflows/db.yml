@@ -144,47 +144,6 @@ jobs:
           docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
 
-  # Deploy DB to OpenShift
-  deploy-db:
-    name: '🚀 Deploy'
-    runs-on: ubuntu-latest
-    needs: [build-images]
-    #env:
-      # Proxy settings for local development / testing
-      #https_proxy: http://198.161.14.25:8080
-      # no_proxy: ${{ inputs.OPENSHIFT_SERVER }}
-    if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
-    steps:
-      # - name: Install oc
-      #   uses: redhat-actions/openshift-tools-installer@v1
-      #   with:
-      #     oc: 4.11.0
-
-      - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            config/mariadb
-            example.env
-            example.versions.env
-
-      # Log in to OpenShift.
-      # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
-      # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
-      - name: 🔑 Log in to OpenShift ( ${{ github.ref_name }} )
-        if: success()
-        run: |
-          server=https://api.silver.devops.gov.bc.ca:6443
-          if [[ ${{ github.ref_name == 'test' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_DEV }} --server=$server
-          elif [[ ${{ github.ref_name == 'test' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_TEST }} --server=$server
-          elif [[ ${{ github.ref_name == 'prod' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_PROD }} --server=$server
-          else
-            echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
-          fi
-
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
       # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
@@ -200,9 +159,3 @@ jobs:
             oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
             oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
-
-  db-backup:
-    name: 🔨 DB Backups
-    uses: ./.github/workflows/db-backup.yml
-    secrets: inherit # pass all secrets
-    needs: [build-images, deploy-db]
