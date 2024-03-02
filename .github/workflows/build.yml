@@ -148,8 +148,6 @@ jobs:
     needs: [checkEnv, php]
     uses: ./.github/workflows/moodle.yml
     secrets: inherit # pass all secrets
-    with:
-      JFROG_PHP_IMAGE: ${{ needs.php.outputs.JFROG_PHP_IMAGE }}
 
   call-cleanup-workflow:
     name: 🧹️ Clean-up
