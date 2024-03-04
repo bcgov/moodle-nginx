@@ -44,7 +44,7 @@ services:
         depends_on:
           php:
             condition: service_healthy
-        image: ${WEB_IMAGE:-nginx:1.19}
+        image: ${WEB_IMAGE:-nginx-unprivileged:1.25.4-alpine-slim}
         ports:
             - "8080:8080"
         volumes:

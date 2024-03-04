@@ -149,6 +149,12 @@ jobs:
     uses: ./.github/workflows/moodle.yml
     secrets: inherit # pass all secrets
 
+  web:
+    name: 🔨 Web
+    needs: [checkEnv]
+    uses: ./.github/workflows/web.yml
+    secrets: inherit # pass all secrets
+
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml

@@ -380,7 +380,7 @@
           "spec": {
             "containers": [
               {
-                "image": "${WEB_IMAGE}",
+                "image": "${IMAGE_REPO}${WEB_IMAGE}",
                 "name": "${WEB_DEPLOYMENT_NAME}",
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",

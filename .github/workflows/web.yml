@@ -1,4 +1,4 @@
-name: 🔨 Push Web Image to Artifactory and Deploy to OpenShift
+name: Web
 
 concurrency:
   group: web-${{ github.workflow }}-${{ github.ref }}
@@ -10,38 +10,20 @@ env:
 
 on:
   workflow_call:
-  # push:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - 'PHP.Dockerfile'
-  #     - '**/config/nginx/**'
-  #     - '**/workflows/web.yml'
-  #     - '**/**.env'
-  # pull_request:
-  #   branches:
-  #     - dev
-  #     #- test
-  #     #- prod
-  #   paths:
-  #     - 'PHP.Dockerfile'
-  #     - '**/config/nginx/**'
-  #     - '**/workflows/web.yml'
-  #     - '**/**.env'
 jobs:
-
-  # Build Images
-
   build-images:
-    name: '🔨 Build Web images and push to Artifactory'
+    name: '🐸 Build to JFrog'
     runs-on: ubuntu-latest
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v3
+        with:
+          sparse-checkout: |
+            config/nginx
+            example.env
+            example.versions.env
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
