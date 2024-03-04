@@ -7,14 +7,14 @@ oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/defau
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$MOODLE_ENVIRONMENT.config.php
 oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$MOODLE_ENVIRONMENT.config.php
 
-echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$BUILD_TAG"
+echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
 
 oc -n $DEPLOY_NAMESPACE process -f ./openshift/template.json \
       -p APP_NAME=$APP \
       -p DB_USER=$DB_USER \
       -p DB_NAME=$DB_NAME \
       -p DB_PASSWORD=$DB_PASSWORD \
-      -p BUILD_TAG=$BUILD_TAG \
+      -p BUILD_TAG=$DEPLOY_NAMESPACE \
       -p SITE_URL=$APP_HOST_URL \
       -p BUILD_NAMESPACE=$DEPLOY_NAMESPACE \
       -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
