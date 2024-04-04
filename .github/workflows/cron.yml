@@ -58,4 +58,4 @@ jobs:
         run: |
           docker tag ${{ env.CRON_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
-          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .
+          docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .

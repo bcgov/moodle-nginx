@@ -336,20 +336,6 @@
         },
         "triggers": [
           {
-            "type": "ImageChange",
-            "imageChangeParams": {
-              "automatic": true,
-              "containerNames": [
-                "${PHP_DEPLOYMENT_NAME}"
-              ],
-              "from": {
-                "kind": "ImageStreamTag",
-                "name": "${PHP_DEPLOYMENT_NAME}:${BUILD_TAG}",
-                "namespace": "${BUILD_NAMESPACE}"
-              }
-            }
-          },
-          {
             "type": "ConfigChange"
           }
         ],

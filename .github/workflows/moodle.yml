@@ -37,5 +37,5 @@ jobs:
           keys-case: upper
 
       - name: 🐸 Buld to JFrog
-        run: docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
+        run: docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
 
