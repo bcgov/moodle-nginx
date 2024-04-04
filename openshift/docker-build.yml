@@ -23,7 +23,7 @@ objects:
       annotations: null
       from:
         kind: DockerImage
-        name: ${IMAGE_REPO}${IMAGE_NAME}:${IMAGE_TAG}
+        name: ${IMAGE_REPO}${IMAGE_NAME}:${BUILD_TAG}
       importPolicy:
         scheduled: true
       referencePolicy:

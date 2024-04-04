@@ -30,6 +30,8 @@ objects:
                  - key: .env
                    path: ./.env
                defaultMode: 420
+         imagePullSecrets:
+           - name: artifactory-m950-learning
          containers:
            - name: migrate-build-files-job
              image: ${IMAGE_REPO}${BUILD_NAMESPACE}/${BUILD_NAME}:${BUILD_TAG}
