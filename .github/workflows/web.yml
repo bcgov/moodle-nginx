@@ -59,32 +59,32 @@ jobs:
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
       # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
-      - name: 🔑 Log in to OpenShift ( ${{ github.ref_name }} )
-        run: |
-          server=https://api.silver.devops.gov.bc.ca:6443
-          if [[ ${{ github.ref_name == 'test' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_DEV }} --server=$server
-          elif [[ ${{ github.ref_name == 'test' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_TEST }} --server=$server
-          elif [[ ${{ github.ref_name == 'prod' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_PROD }} --server=$server
-          else
-            echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
-          fi
+      # - name: 🔑 Log in to OpenShift ( ${{ github.ref_name }} )
+      #   run: |
+      #     server=https://api.silver.devops.gov.bc.ca:6443
+      #     if [[ ${{ github.ref_name == 'test' }} ]]; then
+      #       oc login --token=${{ secrets.AUTH_TOKEN_DEV }} --server=$server
+      #     elif [[ ${{ github.ref_name == 'test' }} ]]; then
+      #       oc login --token=${{ secrets.AUTH_TOKEN_TEST }} --server=$server
+      #     elif [[ ${{ github.ref_name == 'prod' }} ]]; then
+      #       oc login --token=${{ secrets.AUTH_TOKEN_PROD }} --server=$server
+      #     else
+      #       echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
+      #     fi
 
 
-      # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale dc ${{ env.WEB_DEPLOYMENT_NAME  }} --replicas=0
-      # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ env.WEB_DEPLOYMENT_NAME  }}
-      - name: 🚀 Deploy ${{ env.WEB_DEPLOYMENT_NAME  }} to ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-        if: success()
-        run: |
-          if [[ `oc describe dc ${{ env.WEB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ env.WEB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create configmap ${{ env.WEB_DEPLOYMENT_NAME }}-config --from-file=./config/nginx/default.conf -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-          else
-            echo "${{ env.WEB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-            oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-            oc rollout latest dc/${{ env.WEB_DEPLOYMENT_NAME  }}
-          fi
+      # # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
+      # # oc scale dc ${{ env.WEB_DEPLOYMENT_NAME  }} --replicas=0
+      # # To uninstall/delete the my-release release:
+      # # helm delete --purge ${{ env.WEB_DEPLOYMENT_NAME  }}
+      # - name: 🚀 Deploy ${{ env.WEB_DEPLOYMENT_NAME  }} to ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      #   if: success()
+      #   run: |
+      #     if [[ `oc describe dc ${{ env.WEB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+      #       echo "${{ env.WEB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
+      #       oc create configmap ${{ env.WEB_DEPLOYMENT_NAME }}-config --from-file=./config/nginx/default.conf -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      #     else
+      #       echo "${{ env.WEB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+      #       oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      #       oc rollout latest dc/${{ env.WEB_DEPLOYMENT_NAME  }}
+      #     fi
