@@ -188,6 +188,11 @@
             }
           },
           "spec": {
+            "imagePullSecrets": [
+              {
+                "name": "${{ secrets.ARTIFACTORY_PULL_SECRET_NAME }}"
+              }
+            ],
             "containers": [
               {
                 "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${BUILD_TAG}",
@@ -378,6 +383,11 @@
             }
           },
           "spec": {
+            "imagePullSecrets": [
+              {
+                "name": "${{ secrets.ARTIFACTORY_PULL_SECRET_NAME }}"
+              }
+            ],
             "containers": [
               {
                 "image": "${WEB_IMAGE}",

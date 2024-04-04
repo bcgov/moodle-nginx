@@ -9,6 +9,14 @@ oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config
 
 echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
 
+if [[ `oc describe dc ${{ env.WEB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
+  echo "${{ env.WEB_DEPLOYMENT_NAME  }} NOT FOUND..."
+else
+  echo "${{ env.WEB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+  oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+  oc rollout latest dc/${{ env.WEB_DEPLOYMENT_NAME  }}
+fi
+
 oc -n $DEPLOY_NAMESPACE process -f ./openshift/template.json \
       -p APP_NAME=$APP \
       -p DB_USER=$DB_USER \
