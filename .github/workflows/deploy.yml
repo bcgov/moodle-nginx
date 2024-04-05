@@ -170,7 +170,7 @@ jobs:
           exec:  |
             helm repo add bcgov http://bcgov.github.io/helm-charts
             helm repo update
-            if [[ `oc describe deployment moodle-backup-storage 2>&1` =~ "NotFound" ]]; then
+            if [[ `oc describe deployment moodle-backups 2>&1` =~ "NotFound" ]]; then
               echo "Backup container NOT FOUND. Begin backup container deployment..."
               echo '
                 backupConfig: |
@@ -190,10 +190,10 @@ jobs:
                   ENVIRONMENT_FRIENDLY_NAME:
                     value: "DB Backups"
                 ' > config.yaml
-              helm upgrade --install moodle-backup-storage ${{ inputs.BACKUP_IMAGE }} -f config.yaml
+              helm upgrade --install moodle-backups ${{ inputs.BACKUP_IMAGE }} -f config.yaml
             else
               echo "Backup container installation FOUND. Updating..."
-              if [[ `helm upgrade moodle-backup-storage ${{ inputs.BACKUP_IMAGE }} --reuse-values 2>&1` =~ "Error" ]]; then
+              if [[ `helm upgrade moodle-backups ${{ inputs.BACKUP_IMAGE }} --reuse-values 2>&1` =~ "Error" ]]; then
                 echo "Backup container update FAILED."
                 exit 1
               fi
