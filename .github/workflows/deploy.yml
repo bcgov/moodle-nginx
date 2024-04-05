@@ -190,7 +190,7 @@ jobs:
                   ENVIRONMENT_FRIENDLY_NAME:
                     value: "DB Backups"
                 ' > config.yaml
-              helm upgrade moodle-backup-storage ${{ env.BACKUP_IMAGE }} --install -f config.yaml
+              helm upgrade --install moodle-backup-storage ${{ env.BACKUP_IMAGE }} -f config.yaml
             else
               echo "Backup container installation FOUND. Updating..."
               if [[ `helm upgrade moodle-backup-storage ${{ env.BACKUP_IMAGE }} --reuse-values 2>&1` =~ "Error" ]]; then
