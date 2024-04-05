@@ -267,7 +267,7 @@ jobs:
       - name: 🧹️ Clean Backups
         id: clean-backups
         run: |
-          if [[ `helm status backup 2>&1` =~ "STATUS: deployed" ]]; then
+          if [[ `helm status backup 2>&1` =~ "STATUS: deployed" ]] || [[ `helm status backup 2>&1` =~ "Error: release: not found" ]]; then
             echo "backup NOT FOUND: Skipping..."
           else
             echo "backup FOUND: Cleaning resources..."
