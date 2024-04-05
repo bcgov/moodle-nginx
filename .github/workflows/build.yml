@@ -74,7 +74,7 @@ jobs:
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
       REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
-      BACKUP_IMAGE: ${{ vars.BACKUP_IMAGE }}
+      BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -195,6 +195,7 @@ jobs:
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
       OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
       REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
