@@ -71,6 +71,7 @@ jobs:
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
       REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4

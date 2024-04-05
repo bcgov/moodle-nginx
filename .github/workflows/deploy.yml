@@ -75,6 +75,9 @@ on:
       BRANCH:
         required: true
         type: string
+      BACKUP_IMAGE:
+        required: true
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -159,6 +162,7 @@ jobs:
           CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
       - name: Backups
         uses: WyriHaximus/github-action-helm3@v3
@@ -186,7 +190,7 @@ jobs:
                   ENVIRONMENT_FRIENDLY_NAME:
                     value: "DB Backups"
                 ' > config.yaml
-              helm upgrade --install moodle -f config.yaml ${{ env.BACKUP_IMAGE }}
+              helm upgrade --install moodle-backup-storage ${{ env.BACKUP_IMAGE }} -f config.yaml
             else
               echo "Backup container installation FOUND. Updating..."
               if [[ `helm upgrade --reuse-values moodle ${{ env.BACKUP_IMAGE }} 2>&1` =~ "Error" ]]; then
