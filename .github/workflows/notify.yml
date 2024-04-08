@@ -2,17 +2,6 @@
 # Builds and Deploys merged PR's to persistent pods/services/routes/etc in the OpenShift Dev environment.
 name: Notify
 
-env:
-  APP: moodle
-  USER: ${{ github.actor }}
-  BUILD_ID: ${{ github.event.number }}
-  BRANCH: ${{ github.ref_name }}
-  SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
-  INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
-  SUCCESS_ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
-  FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
-
 on:
   workflow_run:
     workflows: ["Moodle", "PHP", "Cron", "DB", "DB Backup"]
@@ -26,16 +15,25 @@ jobs:
     steps:
       - name: Workflow Failure
         uses: muinmomin/webhook-action@v1.0.0
+        env:
+          APP: moodle
+          USER: ${{ github.actor }}
+          BUILD_ID: ${{ github.event.number }}
+          BRANCH: ${{ github.ref_name }}
+          SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
+          INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
+          ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: '{
-            "alias":"FAILED GitHub Action by ${{ env.USER }}",
+            "emoji": ":crossmark:",
             "text":"${{ github.workflow }} for repo: ${{ github.repository }}:${{ github.ref_name }}",
             "attachments":[{
               "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
               "title_link": "${{ env.INSPECT_JOB_URL }}",
               "text":"Failure detected in ${{ github.repository }}:${{ github.ref_name }}",
-              "thumb_url": "${{ env.FAIL_ICON_URL }}",
+              "image_url": "${{ env.ICON_URL }}",
               "color":"#764FA5"
             }]}'
 
@@ -45,16 +43,25 @@ jobs:
     steps:
       - name: Workflow Success
         uses: muinmomin/webhook-action@v1.0.0
+        env:
+          APP: moodle
+          USER: ${{ github.actor }}
+          BUILD_ID: ${{ github.event.number }}
+          BRANCH: ${{ github.ref_name }}
+          SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
+          INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
+          ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: '{
             "emoji": ":checkmark:",
-            "text": "Successful ${{ github.job }} in ${{ github.workflow }} of ${{ github.repository }}:${{ github.ref_name }}",
+            "text": "Success",
             "attachments": [
               {
-                "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-                "title_link":"https://github.com/kaji-bikash/rocketchat-pagerduty/blob/master/rocketchat_pagerduty_incoming.js",
+                "title":"${{ github.ref_name }} deployment: ${{ job.status }}",
+                "title_link":"${{ env.INSPECT_JOB_URL }}",
                 "text":"Successful ${{ github.job }} in ${{ github.workflow }} of ${{ github.repository }}:${{ github.ref_name }}",
-                "image_url":"$SUCCESS_ICON_URL",
+                "image_url":"${{ env.ICON_URL }}",
                 "color":"#764FA5"
             }]}'

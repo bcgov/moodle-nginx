@@ -163,7 +163,7 @@ jobs:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit # pass all secrets
-    needs: [checkEnv, db, php, cron, moodle]
+    needs: [checkEnv, db, php, cron, moodle, web]
     if: success()
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
