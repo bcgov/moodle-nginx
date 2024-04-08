@@ -48,12 +48,13 @@ jobs:
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: '{
-            "alias":"Successful deployment by $USER",
-            "text":"${{ github.workflow }} for repo: ${{ github.repository }}:${{ github.ref_name }}",
-            "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-              "title_link":"https://github.com/kaji-bikash/rocketchat-pagerduty/blob/master/rocketchat_pagerduty_incoming.js",
-              "text":"Successful ${{ github.job }} in ${{ github.workflow }} of ${{ github.repository }}:${{ github.ref_name }}",
-              "thumb_url":"$SUCCESS_ICON_URL",
-              "color":"#764FA5"
+            "emoji": ":checkmark:",
+            "text": "Successful ${{ github.job }} in ${{ github.workflow }} of ${{ github.repository }}:${{ github.ref_name }}",
+            "attachments": [
+              {
+                "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
+                "title_link":"https://github.com/kaji-bikash/rocketchat-pagerduty/blob/master/rocketchat_pagerduty_incoming.js",
+                "text":"Successful ${{ github.job }} in ${{ github.workflow }} of ${{ github.repository }}:${{ github.ref_name }}",
+                "image_url":"$SUCCESS_ICON_URL",
+                "color":"#764FA5"
             }]}'
