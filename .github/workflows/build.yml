@@ -189,7 +189,9 @@ jobs:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
     secrets: inherit # pass all secrets
-    needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
+    # needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
+    needs: [checkEnv]
+    if: (needs.checkEnv.outputs.CLEAN_BUILDS == 'NO' && needs.checkEnv.outputs.SKIP_BUILDS == 'YES') || success()
     with:
       MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
@@ -217,7 +219,7 @@ jobs:
 
   notify:
     name: 📫 Notify
-    needs: [checkEnv, db, php, cron, moodle, call-deploy-workflow]
+    needs: [checkEnv, call-deploy-workflow]
     if: success() || failure()
     runs-on: ubuntu-latest
     steps:
