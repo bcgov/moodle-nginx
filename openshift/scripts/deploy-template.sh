@@ -1,5 +1,6 @@
 test -n "$DEPLOY_NAMESPACE"
 test -n "$BRANCH"
+oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Create ConfigMaps
@@ -9,45 +10,45 @@ oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config
 
 echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
 
-if [[ `oc describe dc ${{ env.WEB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-  echo "${{ env.WEB_DEPLOYMENT_NAME  }} NOT FOUND..."
+if [[ `oc describe dc $WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "$WEB_DEPLOYMENT_NAME NOT FOUND..."
 else
-  echo "${{ env.WEB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
-  oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
-  oc rollout latest dc/${{ env.WEB_DEPLOYMENT_NAME  }}
+  echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
+  oc annotate --overwrite  dc/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
+  oc rollout latest dc/$WEB_DEPLOYMENT_NAME
 fi
 
-oc -n $DEPLOY_NAMESPACE process -f ./openshift/template.json \
-      -p APP_NAME=$APP \
-      -p DB_USER=$DB_USER \
-      -p DB_NAME=$DB_NAME \
-      -p DB_PASSWORD=$DB_PASSWORD \
-      -p BUILD_TAG=$DEPLOY_NAMESPACE \
-      -p SITE_URL=$APP_HOST_URL \
-      -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
-      -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-      -p IMAGE_REPO=$IMAGE_REPO \
-      -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-      -p WEB_IMAGE=$WEB_IMAGE \
-      -p CRON_IMAGE=$CRON_IMAGE \
-      -p CRON_DEPLOYMENT_NAME=$CRON_DEPLOYMENT_NAME \
-      -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
-      -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
-oc -n $DEPLOY_NAMESPACE apply -f -
+oc process -f ./openshift/template.json \
+  -p APP_NAME=$APP \
+  -p DB_USER=$DB_USER \
+  -p DB_NAME=$DB_NAME \
+  -p DB_PASSWORD=$DB_PASSWORD \
+  -p BUILD_TAG=$DEPLOY_NAMESPACE \
+  -p SITE_URL=$APP_HOST_URL \
+  -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
+  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  -p IMAGE_REPO=$IMAGE_REPO \
+  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
+  -p WEB_IMAGE=$WEB_IMAGE \
+  -p CRON_IMAGE=$CRON_IMAGE \
+  -p CRON_DEPLOYMENT_NAME=$CRON_DEPLOYMENT_NAME \
+  -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
+  -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
+oc apply -f -
 
 # echo "Rolling out $MOODLE_DEPLOYMENT_NAME..."
-# oc rollout latest dc/$MOODLE_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
+# oc rollout latest dc/$MOODLE_DEPLOYMENT_NAME
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
-oc rollout latest dc/$PHP_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
+oc rollout latest dc/$PHP_DEPLOYMENT_NAME
 
 # echo "Rolling out $CRON_DEPLOYMENT_NAME..."
-# oc rollout latest dc/$CRON_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
+# oc rollout latest dc/$CRON_DEPLOYMENT_NAME
 
 # Check PHP deployment rollout status until complete.
 ATTEMPTS=0
 WAIT_TIME=5
-ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE"
+ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME"
 until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
   $ROLLOUT_STATUS_CMD
   ATTEMPTS=$((attempts + 1))
@@ -58,7 +59,7 @@ done
 # Check Moodle deployment rollout status until complete.
 # ATTEMPTS=0
 # WAIT_TIME=5
-# ROLLOUT_STATUS_CMD="oc rollout status dc/$MOODLE_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE"
+# ROLLOUT_STATUS_CMD="oc rollout status dc/$MOODLE_DEPLOYMENT_NAME"
 # until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
 #   $ROLLOUT_STATUS_CMD
 #   ATTEMPTS=$((attempts + 1))
@@ -68,7 +69,7 @@ done
 
 # Enable Maintenance mode (PHP)
 echo "Enabling Moodle maintenance mode..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' -n $DEPLOY_NAMESPACE --wait
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait
 
 echo "Create and run Moodle build migration job..."
 oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
@@ -94,40 +95,40 @@ echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade-job.yml | oc create -f -
 
 # # Ensure moodle config is cleared (Moodle)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'rm -f /var/www/html/config.php' -n $DEPLOY_NAMESPACE
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'rm -f /var/www/html/config.php'
 
 # MOODLE_APP_DIR=/var/www/html
 
 # # Delete existing plugins (PHP)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/trigger" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/dataflows" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/facetoface" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/hvp" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/course/format/topcoll" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/customcert" -n $DEPLOY_NAMESPACE
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/certificate" -n $DEPLOY_NAMESPACE
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/trigger"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/dataflows"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/facetoface"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/hvp"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/course/format/topcoll"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/customcert"
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/certificate"
 
 # # Copy / update all files from docker build to shared PVC (Moodle)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'cp -ru /app/public/* /var/www/html' -n $DEPLOY_NAMESPACE
+# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'cp -ru /app/public/* /var/www/html'
 
 echo "Purging caches..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' -n $DEPLOY_NAMESPACE
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
 
 echo "Purging missing plugins..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run' -n $DEPLOY_NAMESPACE
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run'
 
 echo "Running Moodle upgrades..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive' -n $DEPLOY_NAMESPACE
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive'
 
 echo "Disabling maintenance mode..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable' -n $DEPLOY_NAMESPACE
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
 
 
 echo "Create and run Moodle cron job..."
 oc process -f ./openshift/moodle-cron-job.yml | oc create -f -
 
 # echo "Run first cron..."
-# oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/cron.php' -n $DEPLOY_NAMESPACE
+# oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/cron.php'
 
 # echo "Listing pods..."
 # oc get pods|grep $PHP_DEPLOYMENT_NAME
