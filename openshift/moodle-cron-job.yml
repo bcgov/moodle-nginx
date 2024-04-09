@@ -7,7 +7,7 @@ objects:
    kind: Job
    metadata:
      name: moodle-cron-job
-     namespace: e66ac2-dev
+     namespace: ${DEPLOY_NAMESPACE}
    spec:
      parallelism: 1
      completions: 1
@@ -88,7 +88,7 @@ parameters:
     value: "image-registry.openshift-image-registry.svc:5000/"
   - name: BUILD_NAMESPACE
     required: true
-    value: "e66ac2-tools"
+    value: "e66ac2-dev"
   - name: BUILD_NAME
     required: true
     value: "cron"

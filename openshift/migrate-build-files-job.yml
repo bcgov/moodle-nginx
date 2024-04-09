@@ -7,7 +7,7 @@ objects:
    kind: Job
    metadata:
      name: migrate-build-files
-     namespace: e66ac2-dev
+     namespace: ${BUILD_NAMESPACE}
    spec:
      parallelism: 1
      completions: 1
@@ -73,7 +73,7 @@ parameters:
     value: "artifacts.developer.gov.bc.ca/m950-learning/"
   - name: BUILD_NAMESPACE
     required: true
-    value: "e66ac2-tools"
+    value: "e66ac2-dev"
   - name: BUILD_NAME
     required: true
     value: "moodle"

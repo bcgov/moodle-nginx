@@ -153,7 +153,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           BUILD_TAG: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
-          BUILD_NAMESPACE: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          BUILD_NAMESPACE: ${{ inputs.BUILD_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
