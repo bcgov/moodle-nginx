@@ -150,8 +150,8 @@ jobs:
         env:
           MOODLE_ENVIRONMENT: ${{ inputs.MOODLE_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
-          DB_NAME: ${{ inputs.DB_NAME }}
-          DB_USER: ${{ inputs.DB_USER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           BUILD_TAG: ${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
