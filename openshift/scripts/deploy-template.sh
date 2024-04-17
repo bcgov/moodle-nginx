@@ -3,9 +3,26 @@ test -n "$BRANCH"
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
-# Create ConfigMaps
+# Create ConfigMaps (first delete, if necessary)
+if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
+  oc delete configmap $WEB_DEPLOYMENT_NAME-config
+fi
+echo "Creating configMap: $WEB_DEPLOYMENT_NAME-config"
 oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/default.conf
+
+if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $APP-config"
+  oc delete configmap $APP-config
+fi
+echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$MOODLE_ENVIRONMENT.config.php
+
+if [[ ! `oc describe configmap $CRON_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $CRON_DEPLOYMENT_NAME-config"
+  oc delete configmap $CRON_DEPLOYMENT_NAME-config
+fi
+echo "Creating configMap: $CRON_DEPLOYMENT_NAME-config"
 oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$MOODLE_ENVIRONMENT.config.php
 
 echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
@@ -52,7 +69,7 @@ ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME"
 until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
   $ROLLOUT_STATUS_CMD
   ATTEMPTS=$((attempts + 1))
-  echo "Waited: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  echo "Waiting for dc/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
 
@@ -77,7 +94,9 @@ oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 echo "Waiting for Moodle build migration job status to complete..."
 ATTEMPTS=0
 WAIT_TIME=5
-MIGRATE_STATUS_CMD="oc get jobs | findstr /i 'migrate-build-files 1/1'"
+#  2>&1` =~ "NotFound"
+# oc get jobs | findstr /i 'migrate-build-files 1/1'
+MIGRATE_STATUS_CMD="oc get jobs 2>&1` =~ "migrate-build-files"
 until $MIGRATE_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
   $MIGRATE_STATUS_CMD
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
