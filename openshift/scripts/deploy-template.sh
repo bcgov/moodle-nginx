@@ -96,7 +96,7 @@ ATTEMPTS=0
 WAIT_TIME=5
 #  2>&1` =~ "NotFound"
 # oc get jobs | findstr /i 'migrate-build-files 1/1'
-MIGRATE_STATUS_CMD="oc get jobs 2>&1` =~ "migrate-build-files"
+MIGRATE_STATUS_CMD='oc get jobs 2>&1` =~ "migrate-build-files"'
 until $MIGRATE_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
   $MIGRATE_STATUS_CMD
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
