@@ -22,6 +22,9 @@ env:
   FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
 
 on:
+  schedule:
+    - cron: "15 * * * *"
+    # - cron: "0 3 * * 6"
   push:
     branches:
       - dev
