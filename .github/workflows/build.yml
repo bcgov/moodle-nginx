@@ -121,9 +121,9 @@ jobs:
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
-      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
-      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
-      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
@@ -202,9 +202,9 @@ jobs:
     with:
       MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
-      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
-      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
-      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
