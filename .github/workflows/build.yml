@@ -56,10 +56,6 @@ on:
     #   - '**.txt'
 
   workflow_call:
-    inputs:
-      DB_NAME:
-        required: true
-        type: string
     secrets:
       DB_NAME:
         required: true
