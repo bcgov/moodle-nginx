@@ -98,6 +98,8 @@ jobs:
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v3
+        with:
+          ref: dev
 
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.

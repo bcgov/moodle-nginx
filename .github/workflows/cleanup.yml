@@ -69,6 +69,8 @@ jobs:
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v3
+        with:
+          ref: dev
 
       # Get Environment Variables from file
       - name: 📋 Setup Environment from File

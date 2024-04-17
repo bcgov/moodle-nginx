@@ -25,6 +25,8 @@ jobs:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v3
+        with:
+          ref: dev
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory

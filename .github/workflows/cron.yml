@@ -20,6 +20,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v3
         with:
+          ref: dev
           sparse-checkout: |
             config/cron
             config/php
