@@ -1,0 +1,34 @@
+{
+  "text": "Sysdig Notification",
+  "attachments": [
+    {
+      "title": " {{@event_title}}",
+      "title_link": "{{@alert_url}}",
+      "pretext": " {{@alert_description}}",
+      "color": "#9d1a00",
+      "thumb_url": "https://cdn2.securitysenses.com/sites/default/files/logos/sysdig-logo.png",
+      "fields": [
+        {
+          "title": "State",
+          "short": true,
+          "value": "{{@event_state}}"
+        },
+        {
+          "title": "Alert level",
+          "short": true,
+          "value": "incident"
+        },
+        {
+          "title": "Condition",
+          "short": false,
+          "value": "{{@alert_warning_condition}}"
+        },
+        {
+          "title": "Link to the Alert",
+          "short": false,
+          "value": "{{@alert_url}}"
+        }
+      ]
+    }
+  ]
+}

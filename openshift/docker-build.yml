@@ -4,12 +4,12 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
-  name: ${BASE_IMAGE_NAME}-${BASE_IMAGE_TAG}
+  name: ${NAME}
 objects:
   - apiVersion: image.openshift.io/v1
     kind: ImageStream
     metadata:
-      name: ${BASE_IMAGE_NAME}
+      name: ${IMAGE_NAME}
     spec:
       lookupPolicy:
         local: false
@@ -18,20 +18,27 @@ objects:
     lookupPolicy:
       local: false
     metadata:
-      name: ${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}
+      name: ${IMAGE_NAME}:${IMAGE_TAG}
     tag:
       annotations: null
       from:
         kind: DockerImage
-        name: ${BASE_IMAGE_REPO}${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}
+        name: ${IMAGE_REPO}${IMAGE_NAME}:${BUILD_TAG}
       importPolicy:
         scheduled: true
       referencePolicy:
         type: Source
+  - kind: ImageStream
+    apiVersion: v1
+    metadata:
+      name: ${NAME}
+    spec:
+      lookupPolicy:
+        local: false
   - apiVersion: v1
     kind: BuildConfig
     metadata:
-      name: ${BASE_IMAGE_NAME}-${BASE_IMAGE_TAG}
+      name: ${NAME}
     spec:
       resources:
         limits:
@@ -43,51 +50,78 @@ objects:
       output:
         to:
           kind: ImageStreamTag
-          name: "${BASE_IMAGE_NAME}:${TAG}"
+          name: "${NAME}:${IMAGE_TAG}"
       runPolicy: SerialLatestOnly
       source:
         contextDir: "${SOURCE_CONTEXT_DIR}"
         git:
           uri: "${SOURCE_REPOSITORY_URL}"
-          ref: "${TAG}"
+          ref: "${IMAGE_TAG}"
         type: Git
       strategy:
         dockerStrategy:
-          dockerfilePath: "${DOCKERFILE}"
+          dockerfilePath: "${DOCKER_FILE_PATH}"
+          incremental: true
           buildArgs:
-          - name: "DB_HOST"
-            value: "${DB_HOST}"
-          - name: "DB_NAME"
-            value: "moodle"
-          - name: "DB_USER"
-            value: "moodle"
-          - name: "DB_PASSWORD"
-            value: "${DB_PASSWORD}"
+            - name: "DOCKER_FROM_IMAGE"
+              value: "${DOCKER_FROM_IMAGE}"
+            - name: "PHP_INI_ENVIRONMENT"
+              value: "${PHP_INI_ENVIRONMENT}"
+            - name: "MOODLE_BRANCH_VERSION"
+              value: "${MOODLE_BRANCH_VERSION}"
+            - name: "F2F_BRANCH_VERSION"
+              value: "${F2F_BRANCH_VERSION}"
+            - name: "HVP_BRANCH_VERSION"
+              value: "${HVP_BRANCH_VERSION}"
+            - name: "FORMAT_BRANCH_VERSION"
+              value: "${FORMAT_BRANCH_VERSION}"
+            - name: "CERTIFICATE_BRANCH_VERSION"
+              value: "${CERTIFICATE_BRANCH_VERSION}"
+            - name: "CUSTOMCERT_BRANCH_VERSION"
+              value: "${CUSTOMCERT_BRANCH_VERSION}"
+            - name: "DATAFLOWS_BRANCH_VERSION"
+              value: "${DATAFLOWS_BRANCH_VERSION}"
         type: Docker
 parameters:
-  - name: SUFFIX
+  - name: DOCKER_FROM_IMAGE
+    required: true
+  - name: NAME
+    required: true
   - name: SOURCE_CONTEXT_DIR
-    value: .
-  - name: DOCKERFILE
-    value: "Dockerfile"
+    value: \
+  - name: DOCKER_FILE_PATH
+    value: "dockerfile"
   - name: SOURCE_REPOSITORY_URL
     value: https://github.com/bcgov/moodle-nginx.git
-  - name: TAG
-    value: "latest"
-  - name: BASE_IMAGE_REPO
-  - name: BASE_IMAGE_NAME
+  - name: IMAGE_REPO
+    value: ""
+  - name: IMAGE_NAME
     required: true
-  - name: BASE_IMAGE_TAG
-    value: "prod"
+    value: "moodle-dev"
+  - name: IMAGE_TAG
+    required: true
+    value: "latest"
   - name: CPU_LIMIT
-    value: "1"
-  - name: CPU_REQUEST
-    value: "0.25"
+    value: "4"
   - name: MEMORY_LIMIT
-    value: "2Gi"
+    value: "8Gi"
+  - name: CPU_REQUEST
+    value: "2"
   - name: MEMORY_REQUEST
-    value: "128Mi"
-  - name: DB_HOST
-    value: "mariadb-sts-0.mariadb"
-  - name: DB_PASSWORD
-    value: "empty"
+    value: "8Gi"
+  - name: PHP_INI_ENVIRONMENT
+    value: "production"
+  - name: MOODLE_BRANCH_VERSION
+    value: MOODLE_311_STABLE
+  - name: F2F_BRANCH_VERSION
+    value: MOODLE_311_STABLE
+  - name: HVP_BRANCH_VERSION
+    value: stable
+  - name: FORMAT_BRANCH_VERSION
+    value: MOODLE_311
+  - name: CERTIFICATE_BRANCH_VERSION
+    value: MOODLE_31_STABLE
+  - name: CUSTOMCERT_BRANCH_VERSION
+    value: MOODLE_311_STABLE
+  - name: DATAFLOWS_BRANCH_VERSION
+    value: MOODLE_35_STABLE

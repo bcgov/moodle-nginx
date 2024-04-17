@@ -1,0 +1,97 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: moodle-cron-job
+objects:
+ - apiVersion: batch/v1
+   kind: Job
+   metadata:
+     name: moodle-cron-job
+     namespace: ${DEPLOY_NAMESPACE}
+   spec:
+     parallelism: 1
+     completions: 1
+     backoffLimit: 6
+     template:
+       metadata:
+         name: moodle-cron-job
+       spec:
+         volumes:
+           - name: moodle-data
+             persistentVolumeClaim:
+               claimName: moodle-data
+           - name: moodle-app-data
+             persistentVolumeClaim:
+               claimName: moodle-app-data
+           - name: cron-config
+             configMap:
+               name: cron-config
+               defaultMode: 420
+               items:
+                 - key: config.php
+                   path: config.php
+           - name: moodle-env
+             configMap:
+               name: moodle-env
+               items:
+                 - key: .env
+                   path: ./.env
+               defaultMode: 420
+         containers:
+           - name: ${BUILD_NAME}
+             image: ${IMAGE_REPO}${BUILD_NAMESPACE}/${BUILD_NAME}:${BUILD_TAG}
+             env:
+               - name: DB_USER
+                 valueFrom:
+                   secretKeyRef:
+                     name: moodle-secrets
+                     key: database-user
+               - name: DB_NAME
+                 valueFrom:
+                   secretKeyRef:
+                     name: moodle-secrets
+                     key: database-name
+               - name: DB_PASSWORD
+                 valueFrom:
+                   secretKeyRef:
+                     name: moodle-secrets
+                     key: database-password
+             volumeMounts:
+               - name: moodle-app-data
+                 mountPath: /var/www/html
+               - name: moodle-data
+                 mountPath: /var/www/moodledata
+               - name: moodle-env
+                 mountPath: .env
+                 subPath: .env
+               - name: cron-config
+                 mountPath: /var/www/html/config.php
+                 subPath: config.php
+             command:
+               - bash
+               - "-c"
+               - |
+                echo "Running Moodle Cron..."
+                sh /usr/local/bin/moodle-cron-job.sh
+             imagePullPolicy: Always
+             resources:
+               limits:
+                 memory: '0'
+                 cpu: '0'
+               requests:
+                 memory: '0'
+                 cpu: '0'
+         restartPolicy: OnFailure
+parameters:
+  - name: IMAGE_REPO
+    required: true
+    value: "image-registry.openshift-image-registry.svc:5000/"
+  - name: BUILD_NAMESPACE
+    required: true
+    value: "e66ac2-dev"
+  - name: BUILD_NAME
+    required: true
+    value: "cron"
+  - name: BUILD_TAG
+    required: true
+    value: "dev"

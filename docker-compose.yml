@@ -1,91 +1,135 @@
 version: '3'
 services:
-    db:
-      image: ${DB_IMAGE}
-      env_file:
-        - .env
-      volumes:
-          - ${PWD}/temp/bitnami/mariadb:/bitnami/mariadb:delegated
-          - ${PWD}/temp/db-backups:/tmp/backups:delegated
-      ports:
-          - 3307:3306
-          - 4444:4444
-          - 4567:4567
-          - 4568:4568
-      healthcheck:
-          test: ['CMD', '/opt/bitnami/scripts/mariadb-galera/healthcheck.sh']
-          interval: 15s
-          timeout: 5s
-          retries: 6
-    php:
-      depends_on:
-        - db
-      env_file:
-        - .env
-      ports:
-          - "9000:9000"
-      build:
-          context: .
-          dockerfile: ./builds/php/Dockerfile
-          args:
-            - DB_PORT=3306
-            - DB_HOST=${DB_HOST}
-            - DB_NAME=${DB_NAME}
-            - DB_PASSWORD=${DB_PASSWORD}
-            - DB_USER=${DB_USER}
-            - ETC_DIR=/usr/local/etc
-      volumes:
-          - ${PWD}/temp/var/www/html:/var/www/html:delegated
-          - ${PWD}/temp/var/www/moodledata:/var/www/moodledata:delegated
-          - ${PWD}/builds/web/error-pages:/var/www/error-pages:delegated
-          - ${PWD}/builds/php/info.php:/var/www/html/info.php:delegated
-      healthcheck:
-          test: ["CMD", "db", "-h", "db", "-u", "root"]
-          interval: 30s
-          timeout: 10s
-          retries: 5
-      # Start php-fpm
-      command: bash -c "php-fpm"
-      # Put site in maintenance mode,
-      # copy moodle build to shared location (with cron),
-      # upgrade Moodle, purge caches, dissable maintenance mode, start php-fpm
-      # command: bash -c "php maintenance.php --enable && chown -R www-data:www-data /app/public && chown -R www-data:www-data /var/www/html/* && cp -ru /app/public/* /var/www/html && cd /var/www/html/admin/cli && php upgrade.php --non-interactive && php purge_caches.php && php maintenance.php --disable && php-fpm"
-    redis:
-      image: ${REDIS_IMAGE}
-      env_file:
-        - .env
+    # OPTIONAL: Setup act for testing GitGub Actions locally
+    # You can also install on your workstation, for example:
+    # $ choco install act-cli
+    # $ act -s GITHUB_TOKEN="$(gh auth token)" --secret-file example.secrets -W './.github/workflows/db.yml'
+    # act:
+    #     build:
+    #         context: .
+    #         dockerfile: ACT.Dockerfile
+    #         args:
+    #           TEST: 123
+    #     volumes:
+    #         - /var/run/docker.sock:/var/run/docker.sock
+    #         - ./:/github/workspace
+    # Build moodle and plugins from repo, then save to shared volume on startup
+    # After build, the moodle files need to be copied to the shared volume,
+    # where they can be accessed by the php, cron and web containers.
+    moodle:
+        tty: true
+        restart: "no"
+        environment:
+          DB_PASSWORD: ${DB_PASSWORD:-moodle}
+          DB_USER: ${DB_USER:-moodle}
+          DB_NAME: ${DB_NAME:-moodle}
+        build:
+            context: .
+            dockerfile: Moodle.Dockerfile
+            args:
+              MOODLE_ENVIRONMENT: ${MOODLE_ENVIRONMENT:-local}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
+              HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
+              FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
+              CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_311_STABLE}
+              DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
+        volumes:
+            - ./temp/var/www:/var/www:delegated
+        # Keep the container running so we can run the migration scripts and copy the files to the shared volume
+        command:  tail -F anything
     web:
-      image: ${WEB_IMAGE}
-      env_file:
-        - .env
-      ports:
-          - "8081:8081"
-      volumes:
-          - ${PWD}/temp/var/www/html:/var/www/html:delegated
-          - type: bind
-            source: ${PWD}/builds/web/nginx.conf
-            target: /etc/nginx/conf.d/default.conf
-            read_only: false
-            bind:
-              create_host_path: true
-          - ${PWD}/builds/web/error-pages:/var/www/error-pages:ro
+        depends_on:
+          php:
+            condition: service_healthy
+        image: ${WEB_IMAGE:-nginx-unprivileged:1.25.4-alpine-slim}
+        ports:
+            - "8080:8080"
+        volumes:
+            - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:delegated
+            - ./temp/var/www:/var/www:delegated
+        links:
+          - php
+    db:
+        image: ${DB_IMAGE:-mariadb:10}
+        env_file: .env
+        volumes:
+            - mysqldata:/var/lib/mysql:delegated
+            - ./temp/db-backups:/tmp/db-backups:delegated
+        ports:
+            - 3307:3306
+        healthcheck:
+          test: [
+            "CMD-SHELL",
+            "healthcheck.sh --innodb_initialized --connect"
+          ]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+    php:
+        depends_on:
+          db:
+            condition: service_healthy
+        tty: true
+        restart: "no"
+        env_file:
+          - .env
+        environment:
+          XDEBUG_MODE: debug
+          XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003
+          DB_PASSWORD: ${DB_PASSWORD:-moodle}
+          DB_USER: ${DB_USER:-moodle}
+          DB_NAME: ${DB_NAME:-moodle}
+        build:
+            context: .
+            dockerfile: PHP.Dockerfile
+            args:
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+              PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
+              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
+              HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
+              FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
+              CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_311_STABLE}
+              DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
+        volumes:
+            - ./temp/var/www:/var/www:delegated
+        # Copy files from build directory to www/html to mimic shared PVC copy in OpenShift (allows for multiple container instances)
+        # Note: THis will add a few minutes to startup.
+          # command: bash -c "cp /app/public /var/www/html -r && stdout_logfile=/dev/stdout && stdout_logfile_maxbytes=0 && stderr_logfile=/dev/stderr && stderr_logfile_maxbytes=0 && /usr/local/bin/docker-php-entrypoint"
+        # or Without copy (to save some time if it doesn't need to be rebuilt)
+        # command: bash -c "stdout_logfile=/dev/stdout && stdout_logfile_maxbytes=0 && stderr_logfile=/dev/stderr && stderr_logfile_maxbytes=0 && /usr/local/bin/docker-php-entrypoint"
+        # command: tail -F anything # (to keep the container running)
+        command: php-fpm
+        healthcheck:
+          # test: [
+          #   "CMD-SHELL",
+          #   "php-fpm-healthcheck.sh --listen-queue=10 --accepted-conn=5000 || kill 1"
+          # ]
+          test: [
+            "CMD-SHELL",
+            "php-fpm-healthcheck"
+          ]
+          interval: 10s
+          timeout: 5s
+          retries: 5
     cron:
-      depends_on:
-        - db
-      env_file:
-        - .env
-      build:
-          context: .
-          dockerfile: ./builds/cron/Dockerfile
-          args:
-            - ETC_DIR=/usr/local/etc
-      volumes:
-          - ${PWD}/builds/php/php.ini:/usr/local/etc/php/conf.d/php.ini:delegated
-          - ${PWD}/builds/cron/php-fpm.conf:/usr/local/etc/php-fpm.d/php-fpm.conf:delegated
-          #- ${PWD}/builds/cron/crontab.txt:/etc/cron.d/moodle-cron:delegated
-          - ${PWD}/temp/var/www:/var/www:delegated
-          - ${PWD}/builds/php/info.php:/var/www/html/info.php:delegated
-      # command: bash -c "(crontab -l -u www-data; echo \"* * * * * su -c '/usr/local/bin/php /var/www/html/admin/cli/cron.php >&1'\") | crontab"
-      # command: cron && tail -f /var/log/moodle-cron.log
-      command: bash -c "php /var/www/html/admin/cli/maintenance.php --enable && php /var/www/html/admin/cli/upgrade.php --non-interactive && php /var/www/html/admin/cli/maintenance.php --disable && cron && tail -f /var/log/moodle-cron.log"
-      # command: bash -c "cron && tail -f /var/log/moodle-cron.log"
+        depends_on:
+          db:
+            condition: service_healthy
+        env_file: .env
+        build:
+            context: .
+            dockerfile: CRON.Dockerfile
+            args:
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
+              PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
+        volumes:
+            - ./temp/var/www:/var/www:delegated
+    redis:
+        image: ${REDIS_IMAGE:-redis:latest}
+volumes:
+    mysqldata: {}

@@ -1,0 +1,8 @@
+exporterNamespaceName: d89793-dev
+namespace: d89793-dev
+namespaceName: 950003-dev
+secretName: mysql-exporter
+sslmode: false
+ubi: false
+workloadName: mysql
+workloadType: statefulset

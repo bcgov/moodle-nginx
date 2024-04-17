@@ -8,7 +8,10 @@
       "name": "Listen for Xdebug",
       "type": "php",
       "request": "launch",
-      "port": 9003
+      "port": 9003,
+      "pathMappings": {
+        "/var/www/html": "${workspaceFolder}\\temp\\var\\www\\html"
+      }
     },
     {
       "name": "Launch currently open script",
@@ -33,7 +36,7 @@
         "-dxdebug.mode=debug",
         "-dxdebug.start_with_request=yes",
         "-S",
-        "localhost:8081"
+        "localhost:0"
       ],
       "program": "",
       "cwd": "${workspaceRoot}",

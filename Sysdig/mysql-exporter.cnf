@@ -1,0 +1,4 @@
+[client]
+user = exporter
+password = "moodle"
+host=mysql

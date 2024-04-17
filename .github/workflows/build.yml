@@ -1,0 +1,266 @@
+name: 🚀 Deploy to OpenShift
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP: moodle
+  USER: ${{ github.actor }}
+
+  # Skip builds for faster deployments / testing ("YES" or build)
+  SKIP_BUILDS: "YES"
+  # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
+  CLEAN_BUILDS: "NO"
+  BUILD_ID: ${{ github.event.number }}
+  BRANCH: ${{ github.ref_name }}
+  SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
+  INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
+  SUCCESS_ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
+  FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
+
+on:
+  schedule:
+    - cron: "15 * * * *"
+    # - cron: "0 3 * * 6"
+  push:
+    branches:
+      - dev
+      # - test
+      # - prod
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.env'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - '**.json'
+    #   - '**.sh'
+    #   - '**.txt'
+  pull_request:
+    branches:
+      - dev
+      #- test
+      #- prod
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.env'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - '**.json'
+    #   - '**.sh'
+    #   - '**.txt'
+
+jobs:
+  #Print variables for logging and debugging purposes
+  checkEnv:
+    name: 📋 Environment Check
+    runs-on: ubuntu-latest
+    outputs: # Define the output parameter
+      MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
+      APP: ${{ env.APP }}
+      DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      IMAGE_REPO: ${{ env.IMAGE_REPO }}
+      BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ env.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+      CRON_IMAGE: ${{ env.CRON_IMAGE}}
+      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
+      CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
+      SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
+    steps:
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          sparse-checkout: |
+            config/mariadb
+            example.env
+            example.versions.env
+
+      - name: Setup Env Vars
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Setup Env Version Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Print Env Vars
+        run: |
+          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          echo "-----------------------"
+          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+
+  # Build Images and deploy to JFrog
+  db:
+    name: 🔨 DB
+    needs: [checkEnv]
+    uses: ./.github/workflows/db.yml
+    secrets: inherit # pass all secrets
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    with:
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
+      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
+      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
+
+  php:
+    name: 🔨 PHP
+    needs: [checkEnv]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/php.yml
+    secrets: inherit # pass all secrets
+
+  cron:
+    name: 🔨 Cron
+    needs: [checkEnv]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/cron.yml
+    secrets: inherit # pass all secrets
+
+  moodle:
+    name: 🔨 Moodle
+    needs: [checkEnv, php]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/moodle.yml
+    secrets: inherit # pass all secrets
+
+  web:
+    name: 🔨 Web
+    needs: [checkEnv, php, db, moodle]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/web.yml
+    secrets: inherit # pass all secrets
+
+  call-cleanup-workflow:
+    name: 🧹️ Clean-up
+    uses: ./.github/workflows/cleanup.yml
+    secrets: inherit # pass all secrets
+    needs: [checkEnv, db, php, cron, moodle, web]
+    # if: success()
+    if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
+    with:
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+      BRANCH: ${{ github.ref_name }}
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+
+  call-deploy-workflow:
+    name: 🚀 Deploy
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit # pass all secrets
+    needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
+    if: |
+      always() &&
+      needs.checkEnv.result == 'success' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    with:
+      MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
+      APP: ${{ needs.checkEnv.outputs.APP }}
+      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
+      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
+      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
+      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}
+      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
+
+  notify:
+    name: 📫 Notify
+    needs: [checkEnv, web, moodle, cron, php, db, call-cleanup-workflow, call-deploy-workflow]
+    if: |
+      always() &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⚠️ Failure
+        if: failure()
+        uses: muinmomin/webhook-action@v1.0.0
+        with:
+          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          data: '{
+            "alias":"FAILED GitHub Action by ${{ needs.checkEnv.outputs.USER }}",
+            "text":"Job: ${{ github.job }} in
+              ${{ github.workflow }} of
+              ${{ github.repository }}:${{ github.ref_name }}
+            "attachments":[{
+              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
+              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
+              "text":"Failure detected in ${{ github.repository }}:${{ github.ref_name }}",
+              "image_url": "${{ needs.checkEnv.outputs.FAIL_ICON_URL }}",
+              "color":"#e7e076"
+            }]}'
+      - name: ✅ Success
+        uses: muinmomin/webhook-action@v1.0.0
+        with:
+          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          data: '{
+            "alias":"Successful ${{ github.job }} by ${{ needs.checkEnv.outputs.USER }}",
+            "text":"${{ github.job }} in ${{ github.workflow }}
+              of ${{ github.repository }}:${{ github.ref_name }}",
+            "attachments":[{
+              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
+              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
+              "text":"Successful deployment of: ${{ github.repository }}:${{ github.ref_name }}",
+              "image_url": "${{ needs.checkEnv.outputs.SUCCESS_ICON_URL }}",
+              "color":"#05a227"
+            }]}'

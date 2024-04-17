@@ -1,0 +1,637 @@
+{
+  "apiVersion": "template.openshift.io/v1",
+  "kind": "Template",
+  "labels": {
+    "template": "${APP_NAME}"
+  },
+  "message": "The following Site has been created in your project: ${APP_NAME}.\nDB: ${APP_NAME}.\n\n  URL: ${SITE_URL}",
+  "metadata": {
+    "annotations": {
+      "description": "${APP_NAME} application",
+      "iconClass": "icon-mysql-database",
+      "openshift.io/display-name": "Moodle",
+      "openshift.io/long-description": "This template provides application deployments for web (nginx), php and cron with related PVCs, route and secrets. Database and Redis cache are managed via helm chart installlations.",
+      "tags": "application,${APP_NAME}"
+    },
+    "name": "${NAME}"
+  },
+  "objects": [
+    {
+			"apiVersion": "v1",
+			"kind": "Secret",
+			"metadata": {
+				"annotations": {
+					"template.openshift.io/expose-password": "{.data['database-password']}"
+				},
+				"name": "${APP_NAME}-secrets"
+			},
+			"stringData": {
+        "database-user": "${DB_USER}",
+				"database-password": "${DB_PASSWORD}",
+        "database-name": "${DB_NAME}"
+			}
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "${APP_NAME}-data"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "${MOODLE_VOLUME_CAPACITY}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "${APP_NAME}-app-data"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "${MOODLE_VOLUME_CAPACITY}"
+          }
+        }
+      }
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "file-backup-data"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "${BACKUP_VOLUME_SIZE}"
+          }
+        },
+        "storageClassName": "netapp-file-backup"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "${WEB_DEPLOYMENT_NAME}"
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "${WEB_DEPLOYMENT_NAME}",
+            "port": 8080
+          }
+        ],
+        "selector": {
+          "deploymentconfig": "${WEB_DEPLOYMENT_NAME}"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "${PHP_DEPLOYMENT_NAME}"
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "${PHP_DEPLOYMENT_NAME}",
+            "port": 9000
+          }
+        ],
+        "selector": {
+          "deploymentconfig": "${PHP_DEPLOYMENT_NAME}"
+        }
+      }
+    },
+    {
+			"apiVersion": "v1",
+			"kind": "Route",
+			"metadata": {
+        "name": "${APP_NAME}-${WEB_DEPLOYMENT_NAME}",
+        "namespace": "${DEPLOY_NAMESPACE}",
+        "labels": {
+          "service": "${WEB_DEPLOYMENT_NAME}"
+        }
+      },
+      "spec": {
+        "host": "${SITE_URL}",
+        "to": {
+          "kind": "Service",
+          "name": "${WEB_DEPLOYMENT_NAME}",
+          "weight": 100
+        },
+        "conditions": [
+          {
+            "type": "Admitted",
+            "status": "True"
+          }
+        ],
+        "tls": {
+          "termination": "edge",
+          "insecureEdgeTerminationPolicy": "Redirect"
+        },
+        "port": {
+          "targetPort": 8080
+        },
+        "wildcardPolicy": "None"
+      }
+		},
+
+    {
+      "apiVersion": "v1",
+      "kind": "DeploymentConfig",
+      "metadata": {
+        "annotations": {
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        },
+        "name": "${PHP_DEPLOYMENT_NAME}",
+        "namespace": "${DEPLOY_NAMESPACE}",
+        "labels": {
+          "service": "${PHP_DEPLOYMENT_NAME}"
+        }
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": {
+          "deploymentconfig": "${PHP_DEPLOYMENT_NAME}"
+        },
+        "strategy": {
+          "type": "Rolling",
+          "rollingParams": {
+            "updatePeriodSeconds": 1,
+            "intervalSeconds": 1,
+            "timeoutSeconds": 600,
+            "maxUnavailable": "25%",
+            "maxSurge": "25%"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "deploymentconfig": "${PHP_DEPLOYMENT_NAME}"
+            }
+          },
+          "spec": {
+            "imagePullSecrets": [
+              {
+                "name": "artifactory-m950-learning"
+              }
+            ],
+            "containers": [
+              {
+                "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${BUILD_TAG}",
+                "name": "${PHP_DEPLOYMENT_NAME}",
+                "restartPolicy": "Always",
+                "imagePullPolicy": "Always",
+                "ports": [
+                  {
+                    "containerPort": 9000
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "${APP_NAME}-config",
+                    "mountPath": "/var/www/html/config.php",
+                    "subPath": "config.php"
+                  },
+                  {
+                    "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
+                    "name": "${APP_NAME}-data"
+                  },
+                  {
+                    "mountPath": "${MOODLE_APP_MOUNT_PATH}",
+                    "name": "${APP_NAME}-app-data"
+                  },
+                  {
+                    "mountPath": "/tmp/file-backups",
+                    "name": "file-backup-data"
+                  },
+                  {
+                    "name": "${APP_NAME}-env",
+                    "mountPath": ".env",
+                    "subPath": ".env"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "${PHP_MEMORY_LIMIT}",
+                    "cpu": "${PHP_CPU_LIMIT}"
+                  },
+                  "requests": {
+                    "memory": "${PHP_MEMORY_REQUEST}",
+                    "cpu": "${PHP_CPU_REQUEST}"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "APP_NAME",
+                    "value": "${APP_NAME}"
+                  },
+                  {
+                    "name": "SITE_URL",
+                    "value": "https://${SITE_URL}"
+                  },
+                  {
+                    "name": "DB_USER",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "DB_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "DB_NAME",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-name"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "${APP_NAME}-config",
+                "configMap": {
+                  "name": "${APP_NAME}-config",
+                  "defaultMode": 420,
+                  "items": [
+                    {
+                      "key": "config.php",
+                      "path": "config.php"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "${APP_NAME}-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${APP_NAME}-app-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-app-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "file-backup-data",
+                "persistentVolumeClaim": {
+                  "claimName": "file-backup-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${PHP_DEPLOYMENT_NAME}-config",
+                "configMap": {
+                  "name": "${PHP_DEPLOYMENT_NAME}-config",
+                  "defaultMode": 420
+                }
+              },
+              {
+                "name": "${APP_NAME}-env",
+                "configMap": {
+                  "name": "${APP_NAME}-env",
+                  "items": [
+                    {
+                      "key": ".env",
+                      "path": "./.env"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "revisionHistoryLimit": 10,
+        "test": false
+      }
+    },
+
+    {
+      "apiVersion": "v1",
+      "kind": "DeploymentConfig",
+      "metadata": {
+        "annotations": {
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        },
+        "name": "${WEB_DEPLOYMENT_NAME}",
+        "namespace": "${DEPLOY_NAMESPACE}"
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": {
+          "deploymentconfig": "${WEB_DEPLOYMENT_NAME}"
+        },
+        "strategy": {
+          "type": "Recreate"
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "deploymentconfig": "${WEB_DEPLOYMENT_NAME}"
+            }
+          },
+          "spec": {
+            "imagePullSecrets": [
+              {
+                "name": "artifactory-m950-learning"
+              }
+            ],
+            "containers": [
+              {
+                "image": "${WEB_IMAGE}",
+                "name": "${WEB_DEPLOYMENT_NAME}",
+                "restartPolicy": "Always",
+                "imagePullPolicy": "Always",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
+                    "name": "${APP_NAME}-data"
+                  },
+                  {
+                    "mountPath": "${MOODLE_APP_MOUNT_PATH}",
+                    "name": "${APP_NAME}-app-data"
+                  },
+                  {
+                    "name": "${APP_NAME}-env",
+                    "mountPath": ".env",
+                    "subPath": ".env"
+                  },
+                  {
+                    "name": "${WEB_DEPLOYMENT_NAME}-config",
+                    "mountPath": "/etc/nginx/conf.d/default.conf",
+                    "subPath": "default.conf"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "${WEB_MEMORY_LIMIT}",
+                    "cpu": "${CRON_CPU_LIMIT}"
+                  },
+                  "requests": {
+                    "memory": "${CRON_MEMORY_REQUEST}",
+                    "cpu": "${WEB_CPU_REQUEST}"
+                  }
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "${APP_NAME}-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${APP_NAME}-app-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-app-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${WEB_DEPLOYMENT_NAME}-config",
+                "configMap": {
+                  "name": "${WEB_DEPLOYMENT_NAME}-config",
+                  "defaultMode": 420
+                }
+              },
+              {
+                "name": "${APP_NAME}-env",
+                "configMap": {
+                  "name": "${APP_NAME}-env",
+                  "items": [
+                    {
+                      "key": ".env",
+                      "path": "./.env"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "revisionHistoryLimit": 10,
+        "test": false
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "description": "Application name.",
+      "displayName": "App Name",
+      "name": "APP_NAME",
+      "required": true,
+      "value": "moodle"
+    },
+    {
+      "description": "Website URL.",
+      "displayName": "URL",
+      "name": "SITE_URL",
+      "required": true,
+      "value": "${SITE_URL}"
+    },
+    {
+      "description": "Application Build Name",
+      "displayName": "Application Build Name",
+      "name": "MOODLE_DEPLOYMENT_NAME",
+      "value": "moodle"
+    },
+    {
+      "description": "Web Service Name",
+      "displayName": "Web Service",
+      "name": "WEB_DEPLOYMENT_NAME",
+      "value": "web"
+    },
+    {
+      "description": "Web Image Name",
+      "displayName": "Web Image",
+      "name": "WEB_IMAGE",
+      "value": "nginxinc/nginx-unprivileged"
+    },
+    {
+      "description": "Image registry",
+      "displayName": "Image Registry",
+      "name": "IMAGE_REPO",
+      "value": "artifacts.developer.gov.bc.ca/m950-learning/"
+    },
+    {
+      "description": "Build namespace.",
+      "displayName": "Build Namespace",
+      "required": true,
+      "name": "BUILD_NAMESPACE"
+    },
+    {
+      "description": "PHP Image",
+      "displayName": "PHP Image",
+      "required": true,
+      "name": "PHP_DEPLOYMENT_NAME"
+    },
+    {
+      "description": "Cron Image",
+      "displayName": "Cron Image",
+      "required": true,
+      "name": "CRON_IMAGE"
+    },
+    {
+      "description": "Cron Deployment Name",
+      "displayName": "Cron Deployment",
+      "required": true,
+      "name": "CRON_DEPLOYMENT_NAME"
+    },
+    {
+      "description": "Image Build Tag (dev, test, prod)",
+      "displayName": "Build Tag",
+      "required": true,
+      "name": "BUILD_TAG"
+    },
+    {
+      "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",
+      "displayName": "Moodle Volume Capacity",
+      "name": "MOODLE_VOLUME_CAPACITY",
+      "required": true,
+      "value": "5Gi"
+    },
+    {
+      "description": "Volume for storing file backups",
+      "displayName": "Moodle File backups",
+      "name": "BACKUP_VOLUME_SIZE",
+      "required": true,
+      "value": "5Gi"
+    },
+    {
+      "description": "Path where the persistent volume will be mounted",
+      "displayName": "Moodle-data Mount Path",
+      "name": "MOODLE_DATA_MOUNT_PATH",
+      "required": true,
+      "value": "/var/www/moodledata"
+    },
+    {
+      "description": "Path where the persistent volume for web will be mounted",
+      "displayName": "Moodle app Mount Path",
+      "name": "MOODLE_APP_MOUNT_PATH",
+      "required": true,
+      "value": "/var/www/html"
+    },
+    {
+      "description": "The OpenShift Namespace where the ImageStream resides.",
+      "displayName": "Namespace",
+      "name": "DEPLOY_NAMESPACE",
+      "required": true
+    },
+    {
+      "description": "Requested amount of memory for the PHP container.",
+      "displayName": "PHP Request Memory",
+      "name": "PHP_MEMORY_REQUEST",
+      "value": "70Mi"
+    },
+    {
+      "description": "Maximum amount of memory the PHP container can use.",
+      "displayName": "PHP Memory Limit",
+      "name": "PHP_MEMORY_LIMIT",
+      "value": "256Mi"
+    },
+    {
+      "description": "Requested CPU for the PHP container.",
+      "displayName": "PHP Request CPU",
+      "name": "PHP_CPU_REQUEST",
+      "value": "50m"
+    },
+    {
+      "description": "Maximum CPU the PHP container can use.",
+      "displayName": "PHP CPU Limit",
+      "name": "PHP_CPU_LIMIT",
+      "value": "150m"
+    },
+    {
+      "description": "Requested amount of memory for the CRON container.",
+      "displayName": "CRON Memory Request",
+      "name": "CRON_MEMORY_REQUEST",
+      "value": "50Mi"
+    },
+    {
+      "description": "Maximum amount of memory the CRON container can use.",
+      "displayName": "CRON Memory Limit",
+      "name": "WEB_MEMORY_LIMIT",
+      "value": "128Mi"
+    },
+    {
+      "description": "Requested amount of CPU for the CRON container.",
+      "displayName": "CRON CPU Request",
+      "name": "WEB_CPU_REQUEST",
+      "value": "30m"
+    },
+    {
+      "description": "Maximum amount of CPU the CRON container can use.",
+      "displayName": "CRON CPU Limit",
+      "name": "CRON_CPU_LIMIT",
+      "value": "150m"
+    },
+    {
+      "description": "Database password.",
+      "displayName": "DB Password",
+      "name": "DB_PASSWORD",
+      "value": "moodle"
+    },
+    {
+      "description": "Database user.",
+      "displayName": "DB User",
+      "name": "DB_USER",
+      "value": "moodle"
+    },
+    {
+      "description": "Database name.",
+      "displayName": "DB Name",
+      "name": "DB_NAME",
+      "value": "moodle"
+    }
+  ]
+}

@@ -1,0 +1,280 @@
+name: 🔨 Build on OpenShift
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP: moodle
+  USER: ${{ github.actor }}
+
+  # Skip builds for faster deployments / testing ("YES" or build)
+  SKIP_BUILDS: "NO"
+  # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
+  CLEAN_BUILDS: "YES"
+
+  APP_HOST_URL: moodle-${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+  BASE_IMAGE_TAG: ${{ github.ref_name }}
+  BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-tools
+  DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+  BUILD_ID: ${{ github.event.number }}
+  BRANCH: ${{ github.ref_name }}
+  SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
+  INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
+  SUCCESS_ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
+  FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
+
+on:
+  push:
+    # branches:
+      # - dev
+      # - test
+      # - prod
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.env'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - '**.json'
+    #   - '**.sh'
+  pull_request:
+    #branches:
+      #- dev
+      #- test
+      #- prod
+    # paths:
+    #   - '**.Dockerfile'
+    #   - '**.conf'
+    #   - '**.ini'
+    #   - '**.php'
+    #   - '**.yml'
+    #   - 'php-fpm-healthcheck.sh'
+
+jobs:
+
+  # Build PHP Image
+
+  build-images:
+    name: 🔨 Build Application Images (${{ github.ref_name }})
+    needs: [checkEnv]
+    runs-on: ubuntu-latest
+    if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
+    steps:
+      # Checkout the PR branch
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v2
+
+        # Log in to OpenShift.
+      # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
+      # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
+      - name: 🔑 Log in to OpenShift
+        run: |
+          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
+
+      # Get Environment Variables from file
+      - name: 📋 Setup Environment from File
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          log-variables: true
+          keys-case: upper
+
+      - name: 📋 Setup Version Environment from File
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          log-variables: true
+          keys-case: upper
+
+      # Build the Moodle image
+      - name: 🚧 Build ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+        id: build-moodle
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
+        working-directory: "./"
+        run: |
+          echo "Building ${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.PHP_IMAGE }}"
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
+            echo "STARTING BUILD..."
+            sh ./openshift/scripts/build-docker-image.sh
+          else
+            echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
+          fi
+        env:
+          DOCKER_FROM_IMAGE: ${{ env.PHP_IMAGE }}
+          DOCKER_FILE_PATH: ${{ env.MOODLE_DOCKER_FILE_PATH }}
+          DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
+          SOURCE_CONTEXT_DIR: ${{ env.PHP_SOURCE_CONTEXT_DIR }}
+          BRANCH: ${{ env.BRANCH }}
+          BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
+          IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
+          SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
+
+      # Build the PHP image
+      - name: 🚧 Build ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+        id: build-php
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
+        working-directory: "./"
+        run: |
+          echo "Building ${{ env.PHP_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.PHP_IMAGE }}"
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
+            echo "STARTING BUILD..."
+            sh ./openshift/scripts/build-docker-image.sh
+          else
+            echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
+          fi
+        env:
+          DOCKER_FROM_IMAGE: ${{ env.PHP_IMAGE }}
+          DOCKER_FILE_PATH: ${{ env.PHP_DOCKER_FILE_PATH }}
+          DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+          SOURCE_CONTEXT_DIR: ${{ env.PHP_SOURCE_CONTEXT_DIR }}
+          BRANCH: ${{ env.BRANCH }}
+          BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
+          IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
+          SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
+
+      # Build the Cron image
+      - name: 🚧 Build ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+        id: build-cron
+        if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
+        working-directory: "./"
+        run: |
+          echo "Building ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Using ${{ env.CRON_IMAGE }}"
+          if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
+            echo "STARTING BUILD..."
+            sh ./openshift/scripts/build-docker-image.sh
+          else
+            echo "SKIPPING BUILD (Environment variable SKIP_BUILDS=YES)"
+          fi
+        env:
+          DOCKER_FROM_IMAGE: ${{ env.CRON_IMAGE }}
+          DOCKER_FILE_PATH: ${{ env.CRON_DOCKER_FILE_PATH }}
+          DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+          SOURCE_CONTEXT_DIR: ${{ env.CRON_SOURCE_CONTEXT_DIR }}
+          BRANCH: ${{ env.BRANCH }}
+          BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
+          IMAGE_TAG: ${{ env.BASE_IMAGE_TAG }}
+          SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
+    outputs:
+      APP: ${{ env.APP }}
+      DB_NAME: ${{ env.DB_NAME }}
+      DB_USER: ${{ env.DB_USER }}
+      DB_PASSWORD: ${{ env.DB_PASSWORD }}
+      IMAGE_REPO: ${{ env.IMAGE_REPO }}
+      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
+      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ env.PHP_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
+      CRON_IMAGE: ${{ env.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ env.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
+      WEB_IMAGE: ${{ env.WEB_IMAGE }}
+      DB_IMAGE: ${{ env.DB_IMAGE }}
+      APP_HOST_URL: ${{ env.APP_HOST_URL }}
+      BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ env.DEPLOY_NAMESPACE }}
+      BRANCH: ${{ env.BRANCH }}
+      CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
+
+  call-cleanup-workflow:
+    name: 🧹️ Clean Build ( ${{ needs.build-images.outputs.CLEAN_BUILDS }} )
+    uses: ./.github/workflows/cleanup.yml
+    needs: [checkEnv, build-images]
+    if: success() && ${{ needs.build-images.outputs == 'YES' }}
+    secrets: inherit
+    with:
+      APP: ${{ needs.build-images.outputs.APP }}
+      APP_HOST_URL: ${{ needs.build-images.outputs.APP_HOST_URL }}
+      BRANCH: ${{ needs.build-images.outputs.BRANCH }}
+      BUILD_NAMESPACE: ${{ needs.build-images.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.build-images.outputs.DEPLOY_NAMESPACE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.WEB_DEPLOYMENT_NAME }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.PHP_DEPLOYMENT_NAME }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.REDIS_DEPLOYMENT_NAME }}
+
+  call-deploy-workflow:
+    name: 🚀 Deploy to OpenShift
+    uses: ./.github/workflows/deploy.yml
+    needs: [checkEnv, build-images, call-cleanup-workflow]
+    if: needs.build-images.outcome == 'success' || needs.build-images.outcome == 'skipped' || ${{ needs.checckEnv.SKIP_BUILDS == 'FALSE' }}
+    secrets: inherit
+    with:
+      BASE_IMAGE_TAG: ${{ github.ref_name }}
+      APP: ${{ needs.build-images.outputs.APP }}
+      DB_NAME: ${{ needs.build-images.outputs.DB_NAME }}
+      DB_USER: ${{ needs.build-images.outputs.DB_USER }}
+      DB_PASSWORD: ${{ needs.build-images.outputs.DB_PASSWORD }}
+      WEB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.WEB_DEPLOYMENT_NAME }}
+      WEB_IMAGE: ${{ needs.build-images.outputs.WEB_IMAGE }}
+      PHP_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.PHP_DEPLOYMENT_NAME }}
+      PHP_IMAGE: ${{ needs.build-images.outputs.PHP_IMAGE }}
+      DB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME }}
+      DB_IMAGE: ${{ needs.build-images.outputs.DB_IMAGE }}
+      CRON_IMAGE: ${{ needs.build-images.outputs.CRON_IMAGE }}
+      CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_REPO: ${{ needs.build-images.outputs.REDIS_REPO }}
+      REDIS_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.build-images.outputs.REDIS_IMAGE }}
+      APP_HOST_URL: ${{ needs.build-images.outputs.APP_HOST_URL }}
+      BUILD_NAMESPACE: ${{ needs.build-images.outputs.BUILD_NAMESPACE }}
+      DEPLOY_NAMESPACE: ${{ needs.build-images.outputs.DEPLOY_NAMESPACE }}
+      IMAGE_REPO: ${{ needs.build-images.outputs.IMAGE_REPO }}
+      BRANCH: ${{ needs.build-images.outputs.BRANCH }}
+
+  notify:
+    name: 📫 Send Notifications (via Rocket.Chat)
+    needs: [build-images, call-deploy-workflow]
+    if: success() || failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⚠️ Failure
+        if: failure()
+        uses: muinmomin/webhook-action@v1.0.0
+        with:
+          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          data: '{
+            "alias":"FAILED GitHub Action by ${{ env.USER }}",
+            "text":"Job: ${{ github.job }} in
+              ${{ github.workflow }} of
+              ${{ github.repository }}:${{ github.ref_name }} >>
+              Deploy1: ${{ needs.call-deploy-workflow.outputs.deploy1 }}
+              Deploy2: ${{ needs.call-deploy-workflow.outputs.deploy2 }}",
+            "attachments":[{
+              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
+              "title_link": "${{ env.INSPECT_JOB_URL }}",
+              "text":"Failure detected in ${{ github.repository }}:${{ github.ref_name }}",
+              "image_url": "${{ env.FAIL_ICON_URL }}",
+              "color":"#e7e076"
+            }]}'
+      - name: ✅ Success
+        uses: muinmomin/webhook-action@v1.0.0
+        with:
+          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          data: '{
+            "alias":"Successful ${{ github.job }} by ${{ env.USER }}",
+            "text":"${{ github.job }} in ${{ github.workflow }}
+              of ${{ github.repository }}:${{ github.ref_name }}",
+            "attachments":[{
+              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
+              "title_link": "${{ env.INSPECT_JOB_URL }}",
+              "text":"Successful deployment of: ${{ github.repository }}:${{ github.ref_name }}",
+              "image_url": "${{ env.SUCCESS_ICON_URL }}",
+              "color":"#05a227"
+            }]}'

@@ -1,2 +1,0 @@
-# must be ended with a new line "LF" (Unix) and not "CRLF" (Windows)
-* * * * * su -c '/usr/local/bin/php /var/www/html/admin/cli/cron.php > /proc/1/fd/1 2>/proc/1/fd/2'
