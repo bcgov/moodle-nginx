@@ -15,15 +15,6 @@ on:
       APP:
         required: true
         type: string
-      DB_NAME:
-        required: true
-        type: string
-      DB_USER:
-        required: true
-        type: string
-      DB_PASSWORD:
-        required: true
-        type: string
       WEB_DEPLOYMENT_NAME:
         required: true
         type: string

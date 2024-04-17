@@ -200,7 +200,6 @@ jobs:
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
-      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   notify:
     name: 📫 Notify
