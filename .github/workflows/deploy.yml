@@ -12,9 +12,6 @@ on:
       MOODLE_ENVIRONMENT:
         required: true
         type: string
-      OPENSHIFT_DEPLOY_PROJECT:
-        required: true
-        type: string
       APP:
         required: true
         type: string
@@ -36,13 +33,7 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
-      PHP_IMAGE:
-        required: true
-        type: string
       DB_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      DB_IMAGE:
         required: true
         type: string
       CRON_IMAGE:
@@ -51,13 +42,7 @@ on:
       CRON_DEPLOYMENT_NAME:
         required: true
         type: string
-      REDIS_REPO:
-        required: true
-        type: string
       REDIS_DEPLOYMENT_NAME:
-        required: true
-        type: string
-      REDIS_IMAGE:
         required: true
         type: string
       APP_HOST_URL:
@@ -70,9 +55,6 @@ on:
         required: true
         type: string
       IMAGE_REPO:
-        required: true
-        type: string
-      BRANCH:
         required: true
         type: string
       BACKUP_IMAGE:

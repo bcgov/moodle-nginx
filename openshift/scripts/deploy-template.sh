@@ -1,5 +1,4 @@
 test -n "$DEPLOY_NAMESPACE"
-test -n "$BRANCH"
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
@@ -40,7 +39,7 @@ oc process -f ./openshift/template.json \
   -p DB_USER=$DB_USER \
   -p DB_NAME=$DB_NAME \
   -p DB_PASSWORD=$DB_PASSWORD \
-  -p BUILD_TAG=$DEPLOY_NAMESPACE \
+  -p BUILD_TAG=$BUILD_TAG \
   -p SITE_URL=$APP_HOST_URL \
   -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
