@@ -7,7 +7,6 @@ objects:
    kind: Job
    metadata:
      name: moodle-upgrade-job
-     namespace: ${DEPLOY_NAMESPACE}
    spec:
      parallelism: 1
      completions: 1

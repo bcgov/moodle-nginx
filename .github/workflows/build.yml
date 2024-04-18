@@ -9,12 +9,11 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "YES"
+  SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
-  CLEAN_BUILDS: "NO"
+  CLEAN_BUILDS: "YES"
   BUILD_ID: ${{ github.event.number }}
   BRANCH: ${{ github.ref_name }}
-  SOURCE_REPOSITORY_URL: "https://github.com/${{ github.repository }}"
   INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
@@ -56,6 +55,15 @@ on:
     #   - '**.sh'
     #   - '**.txt'
 
+  workflow_call:
+    secrets:
+      DB_NAME:
+        required: true
+      DB_USER:
+        required: true
+      DB_PASSWORD:
+        required: true
+
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
@@ -68,11 +76,9 @@ jobs:
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
       BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ env.WEB_IMAGE }}
+      DB_IMAGE: ${{ env.DB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
@@ -120,27 +126,7 @@ jobs:
     secrets: inherit # pass all secrets
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     with:
-      APP: ${{ needs.checkEnv.outputs.APP }}
-      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
-      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
-      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
-      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
-      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
-      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
-      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
-      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
-      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
-      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
-      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
-      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   php:
     name: 🔨 PHP
@@ -202,27 +188,18 @@ jobs:
     with:
       MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
-      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
-      DB_USER: ${{ needs.checkEnv.outputs.DB_USER }}
-      DB_PASSWORD: ${{ needs.checkEnv.outputs.DB_PASSWORD }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
-      PHP_IMAGE: ${{ needs.checkEnv.outputs.PHP_IMAGE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
-      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
-      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
       BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_REPO: ${{ needs.checkEnv.outputs.REDIS_REPO }}
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
-      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
 
   notify:
     name: 📫 Notify
