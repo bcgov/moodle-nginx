@@ -100,6 +100,7 @@ jobs:
         id: dotenv
         uses: falti/dotenv-action@v1
         with:
+          ref: dev
           path: example.env
           export-variables: true
           keys-case: upper
@@ -108,6 +109,7 @@ jobs:
         id: dotenv_versions
         uses: falti/dotenv-action@v1
         with:
+          ref: dev
           path: example.versions.env
           export-variables: true
           keys-case: upper
