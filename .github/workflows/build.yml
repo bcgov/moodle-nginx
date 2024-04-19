@@ -71,6 +71,7 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
+      BRANCH: ${{ env.BRANCH }}
       MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
       APP: ${{ env.APP }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -166,8 +167,8 @@ jobs:
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
-      BRANCH: ${{ env.BRANCH }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
@@ -197,7 +198,7 @@ jobs:
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
@@ -219,11 +220,11 @@ jobs:
             "alias":"FAILED GitHub Action by ${{ needs.checkEnv.outputs.USER }}",
             "text":"Job: ${{ github.job }} in
               ${{ github.workflow }} of
-              ${{ github.repository }}:${{ env.BRANCH }}
+              ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}
             "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ env.BRANCH }}",
+              "title":"${{ github.job }} ${{ job.status }} to ${{ needs.checkEnv.outputs.BRANCH }}",
               "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
-              "text":"Failure detected in ${{ github.repository }}:${{ env.BRANCH }}",
+              "text":"Failure detected in ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
               "image_url": "${{ needs.checkEnv.outputs.FAIL_ICON_URL }}",
               "color":"#e7e076"
             }]}'
@@ -234,11 +235,11 @@ jobs:
           data: '{
             "alias":"Successful ${{ github.job }} by ${{ needs.checkEnv.outputs.USER }}",
             "text":"${{ github.job }} in ${{ github.workflow }}
-              of ${{ github.repository }}:${{ env.BRANCH }}",
+              of ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
             "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ env.BRANCH }}",
+              "title":"${{ github.job }} ${{ job.status }} to ${{ needs.checkEnv.outputs.BRANCH }}",
               "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
-              "text":"Successful deployment of: ${{ github.repository }}:${{ env.BRANCH }}",
+              "text":"Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
               "image_url": "${{ needs.checkEnv.outputs.SUCCESS_ICON_URL }}",
               "color":"#05a227"
             }]}'
