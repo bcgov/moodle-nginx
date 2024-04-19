@@ -212,31 +212,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ⚠️ Failure
-        if: failure()
+        if: !success()
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
             {
-            "emoji": ":sad:",
-            "text":"Job: ${{ github.job }} in
-              ${{ github.workflow }} of
-              ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}
-            "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ needs.checkEnv.outputs.BRANCH }}",
-              "title_link": "${{ env.INSPECT_JOB_URL }}",
-              "text":"Failure detected in ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-              "fields": [{
-                "title": "Priority",
-                "value": "High",
-                "short": false
-              }],
-              "image_url": "${{ env.FAIL_ICON_URL }}",
-              "thumb_url": "${{ env.FAIL_ICON_URL }}",
-              "color":"#e7e076"
-            }]}
+              "emoji": ":warning:",
+              "text": "Failed deployment to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+              "attachments": [{
+                "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} FAILED",
+                "title_link": "${{ env.INSPECT_JOB_URL }}",
+                "text": "Failed deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+                "image_url": "",
+                "thumb_url": "",
+                "color": "#d50550"
+              }]
+            }
       - name: ✅ Success
         uses: muinmomin/webhook-action@v1.0.0
+        if: success()
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
@@ -247,8 +242,8 @@ jobs:
                 "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "image_url": "${{ env.SUCCESS_ICON_URL }}",
-                "thumb_url": "${{ env.SUCCESS_ICON_URL }}",
+                "image_url": "",
+                "thumb_url": "",
                 "color": "#05a227"
               }]
             }
