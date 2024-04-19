@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ⚠️ Failure
-        if: !success()
+        if: ${{ !success() }}
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
