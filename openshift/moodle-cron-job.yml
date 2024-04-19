@@ -39,7 +39,7 @@ objects:
                defaultMode: 420
          containers:
            - name: ${BUILD_NAME}
-             image: ${IMAGE_REPO}${BUILD_NAMESPACE}/${BUILD_NAME}:${BUILD_TAG}
+             image: ${IMAGE_REPO}${CRON_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}
              env:
                - name: DB_USER
                  valueFrom:
