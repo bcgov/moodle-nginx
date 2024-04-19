@@ -206,9 +206,7 @@ jobs:
   notify:
     name: 📫 Notify
     needs: [checkEnv, web, moodle, cron, php, db, call-cleanup-workflow, call-deploy-workflow]
-    if: |
-      always() &&
-      !contains(needs.*.result, 'cancelled')
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: ⚠️ Failure
