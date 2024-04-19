@@ -209,35 +209,16 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: ⚠️ Failure
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - name: Deployment ${{ needs.call-deploy-workflow.result }}
         uses: muinmomin/webhook-action@v1.0.0
-        with:
-          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          data: >
-            {
-              "emoji": ":warning:",
-              "text": "Failed deployment to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-              "attachments": [{
-                "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} FAILED",
-                "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "Failed deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "color": "#d50550"
-              }]
-            }
-      - name: ✅ Success
-        uses: muinmomin/webhook-action@v1.0.0
-        if: success()
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
             {
               "emoji": ":rocket:",
-              "text": "Successfully deployed to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+              "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
-                "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
+                "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "color": "#05a227"
               }]
             }
