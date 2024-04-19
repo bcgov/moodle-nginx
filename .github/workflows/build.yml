@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ⚠️ Failure
-        if: ${{ !success() }}
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
@@ -222,8 +222,6 @@ jobs:
                 "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} FAILED",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "Failed deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "image_url": "",
-                "thumb_url": "",
                 "color": "#d50550"
               }]
             }
@@ -240,8 +238,6 @@ jobs:
                 "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "image_url": "",
-                "thumb_url": "",
                 "color": "#05a227"
               }]
             }
