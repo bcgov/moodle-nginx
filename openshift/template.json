@@ -195,7 +195,7 @@
             ],
             "containers": [
               {
-                "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${BUILD_TAG}",
+                "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}",
                 "name": "${PHP_DEPLOYMENT_NAME}",
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
@@ -526,12 +526,6 @@
       "displayName": "Cron Deployment",
       "required": true,
       "name": "CRON_DEPLOYMENT_NAME"
-    },
-    {
-      "description": "Image Build Tag (dev, test, prod)",
-      "displayName": "Build Tag",
-      "required": true,
-      "name": "BUILD_TAG"
     },
     {
       "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",

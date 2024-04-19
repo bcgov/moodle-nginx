@@ -39,7 +39,6 @@ oc process -f ./openshift/template.json \
   -p DB_USER=$DB_USER \
   -p DB_NAME=$DB_NAME \
   -p DB_PASSWORD=$DB_PASSWORD \
-  -p BUILD_TAG=$BUILD_TAG \
   -p SITE_URL=$APP_HOST_URL \
   -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
@@ -63,9 +62,9 @@ oc rollout latest dc/$PHP_DEPLOYMENT_NAME
 
 # Check PHP deployment rollout status until complete.
 ATTEMPTS=0
-WAIT_TIME=5
+WAIT_TIME=30
 ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME"
-until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
+until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
   $ROLLOUT_STATUS_CMD
   ATTEMPTS=$((attempts + 1))
   echo "Waiting for dc/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
@@ -92,14 +91,12 @@ oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 
 echo "Waiting for Moodle build migration job status to complete..."
 ATTEMPTS=0
-WAIT_TIME=5
+WAIT_TIME=30
 #  2>&1` =~ "NotFound"
 # oc get jobs | findstr /i 'migrate-build-files 1/1'
-MIGRATE_STATUS_CMD='oc get jobs 2>&1` =~ "migrate-build-files"'
-until $MIGRATE_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
-  $MIGRATE_STATUS_CMD
+until oc get jobs | grep -q "migrate-build-files" || [ $ATTEMPTS -eq 4 ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  echo "Waited: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  echo "Waiting for migrate-build-files job to be detected... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
 
@@ -143,6 +140,11 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintena
 
 
 echo "Create and run Moodle cron job..."
+# Check if the moodle-upgrade-job exists
+if oc get job moodle-cron-job; then
+  # If the job exists, delete it
+  oc delete job moodle-cron-job
+fi
 oc process -f ./openshift/moodle-cron-job.yml | oc create -f -
 
 # echo "Run first cron..."

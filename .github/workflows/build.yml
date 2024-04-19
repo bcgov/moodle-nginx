@@ -9,11 +9,12 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
-  CLEAN_BUILDS: "YES"
+  CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
-  BRANCH: ${{ github.ref_name }}
+  # BRANCH: ${{ env.BRANCH }}
+  BRANCH: dev
   INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
@@ -70,11 +71,12 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
+      BRANCH: ${{ env.BRANCH }}
       MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
       APP: ${{ env.APP }}
-      DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
-      BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+      BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ env.WEB_IMAGE }}
@@ -114,9 +116,9 @@ jobs:
 
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
           echo "-----------------------"
-          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
   db:
@@ -165,8 +167,8 @@ jobs:
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
-      BRANCH: ${{ github.ref_name }}
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
+      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
@@ -196,7 +198,7 @@ jobs:
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
@@ -214,30 +216,39 @@ jobs:
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          data: '{
-            "alias":"FAILED GitHub Action by ${{ needs.checkEnv.outputs.USER }}",
+          data: >
+            {
+            "emoji": ":sad:",
             "text":"Job: ${{ github.job }} in
               ${{ github.workflow }} of
-              ${{ github.repository }}:${{ github.ref_name }}
+              ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}
             "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
-              "text":"Failure detected in ${{ github.repository }}:${{ github.ref_name }}",
-              "image_url": "${{ needs.checkEnv.outputs.FAIL_ICON_URL }}",
+              "title":"${{ github.job }} ${{ job.status }} to ${{ needs.checkEnv.outputs.BRANCH }}",
+              "title_link": "${{ env.INSPECT_JOB_URL }}",
+              "text":"Failure detected in ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+              "fields": [{
+                "title": "Priority",
+                "value": "High",
+                "short": false
+              }],
+              "image_url": "${{ env.FAIL_ICON_URL }}",
+              "thumb_url": "${{ env.FAIL_ICON_URL }}",
               "color":"#e7e076"
-            }]}'
+            }]}
       - name: ✅ Success
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          data: '{
-            "alias":"Successful ${{ github.job }} by ${{ needs.checkEnv.outputs.USER }}",
-            "text":"${{ github.job }} in ${{ github.workflow }}
-              of ${{ github.repository }}:${{ github.ref_name }}",
-            "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ github.ref_name }}",
-              "title_link": "${{ needs.checkEnv.outputs.INSPECT_JOB_URL }}",
-              "text":"Successful deployment of: ${{ github.repository }}:${{ github.ref_name }}",
-              "image_url": "${{ needs.checkEnv.outputs.SUCCESS_ICON_URL }}",
-              "color":"#05a227"
-            }]}'
+          data: >
+            {
+              "emoji": ":rocket:",
+              "text": "Successfully deployed to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+              "attachments": [{
+                "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
+                "title_link": "${{ env.INSPECT_JOB_URL }}",
+                "text": "Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+                "image_url": "${{ env.SUCCESS_ICON_URL }}",
+                "thumb_url": "${{ env.SUCCESS_ICON_URL }}",
+                "color": "#05a227"
+              }]
+            }
