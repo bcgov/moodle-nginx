@@ -209,7 +209,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Deployment ${{ needs.call-deploy-workflow.result }}
+      - name: Rocket.Chat Notification
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
