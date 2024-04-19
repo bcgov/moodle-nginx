@@ -140,6 +140,11 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintena
 
 
 echo "Create and run Moodle cron job..."
+# Check if the moodle-upgrade-job exists
+if oc get job moodle-cron-job; then
+  # If the job exists, delete it
+  oc delete job moodle-cron-job
+fi
 oc process -f ./openshift/moodle-cron-job.yml | oc create -f -
 
 # echo "Run first cron..."

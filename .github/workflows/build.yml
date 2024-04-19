@@ -241,7 +241,7 @@ jobs:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
             {
-              "emoji": ":smirk:",
+              "emoji": ":rocket:",
               "text": "Successfully deployed to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
               "attachments": [{
                 "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
