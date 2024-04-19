@@ -62,9 +62,9 @@ oc rollout latest dc/$PHP_DEPLOYMENT_NAME
 
 # Check PHP deployment rollout status until complete.
 ATTEMPTS=0
-WAIT_TIME=5
+WAIT_TIME=30
 ROLLOUT_STATUS_CMD="oc rollout status dc/$PHP_DEPLOYMENT_NAME"
-until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
+until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
   $ROLLOUT_STATUS_CMD
   ATTEMPTS=$((attempts + 1))
   echo "Waiting for dc/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
@@ -91,14 +91,12 @@ oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 
 echo "Waiting for Moodle build migration job status to complete..."
 ATTEMPTS=0
-WAIT_TIME=5
+WAIT_TIME=30
 #  2>&1` =~ "NotFound"
 # oc get jobs | findstr /i 'migrate-build-files 1/1'
-MIGRATE_STATUS_CMD='oc get jobs 2>&1` =~ "migrate-build-files"'
-until $MIGRATE_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
-  $MIGRATE_STATUS_CMD
+until oc get jobs | grep -q "migrate-build-files" || [ $ATTEMPTS -eq 4 ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  echo "Waited: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  echo "Waiting for migrate-build-files job to be detected... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
 
