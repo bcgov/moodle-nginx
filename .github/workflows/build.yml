@@ -23,38 +23,17 @@ env:
 
 on:
   schedule:
-    - cron: "15 * * * *"
-    # - cron: "0 3 * * 6"
+    - cron: "0 3 * * 6"
   push:
     branches:
       - dev
       # - test
       # - prod
-    # paths:
-    #   - '**.Dockerfile'
-    #   - '**.conf'
-    #   - '**.env'
-    #   - '**.ini'
-    #   - '**.php'
-    #   - '**.yml'
-    #   - '**.json'
-    #   - '**.sh'
-    #   - '**.txt'
   pull_request:
     branches:
       - dev
       #- test
       #- prod
-    # paths:
-    #   - '**.Dockerfile'
-    #   - '**.conf'
-    #   - '**.env'
-    #   - '**.ini'
-    #   - '**.php'
-    #   - '**.yml'
-    #   - '**.json'
-    #   - '**.sh'
-    #   - '**.txt'
 
   workflow_call:
     secrets:
@@ -71,9 +50,9 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
+      APP: ${{ env.APP }}
       BRANCH: ${{ env.BRANCH }}
       MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
-      APP: ${{ env.APP }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
       BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -125,7 +104,7 @@ jobs:
     name: 🔨 DB
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     with:
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
@@ -135,33 +114,33 @@ jobs:
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/php.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   cron:
     name: 🔨 Cron
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/cron.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   moodle:
     name: 🔨 Moodle
     needs: [checkEnv, php]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   web:
     name: 🔨 Web
     needs: [checkEnv, php, db, moodle]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/web.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, web]
     # if: success()
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
@@ -180,7 +159,7 @@ jobs:
   call-deploy-workflow:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     if: |
       always() &&
@@ -205,7 +184,17 @@ jobs:
 
   notify:
     name: 📫 Notify
-    needs: [checkEnv, web, moodle, cron, php, db, call-cleanup-workflow, call-deploy-workflow]
+    needs:
+      [
+        checkEnv,
+        web,
+        moodle,
+        cron,
+        php,
+        db,
+        call-cleanup-workflow,
+        call-deploy-workflow,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:
