@@ -107,7 +107,11 @@ if oc get job moodle-upgrade-job; then
 fi
 
 echo "Create and run Moodle upgrade job..."
-oc process -f ./openshift/moodle-upgrade-job.yml | oc create -f -
+oc process -f ./openshift/moodle-upgrade-job.yml \
+  -p IMAGE_REPO=$IMAGE_REPO \
+  -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
+  -p BUILD_NAME=php \
+  | oc create -f -
 
 # # Ensure moodle config is cleared (Moodle)
 # oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'rm -f /var/www/html/config.php'
@@ -145,7 +149,11 @@ if oc get job moodle-cron-job; then
   # If the job exists, delete it
   oc delete job moodle-cron-job
 fi
-oc process -f ./openshift/moodle-cron-job.yml | oc create -f -
+oc process -f ./openshift/moodle-cron-job.yml  \
+  -p IMAGE_REPO=$IMAGE_REPO \
+  -p DEPLOY_NAMESPACE=$BUILD_NAMESPACE \
+  -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
+  | oc create -f -
 
 # echo "Run first cron..."
 # oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/cron.php'

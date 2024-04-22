@@ -38,7 +38,7 @@ objects:
                defaultMode: 420
          containers:
            - name: moodle-upgrade-job-job
-             image: ${IMAGE_REPO}${BUILD_NAMESPACE}/${BUILD_NAME}:${BUILD_TAG}
+             image: ${IMAGE_REPO}${CRON_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}
              env:
                - name: DB_USER
                  valueFrom:
@@ -84,6 +84,3 @@ parameters:
   - name: BUILD_NAME
     required: true
     value: "php"
-  - name: BUILD_TAG
-    required: true
-    value: "dev"

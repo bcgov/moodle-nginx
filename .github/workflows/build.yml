@@ -9,9 +9,9 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "YES"
+  SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
-  CLEAN_BUILDS: "NO"
+  CLEAN_BUILDS: "YES"
   BUILD_ID: ${{ github.event.number }}
   # BRANCH: ${{ env.BRANCH }}
   BRANCH: dev
@@ -23,38 +23,17 @@ env:
 
 on:
   schedule:
-    - cron: "15 * * * *"
-    # - cron: "0 3 * * 6"
+    - cron: "0 3 * * 6"
   push:
     branches:
       - dev
       # - test
       # - prod
-    # paths:
-    #   - '**.Dockerfile'
-    #   - '**.conf'
-    #   - '**.env'
-    #   - '**.ini'
-    #   - '**.php'
-    #   - '**.yml'
-    #   - '**.json'
-    #   - '**.sh'
-    #   - '**.txt'
   pull_request:
     branches:
       - dev
       #- test
       #- prod
-    # paths:
-    #   - '**.Dockerfile'
-    #   - '**.conf'
-    #   - '**.env'
-    #   - '**.ini'
-    #   - '**.php'
-    #   - '**.yml'
-    #   - '**.json'
-    #   - '**.sh'
-    #   - '**.txt'
 
   workflow_call:
     secrets:
@@ -71,9 +50,9 @@ jobs:
     name: 📋 Environment Check
     runs-on: ubuntu-latest
     outputs: # Define the output parameter
+      APP: ${{ env.APP }}
       BRANCH: ${{ env.BRANCH }}
       MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
-      APP: ${{ env.APP }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
       BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -125,7 +104,7 @@ jobs:
     name: 🔨 DB
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     with:
       DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
@@ -135,33 +114,33 @@ jobs:
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/php.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   cron:
     name: 🔨 Cron
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/cron.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   moodle:
     name: 🔨 Moodle
     needs: [checkEnv, php]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   web:
     name: 🔨 Web
     needs: [checkEnv, php, db, moodle]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/web.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
 
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, web]
     # if: success()
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
@@ -180,7 +159,7 @@ jobs:
   call-deploy-workflow:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
-    secrets: inherit # pass all secrets
+    secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
     if: |
       always() &&
@@ -205,50 +184,30 @@ jobs:
 
   notify:
     name: 📫 Notify
-    needs: [checkEnv, web, moodle, cron, php, db, call-cleanup-workflow, call-deploy-workflow]
-    if: |
-      always() &&
-      !contains(needs.*.result, 'cancelled')
+    needs:
+      [
+        checkEnv,
+        web,
+        moodle,
+        cron,
+        php,
+        db,
+        call-cleanup-workflow,
+        call-deploy-workflow,
+      ]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: ⚠️ Failure
-        if: failure()
-        uses: muinmomin/webhook-action@v1.0.0
-        with:
-          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          data: >
-            {
-            "emoji": ":sad:",
-            "text":"Job: ${{ github.job }} in
-              ${{ github.workflow }} of
-              ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}
-            "attachments":[{
-              "title":"${{ github.job }} ${{ job.status }} to ${{ needs.checkEnv.outputs.BRANCH }}",
-              "title_link": "${{ env.INSPECT_JOB_URL }}",
-              "text":"Failure detected in ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-              "fields": [{
-                "title": "Priority",
-                "value": "High",
-                "short": false
-              }],
-              "image_url": "${{ env.FAIL_ICON_URL }}",
-              "thumb_url": "${{ env.FAIL_ICON_URL }}",
-              "color":"#e7e076"
-            }]}
-      - name: ✅ Success
+      - name: Rocket.Chat Notification
         uses: muinmomin/webhook-action@v1.0.0
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
             {
               "emoji": ":rocket:",
-              "text": "Successfully deployed to ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
+              "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
-                "title": "Deployment to ${{ needs.checkEnv.outputs.BRANCH }} successful",
-                "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "Successful deployment of: ${{ github.repository }}:${{ needs.checkEnv.outputs.BRANCH }}",
-                "image_url": "${{ env.SUCCESS_ICON_URL }}",
-                "thumb_url": "${{ env.SUCCESS_ICON_URL }}",
-                "color": "#05a227"
+                "title": "View Job on GitHub",
+                "title_link": "${{ env.INSPECT_JOB_URL }}"
               }]
             }
