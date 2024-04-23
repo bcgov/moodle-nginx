@@ -182,32 +182,6 @@ jobs:
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
-  lighthouse-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@master
-      - name: Setup Chrome
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@latest
-        with:
-          install-dependencies: true
-      - name: Lighthouse
-        uses: foo-software/lighthouse-check-action@master
-        id: lighthouseCheck
-        env:
-          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-        with:
-          urls: 'https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/login/index.php,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/course/view.php?id=13'
-      - name: Verify Lighthouse Check results
-        uses: foo-software/lighthouse-check-status-action@master
-        with:
-          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
-          minAccessibilityScore: "80"
-          minBestPracticesScore: "50"
-          minPerformanceScore: "50"
-          minProgressiveWebAppScore: "50"
-          minSeoScore: "50"
-
   notify:
     name: 📫 Notify
     needs:
@@ -237,3 +211,33 @@ jobs:
                 "title_link": "${{ env.INSPECT_JOB_URL }}"
               }]
             }
+
+  lighthouse-check:
+    runs-on: ubuntu-latest
+    needs: notify
+    if: success()
+    steps:
+      - uses: actions/checkout@master
+      - name: Install dependencies
+        run: sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          install-dependencies: false
+      - name: Lighthouse
+        uses: foo-software/lighthouse-check-action@master
+        id: lighthouseCheck
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        with:
+          urls: 'https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/login/index.php,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/course/view.php?id=13'
+      - name: Verify Lighthouse Check results
+        uses: foo-software/lighthouse-check-status-action@master
+        with:
+          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
+          minAccessibilityScore: "80"
+          minBestPracticesScore: "50"
+          minPerformanceScore: "50"
+          minProgressiveWebAppScore: "50"
+          minSeoScore: "50"
