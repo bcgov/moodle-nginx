@@ -146,7 +146,7 @@ jobs:
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
+      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
       BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
@@ -181,6 +181,32 @@ jobs:
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
+
+  lighthouse-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          install-dependencies: true
+      - name: Lighthouse
+        uses: foo-software/lighthouse-check-action@master
+        id: lighthouseCheck
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        with:
+          urls: 'https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/login/index.php,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/course/view.php?id=13'
+      - name: Verify Lighthouse Check results
+        uses: foo-software/lighthouse-check-status-action@master
+        with:
+          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
+          minAccessibilityScore: "80"
+          minBestPracticesScore: "50"
+          minPerformanceScore: "50"
+          minProgressiveWebAppScore: "50"
+          minSeoScore: "50"
 
   notify:
     name: 📫 Notify
