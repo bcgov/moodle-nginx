@@ -109,8 +109,8 @@ fi
 echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade-job.yml \
   -p IMAGE_REPO=$IMAGE_REPO \
-  -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
-  -p BUILD_NAME=php \
+  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
   | oc create -f -
 
 # # Ensure moodle config is cleared (Moodle)
@@ -151,7 +151,7 @@ if oc get job moodle-cron-job; then
 fi
 oc process -f ./openshift/moodle-cron-job.yml  \
   -p IMAGE_REPO=$IMAGE_REPO \
-  -p DEPLOY_NAMESPACE=$BUILD_NAMESPACE \
+  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
   | oc create -f -
 

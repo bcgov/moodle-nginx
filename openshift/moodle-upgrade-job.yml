@@ -38,7 +38,7 @@ objects:
                defaultMode: 420
          containers:
            - name: moodle-upgrade-job-job
-             image: ${IMAGE_REPO}${CRON_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}
+             image: ${IMAGE_REPO}${BUILD_NAME}:${DEPLOY_NAMESPACE}
              env:
                - name: DB_USER
                  valueFrom:
@@ -78,7 +78,7 @@ parameters:
   - name: IMAGE_REPO
     required: true
     value: "image-registry.openshift-image-registry.svc:5000/"
-  - name: BUILD_NAMESPACE
+  - name: DEPLOY_NAMESPACE
     required: true
     value: "e66ac2-dev"
   - name: BUILD_NAME
