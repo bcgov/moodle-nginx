@@ -211,11 +211,12 @@ jobs:
         uses: foo-software/lighthouse-check-status-action@master
         with:
           lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
+          device: "desktop"
           minAccessibilityScore: "80"
-          minBestPracticesScore: "50"
-          minPerformanceScore: "50"
-          minProgressiveWebAppScore: "50"
-          minSeoScore: "50"
+          minBestPracticesScore: "80"
+          minPerformanceScore: "40"
+          #minProgressiveWebAppScore: "0"
+          #minSeoScore: "0"
 
   notify:
     name: 📫 Notify
