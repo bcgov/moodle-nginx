@@ -127,6 +127,9 @@
         "namespace": "${DEPLOY_NAMESPACE}",
         "labels": {
           "service": "${WEB_DEPLOYMENT_NAME}"
+        },
+        "annotations": {
+          "haproxy.router.openshift.io/timeout": "600s"
         }
       },
       "spec": {

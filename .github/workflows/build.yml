@@ -254,8 +254,12 @@ jobs:
               "emoji": ":rocket:",
               "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
+                "title": "Complete Moodle Upgrades",
+                "title_link": "https://${{ env.APP_HOST_URL }}/admin/index.php",
+                "text": "Please ensure system upgrades are complete before tesing."
+              },{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}"
-              }]
+              }
             }
