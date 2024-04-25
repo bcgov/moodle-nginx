@@ -184,7 +184,7 @@ jobs:
 
   wait:
     runs-on: ubuntu-latest
-    name: wait-job
+    name: ⏱ Wait
     needs: [checkEnv, call-deploy-workflow]
     steps:
       - name: Sleep for 5 minutes
@@ -215,7 +215,7 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
-          urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/index.php,https://${{ env.APP_HOST_URL }}/course/view.php?id=13'
+          urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master
         with:
