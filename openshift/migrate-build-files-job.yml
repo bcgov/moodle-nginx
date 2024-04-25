@@ -34,7 +34,7 @@ objects:
            - name: artifactory-m950-learning
          containers:
            - name: migrate-build-files-job
-             image: ${IMAGE_REPO}/${BUILD_NAME}:${BUILD_NAMESPACE}
+             image: ${IMAGE_REPO}${BUILD_NAME}:${BUILD_NAMESPACE}
              volumeMounts:
                - name: moodle-app-data
                  mountPath: /var/www/html

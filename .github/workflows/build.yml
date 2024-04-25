@@ -184,7 +184,7 @@ jobs:
 
   wait:
     runs-on: ubuntu-latest
-    name: ⏱ Wait
+    name: ⌛ Wait
     needs: [checkEnv, call-deploy-workflow]
     steps:
       - name: Sleep for 10 minutes
@@ -192,6 +192,7 @@ jobs:
         shell: bash
 
   lighthouse-check:
+    name: 👀 Test
     runs-on: ubuntu-latest
     needs: [checkEnv, call-deploy-workflow, wait]
     if: |
