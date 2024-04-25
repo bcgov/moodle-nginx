@@ -187,8 +187,8 @@ jobs:
     name: ⌛ Wait
     needs: [checkEnv, call-deploy-workflow]
     steps:
-      - name: Sleep for 10 minutes
-        run: sleep 600s
+      - name: Sleep for 20 minutes
+        run: sleep 1200s
         shell: bash
 
   lighthouse-check:

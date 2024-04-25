@@ -1,6 +1,9 @@
 echo "Enabling maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --enable
 
+echo "Deleting shared Moodle files... in 30...29...28..."
+sleep 600
+
 echo "Purging cache..."
 php /var/www/html/admin/cli/purge_caches.php
 
