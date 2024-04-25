@@ -183,7 +183,7 @@ jobs:
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
   wait:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     name: wait-job
     needs: [checkEnv, call-deploy-workflow]
     steps:
