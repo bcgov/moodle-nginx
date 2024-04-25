@@ -184,7 +184,7 @@ jobs:
 
   wait:
     runs-on: ubuntu-latest
-    name: ⌛ Wait
+    name: ⌛ Wait for Moodle Upgrades (20 min)
     needs: [checkEnv, call-deploy-workflow]
     steps:
       - name: Sleep for 20 minutes
@@ -221,7 +221,6 @@ jobs:
         uses: foo-software/lighthouse-check-status-action@master
         with:
           lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
-          device: "desktop"
           minAccessibilityScore: "80"
           minBestPracticesScore: "80"
           minPerformanceScore: "40"
@@ -261,5 +260,5 @@ jobs:
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}"
-              }
+              }]
             }
