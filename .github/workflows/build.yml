@@ -195,6 +195,8 @@ jobs:
     name: 👀 Test
     runs-on: ubuntu-latest
     needs: [checkEnv, call-deploy-workflow, wait]
+    outputs:
+      lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
     if: |
       success() &&
       needs.call-deploy-workflow.result == 'success' &&
@@ -246,6 +248,8 @@ jobs:
     steps:
       - name: Rocket.Chat Notification
         uses: muinmomin/webhook-action@v1.0.0
+        env:
+          APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           data: >
