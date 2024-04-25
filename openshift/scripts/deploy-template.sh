@@ -2,6 +2,9 @@ test -n "$DEPLOY_NAMESPACE"
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
+# Ensure secrets are linked for pulling from Artifactory
+oc secrets link default artifactory-m950-learning --for=pull
+
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
@@ -110,7 +113,7 @@ echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade-job.yml \
   -p IMAGE_REPO=$IMAGE_REPO \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
+  -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
 
 # # Ensure moodle config is cleared (Moodle)
