@@ -48,6 +48,9 @@ on:
       IMAGE_REPO:
         required: true
         type: string
+      BACKUP_HELM_CHART:
+        required: true
+        type: string
       BACKUP_IMAGE:
         required: true
         type: string
@@ -137,6 +140,7 @@ jobs:
           CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          BACKUP_HELM_CHART: ${{ inputs.BACKUP_IMAGE }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
       - name: Backups
@@ -145,9 +149,14 @@ jobs:
           exec:  |
             helm repo add bcgov http://bcgov.github.io/helm-charts
             helm repo update
-            if [[ `oc describe deployment moodle-backups 2>&1` =~ "NotFound" ]]; then
+            if [[ `oc describe deployment moodle-db 2>&1` =~ "NotFound" ]]; then
               echo "Backup deployment NOT FOUND. Begin backup container deployment..."
               echo '
+                image:
+                  repository: ${{ inputs.BACKUP_HELM_CHART }}
+                  pullPolicy: Always
+                  tag: dev
+
                 backupConfig: |
                   mariadb=db/moodle
 
@@ -165,10 +174,10 @@ jobs:
                   ENVIRONMENT_FRIENDLY_NAME:
                     value: "DB Backups"
                 ' > config.yaml
-              helm install moodle-backups ${{ inputs.BACKUP_IMAGE }} -f config.yaml
+              helm install moodle-db ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
             else
               echo "Backup container installation FOUND. Updating..."
-              if [[ `helm upgrade moodle-backups ${{ inputs.BACKUP_IMAGE }} --reuse-values 2>&1` =~ "Error" ]]; then
+              if [[ `helm upgrade moodle-db ${{ inputs.BACKUP_HELM_CHART }} --reuse-values 2>&1` =~ "Error" ]]; then
                 echo "Backup container update FAILED."
                 exit 1
               fi
