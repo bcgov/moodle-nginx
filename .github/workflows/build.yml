@@ -188,6 +188,12 @@ jobs:
     runs-on: ubuntu-latest
     name: ⌛ Wait for Moodle Upgrades (20 min)
     needs: [checkEnv, call-deploy-workflow]
+    if: |
+      always() &&
+      needs.checkEnv.result == 'success' &&
+      needs.call-deploy-workflow.result == 'success' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     steps:
       - name: Sleep for 20 minutes
         run: sleep 1200s
