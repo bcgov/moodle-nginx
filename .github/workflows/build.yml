@@ -270,6 +270,6 @@ jobs:
               },{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "${{ steps.table.outputs.table  }}"
+                "text": "${{ toJSON(steps.table.outputs.table)  }}"
               }]
             }
