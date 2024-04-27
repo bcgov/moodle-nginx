@@ -117,6 +117,8 @@ spec:
         # Using Secrets
         - name: MARIADB_ALLOW_EMPTY_ROOT_PASSWORD
           value: "yes"
+        - name: MARIADB_AUTO_UPGRADE
+          value: "yes"
         - name: ALLOW_EMPTY_PASSWORD
           value: "yes"
         - name: MYSQL_USER

@@ -354,6 +354,204 @@
         "annotations": {
           "template.alpha.openshift.io/wait-for-ready": "true"
         },
+        "name": "${CRON_DEPLOYMENT_NAME}",
+        "namespace": "${DEPLOY_NAMESPACE}",
+        "labels": {
+          "service": "${CRON_DEPLOYMENT_NAME}"
+        }
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": {
+          "deploymentconfig": "${CRON_DEPLOYMENT_NAME}"
+        },
+        "strategy": {
+          "type": "Rolling",
+          "rollingParams": {
+            "updatePeriodSeconds": 1,
+            "intervalSeconds": 1,
+            "timeoutSeconds": 600,
+            "maxUnavailable": "25%",
+            "maxSurge": "25%"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "deploymentconfig": "${CRON_DEPLOYMENT_NAME}"
+            }
+          },
+          "spec": {
+            "imagePullSecrets": [
+              {
+                "name": "artifactory-m950-learning"
+              }
+            ],
+            "containers": [
+              {
+                "image": "${IMAGE_REPO}${CRON_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}",
+                "name": "${CRON_DEPLOYMENT_NAME}",
+                "restartPolicy": "Always",
+                "imagePullPolicy": "Always",
+                "ports": [
+                  {
+                    "containerPort": 9000
+                  }
+                ],
+                "command": [
+                  "- bash",
+                  "- \"-c\"",
+                  "- |",
+                  "  echo \"Running Moodle Cron...\"",
+                  "  sh /usr/local/bin/moodle-cron-job.sh"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "${CRON_DEPLOYMENT_NAME}-config",
+                    "mountPath": "/var/www/html/config.php",
+                    "subPath": "config.php"
+                  },
+                  {
+                    "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
+                    "name": "${APP_NAME}-data"
+                  },
+                  {
+                    "mountPath": "${MOODLE_APP_MOUNT_PATH}",
+                    "name": "${APP_NAME}-app-data"
+                  },
+                  {
+                    "mountPath": "/tmp/file-backups",
+                    "name": "file-backup-data"
+                  },
+                  {
+                    "name": "${APP_NAME}-env",
+                    "mountPath": ".env",
+                    "subPath": ".env"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "${PHP_MEMORY_LIMIT}",
+                    "cpu": "${PHP_CPU_LIMIT}"
+                  },
+                  "requests": {
+                    "memory": "${PHP_MEMORY_REQUEST}",
+                    "cpu": "${PHP_CPU_REQUEST}"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "APP_NAME",
+                    "value": "${APP_NAME}"
+                  },
+                  {
+                    "name": "SITE_URL",
+                    "value": "https://${SITE_URL}"
+                  },
+                  {
+                    "name": "DB_USER",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "DB_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "DB_NAME",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${APP_NAME}-secrets",
+                        "key": "database-name"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "${CRON_DEPLOYMENT_NAME}-config",
+                "configMap": {
+                  "name": "${CRON_DEPLOYMENT_NAME}-config",
+                  "defaultMode": 420,
+                  "items": [
+                    {
+                      "key": "config.php",
+                      "path": "config.php"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "${APP_NAME}-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${APP_NAME}-app-data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APP_NAME}-app-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "file-backup-data",
+                "persistentVolumeClaim": {
+                  "claimName": "file-backup-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "${CRON_DEPLOYMENT_NAME}-config",
+                "configMap": {
+                  "name": "${CRON_DEPLOYMENT_NAME}-config",
+                  "defaultMode": 420
+                }
+              },
+              {
+                "name": "${APP_NAME}-env",
+                "configMap": {
+                  "name": "${APP_NAME}-env",
+                  "items": [
+                    {
+                      "key": ".env",
+                      "path": "./.env"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "revisionHistoryLimit": 10,
+        "test": false
+      }
+    },
+
+    {
+      "apiVersion": "v1",
+      "kind": "DeploymentConfig",
+      "metadata": {
+        "annotations": {
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        },
         "name": "${WEB_DEPLOYMENT_NAME}",
         "namespace": "${DEPLOY_NAMESPACE}"
       },

@@ -37,6 +37,20 @@ else
   oc rollout latest dc/$WEB_DEPLOYMENT_NAME
 fi
 
+echo "Create and run Moodle cron job..."
+# Check if the moodle-upgrade-job exists
+if oc get dc moodle-cron-job; then
+  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
+  oc delete dc moodle-cron-job
+fi
+
+# Job doesn't like being run for > 12 hrs, so added cron to template.json as a DC
+# oc process -f ./openshift/moodle-cron-job.yml  \
+#   -p IMAGE_REPO=$IMAGE_REPO \
+#   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+#   -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
+#   | oc create -f -
+
 oc process -f ./openshift/template.json \
   -p APP_NAME=$APP \
   -p DB_USER=$DB_USER \
@@ -144,19 +158,6 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.
 
 echo "Disabling maintenance mode..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
-
-
-echo "Create and run Moodle cron job..."
-# Check if the moodle-upgrade-job exists
-if oc get job moodle-cron-job; then
-  # If the job exists, delete it
-  oc delete job moodle-cron-job
-fi
-oc process -f ./openshift/moodle-cron-job.yml  \
-  -p IMAGE_REPO=$IMAGE_REPO \
-  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
-  | oc create -f -
 
 # echo "Run first cron..."
 # oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/cron.php'
