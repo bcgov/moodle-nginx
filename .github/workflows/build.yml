@@ -212,6 +212,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     steps:
       - uses: actions/checkout@master
+      - run: mkdir ${{ github.workspace }}/tmp/artifacts
       - name: Install dependencies
         run: sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
       - name: Setup Chrome
@@ -226,6 +227,7 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
+          outputDirectory: ${{ github.workspace }}/tmp/artifacts
           urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master
@@ -254,11 +256,17 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Test Results to Markdown Table
-        uses: buildingcash/json-to-markdown-table-action@v1
-        id: table
+      # - name: Test Results to Markdown Table
+      #   uses: buildingcash/json-to-markdown-table-action@v1
+      #   id: table
+      #   with:
+      #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+      - name: Format JSON
+        uses: iyu88/lighthouse-report-formatter@v1.0.0
+        id: formatter
         with:
-          json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+          lh_directory: ${{ github.workspace }}/tmp/artifacts
+          manifest_path: lhci_reports
       - name: Rocket.Chat Notification
         uses: muinmomin/webhook-action@v1.0.0
         env:
@@ -276,6 +284,6 @@ jobs:
               },{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "${{ toJSON(steps.table.outputs.table)  }}"
+                "text": "${{ steps.formatter.outputs.comments }}"
               }]
             }
