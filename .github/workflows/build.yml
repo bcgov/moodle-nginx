@@ -229,6 +229,7 @@ jobs:
         with:
           outputDirectory: ${{ github.workspace }}/tmp/artifacts
           urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
+          overridesJsonFile: ${{ github.workspace }}/config/lighthouse/overrides.json
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master
         with:
@@ -261,12 +262,11 @@ jobs:
       #   id: table
       #   with:
       #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
-      - name: Format JSON
-        uses: iyu88/lighthouse-report-formatter@latest
-        id: formatter
+      - name: Lighthouse Report
+        uses: manrueda/lighthouse-report-action@v1.1.2
+        id: lhreport
         with:
-          lh_directory: ${{ github.workspace }}/tmp/artifacts
-          manifest_path: lhci_reports
+          reports: ${{ github.workspace }}/tmp/artifacts
       - name: Rocket.Chat Notification
         uses: muinmomin/webhook-action@v1.0.0
         env:
