@@ -262,7 +262,7 @@ jobs:
       #   with:
       #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
       - name: Format JSON
-        uses: iyu88/lighthouse-report-formatter@v1.0.0
+        uses: iyu88/lighthouse-report-formatter@latest
         id: formatter
         with:
           lh_directory: ${{ github.workspace }}/tmp/artifacts
