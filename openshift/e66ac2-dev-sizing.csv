@@ -1,8 +1,8 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB)
-db,sts,3,6,3,2048,50,400,256,281.6
-php,dc,3,6,1,5120,100,1970,256,181.5
+db,sts,3,6,3,2048,50,400,256,282
+php,dc,3,6,1,5120,100,1970,256,182
 web,dc,3,6,0,0,25,400,128,33
-moodle-db-backup-storage,deployment,3,6,1,15360,25,10,128,105.6
+moodle-db-backup-storage,deployment,3,6,1,15360,25,10,128,106
 migrate-build-files,job,1,1,0,0,0,0,0,0
 moodle-cron-job,deployment,1,1,0,0,0,0,0,0
 moodle-upgrade-job,job,1,1,0,0,0,0,0,0
