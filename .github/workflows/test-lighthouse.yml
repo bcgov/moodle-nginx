@@ -28,7 +28,7 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         with:
           urls: 'https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/login/index.php,https://moodle-e66ac2-dev-dev.apps.silver.devops.gov.bc.ca/course/view.php?id=13'
-          # ... additional inputs
+          device: "desktop" # all
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master
         with:

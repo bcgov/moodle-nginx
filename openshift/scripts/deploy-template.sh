@@ -39,9 +39,13 @@ fi
 
 echo "Create and run Moodle cron job..."
 # Check if the moodle-upgrade-job exists
-if oc get dc moodle-cron-job; then
+if oc get dc $CRON_DEPLOYMENT_NAME; then
   echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
-  oc delete dc moodle-cron-job
+  oc delete dc $CRON_DEPLOYMENT_NAME
+fi
+if oc get job moodle-cron-job; then
+  echo "moodle-cron-job Installation FOUND...Deleting..."
+  oc delete job moodle-cron-job
 fi
 
 # Job doesn't like being run for > 12 hrs, so added cron to template.json as a DC
@@ -68,8 +72,23 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
-# echo "Rolling out $MOODLE_DEPLOYMENT_NAME..."
-# oc rollout latest dc/$MOODLE_DEPLOYMENT_NAME
+echo "Right-sizing cluster..."
+#!/bin/bash
+
+# Read the CSV file line by line
+tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit
+do
+    # Ignore if the type is 'job'
+    if [ "$Type" != "job" ]
+    then
+        # Build the command
+        cmd="oc set resources $Type $Deployment --limits=cpu=${CPULimit}m,memory=${MemLimit}Mi --requests=cpu=${CPURequest}m,memory=${MemRequest}Mi"
+
+        # Execute the command
+        echo "Executing: $cmd"
+        $cmd
+    fi
+done
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 oc rollout latest dc/$PHP_DEPLOYMENT_NAME

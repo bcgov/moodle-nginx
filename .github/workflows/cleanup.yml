@@ -226,10 +226,17 @@ jobs:
             oc delete job moodle-cron-job
             echo "DELETED job moodle-cron-job"
           fi
-          if [[ `oc describe configmap cron-config 2>&1` =~ "NotFound" ]]; then
-            echo "cron-config NOT FOUND: Skipping..."
+          if [[ `oc describe dc ${{ inputs.CRON_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.CRON_DEPLOYMENT_NAME }} deployment NOT FOUND: Skipping..."
           else
-            oc delete configmap cron-config
+            echo "${{ inputs.CRON_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
+            oc delete dc ${{ inputs.CRON_DEPLOYMENT_NAME }}
+            echo "DELETED deployment: ${{ inputs.CRON_DEPLOYMENT_NAME }}"
+          fi
+          if [[ `oc describe configmap ${{ inputs.CRON_DEPLOYMENT_NAME }}-config 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.CRON_DEPLOYMENT_NAME }}-config NOT FOUND: Skipping..."
+          else
+            oc delete configmap ${{ inputs.CRON_DEPLOYMENT_NAME }}-config
           fi
 
       - name: 🧹️ Clean Upgrade Job
