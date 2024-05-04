@@ -91,7 +91,7 @@ echo "Right-sizing cluster..."
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit
 do
     # Ignore if the type is 'job'
-    if [ "$Type" == "sts" || "$Type" == "dc" ]
+    if [["$Type" == "sts" || "$Type" == "dc" ]]
     then
         # Build the command
         cmd="oc set resources $Type $Deployment --limits=cpu=${CPULimit}m,memory=${MemLimit}Mi --requests=cpu=${CPURequest}m,memory=${MemRequest}Mi"
