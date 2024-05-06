@@ -175,11 +175,13 @@ jobs:
                     value: "DB Backups"
                 ' > config.yaml
               helm install moodle-db ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
+              oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb
             else
               echo "Backup container installation FOUND. Updating..."
               if [[ `helm upgrade moodle-db ${{ inputs.BACKUP_HELM_CHART }} --reuse-values 2>&1` =~ "Error" ]]; then
                 echo "Backup container update FAILED."
                 exit 1
               fi
+              oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb
               echo "Backup container updates completed."
             fi
