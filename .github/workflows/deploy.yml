@@ -117,6 +117,8 @@ jobs:
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation found...Recreating..."
             oc delete sts ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
+            oc delete configmap ${{ inputs.DB_DEPLOYMENT_NAME  }}-config -n ${{ inputs.DEPLOY_NAMESPACE }}
+            oc delete service ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
