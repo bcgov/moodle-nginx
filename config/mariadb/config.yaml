@@ -159,7 +159,7 @@ spec:
           value: "1"
         # Give mysql user grants
         - name: MARIADB_MYSQL_LOCALHOST_GRANTS
-          value: "REPLICA MONITOR"
+          value: "REPLICA MONITOR, SLAVE MONITOR"
         # Mount volume from persistent volume claim
         volumeMounts:
         - name: datadir
