@@ -386,11 +386,8 @@
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
                 "command": [
-                  "- bash",
-                  "- \"-c\"",
-                  "- |",
-                  "  echo \"Running Moodle Cron...\"",
-                  "  sh /usr/local/bin/moodle-cron-job.sh"
+                  "echo \"Running Moodle Cron...\"",
+                  "sh /usr/local/bin/moodle-cron-job.sh"
                 ],
                 "volumeMounts": [
                   {

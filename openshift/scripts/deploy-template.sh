@@ -37,12 +37,8 @@ else
   oc rollout latest dc/$WEB_DEPLOYMENT_NAME
 fi
 
-echo "Create and run Moodle cron job..."
-# Check if the moodle-upgrade-job exists
-if oc get deployment $CRON_DEPLOYMENT_NAME; then
-  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
-  oc delete deployment $CRON_DEPLOYMENT_NAME
-fi
+echo "Delete cron job if it exists..."
+# Check if cron exists
 if oc get deployment $CRON_DEPLOYMENT_NAME; then
   echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
   oc delete deployment $CRON_DEPLOYMENT_NAME
@@ -55,6 +51,7 @@ fi
 #   -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
 #   | oc create -f -
 
+echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
   -p APP_NAME=$APP \
   -p DB_USER=$DB_USER \
