@@ -105,9 +105,9 @@ jobs:
           fi
 
       # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ env.DB_DEPLOYMENT_NAME  }} --replicas=0
+      # oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=0
       # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ env.DB_DEPLOYMENT_NAME  }}
+      # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
       - name: ${{ inputs.DB_DEPLOYMENT_NAME  }}
         if: success()
         run: |
@@ -116,13 +116,16 @@ jobs:
             oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation found...Recreating..."
+            oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=0 -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete sts ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete configmap ${{ inputs.DB_DEPLOYMENT_NAME  }}-config -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete service ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.DEPLOY_NAMESPACE }}
-            oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
+            # oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
+          # Only use 1 replica for deployment / upgrade to avoid conflicts
+          oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=1
 
       - name: Template
         if: success()

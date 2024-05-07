@@ -213,4 +213,7 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintena
 # helm repo add bcgov http://bcgov.github.io/helm-charts
 # helm upgrade --install db-backup-storage bcgov/backup-storage
 
+# STS was scaled-down for deployment and maintenance, scale it back up
+oc scale sts $DB_DEPLOYMENT_NAME --replicas=3
+
 echo "Deployment complete."
