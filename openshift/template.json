@@ -360,7 +360,9 @@
       "spec": {
         "replicas": 1,
         "selector": {
-          "deployment": "${CRON_DEPLOYMENT_NAME}"
+          "matchLabels": {
+            "app": "${CRON_DEPLOYMENT_NAME}"
+          }
         },
         "strategy": {
           "type": "Recreate"
@@ -368,7 +370,7 @@
         "template": {
           "metadata": {
             "labels": {
-              "deployment": "${CRON_DEPLOYMENT_NAME}"
+              "app": "${CRON_DEPLOYMENT_NAME}"
             }
           },
           "spec": {
@@ -391,11 +393,6 @@
                   "  sh /usr/local/bin/moodle-cron-job.sh"
                 ],
                 "volumeMounts": [
-                  {
-                    "name": "${CRON_DEPLOYMENT_NAME}-config",
-                    "mountPath": "/var/www/html/config.php",
-                    "subPath": "config.php"
-                  },
                   {
                     "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
                     "name": "${APP_NAME}-data"
@@ -464,19 +461,6 @@
               }
             ],
             "volumes": [
-              {
-                "name": "${CRON_DEPLOYMENT_NAME}-config",
-                "configMap": {
-                  "name": "${CRON_DEPLOYMENT_NAME}-config",
-                  "defaultMode": 420,
-                  "items": [
-                    {
-                      "key": "config.php",
-                      "path": "config.php"
-                    }
-                  ]
-                }
-              },
               {
                 "name": "${APP_NAME}-data",
                 "persistentVolumeClaim": {
