@@ -37,9 +37,7 @@ if (php_sapi_name() == "cli") {
 } else {
     $protocol = 'https://';
     $moodle_dir = stripos($_SERVER['REQUEST_URI'], '/moodle') === 0 ? '/moodle' : ''; // for local dev in /moodle folder
-    $requested_site_url = $protocol.$_SERVER['HTTP_HOST'].$moodle_dir;
-
-    $CFG->wwwroot = $requested_site_url;
+    $CFG->wwwroot = $protocol.$_SERVER['HTTP_HOST'].$moodle_dir;
 }
 
 $CFG->dataroot  = '/var/www/moodledata';

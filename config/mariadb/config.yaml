@@ -25,7 +25,7 @@ data:
 
   secondary.sql: |
     # We have to know name of sts (`db`) and
-    # service `db-service` in advance as an FQDN.
+    # service `db` in advance as an FQDN.
     # No need to use master_port
     MASTER_HOST='db-0.db',
     MASTER_USER='repluser',
