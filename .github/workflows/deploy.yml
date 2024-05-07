@@ -116,6 +116,7 @@ jobs:
             oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation FOUND...UPDATING..."
+            oc update -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
