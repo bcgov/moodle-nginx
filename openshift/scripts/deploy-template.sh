@@ -39,13 +39,13 @@ fi
 
 echo "Create and run Moodle cron job..."
 # Check if the moodle-upgrade-job exists
-if oc get dc $CRON_DEPLOYMENT_NAME; then
+if oc get deployment $CRON_DEPLOYMENT_NAME; then
   echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
-  oc delete dc $CRON_DEPLOYMENT_NAME
+  oc delete deployment $CRON_DEPLOYMENT_NAME
 fi
-if oc get job moodle-cron-job; then
-  echo "moodle-cron-job Installation FOUND...Deleting..."
-  oc delete job moodle-cron-job
+if oc get deployment $CRON_DEPLOYMENT_NAME; then
+  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
+  oc delete deployment $CRON_DEPLOYMENT_NAME
 fi
 
 # Job doesn't like being run for > 12 hrs, so added cron to template.json as a DC
