@@ -7,6 +7,8 @@ sleep 600
 echo "Purging cache..."
 php /var/www/html/admin/cli/purge_caches.php
 
+echo "Check for missing plugins..."
+php /var/www/html/admin/cli/uninstall_plugins.php --show-missing --show-contrib
 echo "Purging missing plugins..."
 php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run
 
@@ -15,6 +17,9 @@ php /var/www/html/admin/cli/mysql_collation.php --collation=utf8mb4_unicode_ci
 
 echo "Running Moodle upgrades..."
 php /var/www/html/admin/cli/upgrade.php --non-interactive
+
+echo "Rebuilding theme cache..."
+php /var/www/html/admin/cli/build_theme_css.php --themes=boost
 
 echo "Disabling maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --disable
