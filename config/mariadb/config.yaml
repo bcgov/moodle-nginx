@@ -21,6 +21,7 @@ data:
   primary.sql: |
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';
     GRANT REPLICATION REPLICA ON *.* TO 'repluser'@'%';
+    GRANT SLAVE MONITOR ON *.* TO 'repluser'@'%';
     CREATE DATABASE moodle;
 
   secondary.sql: |
@@ -113,6 +114,21 @@ spec:
         ports:
         - containerPort: 3306
           name: db-port
+        resources:
+          limits:
+            cpu: 400m
+            memory: 282Mi
+          requests:
+            cpu: 50m
+            memory: 256Mi
+        livenessProbe:
+          exec:
+            command:
+              - healthcheck.sh
+              - '--replication_io'
+              - '--replication_sql'
+              - '--replication_seconds_behind_master=10'
+              - '--replication'
         env:
         # Using Secrets
         - name: MARIADB_ALLOW_EMPTY_ROOT_PASSWORD

@@ -385,10 +385,6 @@
                 "name": "${CRON_DEPLOYMENT_NAME}",
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
-                "command": [
-                  "echo \"Running Moodle Cron...\"",
-                  "sh /usr/local/bin/moodle-cron-job.sh"
-                ],
                 "volumeMounts": [
                   {
                     "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
