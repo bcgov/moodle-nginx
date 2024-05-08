@@ -5,6 +5,9 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
+# Only use 1 db replica for deployment / upgrade to avoid conflicts
+oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=1
+
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
@@ -131,7 +134,14 @@ done
 echo "Enabling Moodle maintenance mode..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait
 
-echo "Create and run Moodle build migration job..."
+if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
+  echo "migrate-build-files job NOT FOUND..."
+else
+  echo "migrate-build-files job FOUND...Deleting..."
+  oc delete job/migrate-build-files
+fi
+
+echo "Create and run migratet-build-files job..."
 oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 
 echo "Waiting for Moodle build migration job status to complete..."
@@ -184,36 +194,10 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstal
 echo "Running Moodle upgrades..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive'
 
-echo "Disabling maintenance mode..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
-
-# echo "Run first cron..."
-# oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/cron.php'
-
-# echo "Listing pods..."
-# oc get pods|grep $PHP_DEPLOYMENT_NAME
-# sleep 30
-# oc get pods -l deploymentconfig=$PHP_DEPLOYMENT_NAME --field-selector=status.phase=Running -o name
-# sleep 20
-# podNames=$(oc get pods -l deploymentconfig=$PHP_DEPLOYMENT_NAME --field-selector=status.phase=Running -o name)
-# pwd
-# echo "$PHP_DEPLOYMENT_NAME is deployed"
-# echo "deploy1=$PHP_DEPLOYMENT_NAME is deployed" >> $GITHUB_OUTPUT
-
-# oc get pods|grep $CRON_DEPLOYMENT_NAME
-# sleep 30
-# oc get pods -l deploymentconfig=$CRON_DEPLOYMENT_NAME --field-selector=status.phase=Running -o name
-# sleep 20
-# podNames=$(oc get pods -l deploymentconfig=$CRON_DEPLOYMENT_NAME --field-selector=status.phase=Running -o name)
-# pwd
-# echo "$CRON_DEPLOYMENT_NAME is deployed"
-# echo "deploy2=$CRON_DEPLOYMENT_NAME is deployed" >> $GITHUB_OUTPUT
-
-# Deploy backups (** moved to deploy.yml)
-# helm repo add bcgov http://bcgov.github.io/helm-charts
-# helm upgrade --install db-backup-storage bcgov/backup-storage
-
 # STS was scaled-down for deployment and maintenance, scale it back up
 oc scale sts $DB_DEPLOYMENT_NAME --replicas=3
+
+echo "Disabling maintenance mode..."
+oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
 
 echo "Deployment complete."

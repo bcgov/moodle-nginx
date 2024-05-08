@@ -21,6 +21,9 @@ php /var/www/html/admin/cli/upgrade.php --non-interactive
 echo "Rebuilding theme cache..."
 php /var/www/html/admin/cli/build_theme_css.php --themes=boost
 
+echo "Run PHP config check..."
+php /var/www/html/info/phpconfigcheck.php
+
 echo "Disabling maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --disable
 

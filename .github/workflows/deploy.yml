@@ -116,7 +116,6 @@ jobs:
             oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation found...Recreating..."
-            oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=0 -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete sts ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete configmap ${{ inputs.DB_DEPLOYMENT_NAME  }}-config -n ${{ inputs.DEPLOY_NAMESPACE }}
             oc delete service ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
@@ -124,8 +123,6 @@ jobs:
             oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.DEPLOY_NAMESPACE }}
             # oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
           fi
-          # Only use 1 replica for deployment / upgrade to avoid conflicts
-          oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=1
 
       - name: Template
         if: success()
