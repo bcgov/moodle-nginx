@@ -1,4 +1,4 @@
-test -n "$DEPLOY_NAMESPACE"
+test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
@@ -6,7 +6,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 oc secrets link default artifactory-m950-learning --for=pull
 
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
-oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=1
+oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
 
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
