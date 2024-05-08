@@ -147,9 +147,10 @@ oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 echo "Waiting for Moodle build migration job status to complete..."
 ATTEMPTS=0
 WAIT_TIME=30
+MAX_ATTEMPTS=30 # wait 15 minutes
 #  2>&1` =~ "NotFound"
-# oc get jobs | findstr /i 'migrate-build-files 1/1'
-until oc get jobs | grep -q "migrate-build-files" || [ $ATTEMPTS -eq 4 ]; do
+# Wait for jobs to complete with ststus=succeeded, or evenuallly timeout
+until oc get jobs migrate-build-files -o=jsonpath='{.status.succeeded}' | grep -q "1" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
   echo "Waiting for migrate-build-files job to be detected... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
