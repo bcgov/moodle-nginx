@@ -187,7 +187,7 @@ spec:
         emptyDir: {}
       - name: backup-vol
         persistentVolumeClaim:
-            claimName: $DB_BACKUP_DEPLOYMENT_NAME-backup-storage-backup-pvc
+            claimName: $DB_BACKUP_DEPLOYMENT_FULL_NAME-backup-storage-backup-pvc
 
   volumeClaimTemplates:
   - metadata:

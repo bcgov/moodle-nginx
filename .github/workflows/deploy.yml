@@ -54,7 +54,7 @@ on:
       IMAGE_REPO:
         required: true
         type: string
-      DB_BACKUP_DEPLOYMENT_NAME:
+      DB_BACKUP_DEPLOYMENT_FULL_NAME:
         required: true
         type: string
       BACKUP_HELM_CHART:
@@ -118,7 +118,7 @@ jobs:
         with:
           exec: bash ./openshift/scripts/deploy-database-backups.sh
         env:
-          DB_BACKUP_DEPLOYMENT_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }}
+          DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           DB_BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
           DB_HOST: ${{ inputs.DB_HOST }}
@@ -132,7 +132,7 @@ jobs:
         env:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
-          DB_BACKUP_DEPLOYMENT_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }}
+          DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
 
       - name: Template
         if: success()
