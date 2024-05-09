@@ -34,7 +34,7 @@ else
 
     persistence:
       backup:
-        accessMode: ReadWriteMany
+        accessModes: ["ReadWriteMany"]
         storageClassName: netapp-file-backup
       verification:
         storageClassName: netapp-file-backup
