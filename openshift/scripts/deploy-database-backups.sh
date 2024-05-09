@@ -13,9 +13,10 @@ if helm list -q | grep -q "^$DB_BACKUP_DEPLOYMENT_NAME$"; then
 
   if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound" ]]; then
     echo "Backup Helm exists, but deployment NOT FOUND."
-
+    # Fail here until we can find a fix
+    exit 1
     # echo "Attempt to fix deploymment..."
-    oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+    # oc annotate --overwrite  dc/${{ env.WEB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
 
   else
     echo "Backup deployment FOUND. Updating..."

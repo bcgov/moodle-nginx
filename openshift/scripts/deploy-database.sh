@@ -1,6 +1,6 @@
 if [[ `oc describe sts $DB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$DB_DEPLOYMENT_NAME NOT FOUND: Beginning deployment..."
-  oc create -f ./config/mariadb/config.yaml -n $DEPLOY_NAMESPACE
+  envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
 else
   echo "$DB_DEPLOYMENT_NAME Installation found...Scaling to 0..."
   oc scale sts $DB_DEPLOYMENT_NAME --replicas=0
