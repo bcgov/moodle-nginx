@@ -1,7 +1,7 @@
 helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
 echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
-if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound" ]]; then
+if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "Backup deployment NOT FOUND. Begin backup container deployment..."
   echo "
     image:
