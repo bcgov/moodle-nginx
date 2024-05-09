@@ -25,6 +25,9 @@ else
   # oc annotate --overwrite  sts/$DB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n $DEPLOY_NAMESPACE
   # oc rollout restart sts/$DB_DEPLOYMENT_NAME
 
+  echo "Scaling $DB_DEPLOYMENT_NAME to 1..."
+  oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
+
   # Wait for the deployment to scale to 1
   ATTEMPTS=0
   MAX_ATTEMPTS=60
