@@ -152,7 +152,7 @@ MAX_ATTEMPTS=30 # wait 15 minutes
 # Wait for jobs to complete with ststus=succeeded, or evenuallly timeout
 until oc get jobs migrate-build-files -o=jsonpath='{.status.succeeded}' | grep -q "1" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  echo "Waiting for migrate-build-files job to be detected... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  echo "Waiting for migrate-build-files job to complete... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
 

@@ -5,6 +5,8 @@
 
 echo "Deleting shared Moodle files... in 30...29...28..."
 sleep 30
+
+echo "Deleting shared Moodle files..."
 rm -rf /var/www/html/* || true
 
 # echo "Move Moodle web files to /tmp/old..."
