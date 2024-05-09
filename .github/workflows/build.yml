@@ -282,7 +282,7 @@ jobs:
           # ⛔ :no-entry:
           data: >
             {
-              "emoji": "${{ needs.call-deploy-workflow.result == 'success' ? ':rocket:' : ':collision:' }}",
+              "emoji": "${{ if eq(needs.call-deploy-workflow.result, 'success') }}:rocket:${{ else }}:collision:${{ end }}",
               "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
                 "title": "Complete Moodle Upgrades",
