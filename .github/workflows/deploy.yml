@@ -107,25 +107,16 @@ jobs:
             oc create configmap moodle-env --from-file=.env=./example.env
           fi
 
-      # For a graceful termination, set the replica count of the Pods in the mariadb-galera StatefulSet to 0:
-      # oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME  }} --replicas=0
+      - name: Backups
+        uses: WyriHaximus/github-action-helm3@v3
+        with:
+          exec: bash ./openshift/scripts/deploy-database-backups.sh
+
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
       - name: ${{ inputs.DB_DEPLOYMENT_NAME  }}
         if: success()
-        run: |
-          if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME  }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} NOT FOUND: Beginning deployment..."
-            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
-          else
-            echo "${{ inputs.DB_DEPLOYMENT_NAME  }} Installation found...Recreating..."
-            oc delete sts ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
-            oc delete configmap ${{ inputs.DB_DEPLOYMENT_NAME  }}-config -n ${{ inputs.DEPLOY_NAMESPACE }}
-            oc delete service ${{ inputs.DB_DEPLOYMENT_NAME  }} -n ${{ inputs.DEPLOY_NAMESPACE }}
-            oc create -f ./config/mariadb/config.yaml -n ${{ inputs.DEPLOY_NAMESPACE }}
-            oc annotate --overwrite  sts/${{ inputs.DB_DEPLOYMENT_NAME  }} kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n ${{ inputs.DEPLOY_NAMESPACE }}
-            # oc rollout restart sts/${{ inputs.DB_DEPLOYMENT_NAME  }}
-          fi
+        run: bash ./openshift/scripts/deploy-database.sh
 
       - name: Template
         if: success()
@@ -151,45 +142,3 @@ jobs:
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_IMAGE }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
-      - name: Backups
-        uses: WyriHaximus/github-action-helm3@v3
-        with:
-          exec:  |
-            helm repo add bcgov http://bcgov.github.io/helm-charts
-            helm repo update
-            if [[ `oc describe deployment ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
-              echo "Backup deployment NOT FOUND. Begin backup container deployment..."
-              echo '
-                image:
-                  repository: ${{ inputs.BACKUP_HELM_CHART }}
-                  pullPolicy: Always
-                  tag: dev
-
-                backupConfig: |
-                  mariadb=db/moodle
-
-                  0 1 * * * default ./backup.sh -s
-                  0 4 * * * default ./backup.sh -s -v all
-
-                db:
-                  secretName: moodle-secrets
-                  usernameKey: database-user
-                  passwordKey: database-password
-
-                env:
-                  DATABASE_SERVICE_NAME:
-                    value: db
-                  ENVIRONMENT_FRIENDLY_NAME:
-                    value: "DB Backups"
-                ' > config.yaml
-              helm install ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
-              oc set image deployment/${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} backup-storage=bcgovimages/backup-container-mariadb
-            else
-              echo "Backup container installation FOUND. Updating..."
-              if [[ `helm upgrade moodle-db ${{ inputs.BACKUP_HELM_CHART }} --reuse-values 2>&1` =~ "Error" ]]; then
-                echo "Backup container update FAILED."
-                exit 1
-              fi
-              oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb
-              echo "Backup container updates completed."
-            fi
