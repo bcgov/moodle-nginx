@@ -11,6 +11,7 @@ if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]];
 
     persistence:
       backup:
+        accessMode: ReadWriteMany
         storageClassName: netapp-file-backup
       verification:
         storageClassName: netapp-file-backup
