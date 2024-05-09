@@ -277,7 +277,7 @@ jobs:
           if [[ "${{ needs.call-deploy-workflow.result }}" == "success" ]]; then
             `echo "EMOJI=:rocket:" >> $GITHUB_OUTPUT`
           else
-            `echo "EMOJI=:collision:" >> $GITHUB_OUTPUT`
+            `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
           fi
 
       - name: Rocket.Chat Notification
@@ -287,8 +287,8 @@ jobs:
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           # 🚀 :rocket:
-          # 💥 :collision:
-          # ⛔ :no-entry:
+          # 💥 :boom:
+          # ⛔ :no_entry:
           data: >
             {
               "emoji": "${{ steps.notification-emoji.outputs.EMOJI }}",
