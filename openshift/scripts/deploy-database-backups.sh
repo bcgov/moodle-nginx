@@ -38,6 +38,6 @@ else
     echo "Backup container update FAILED."
     exit 1
   fi
-  oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME-backup-storage backup-storage=$DB_BACKUP_IMAGE
+  oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME backup-storage=$DB_BACKUP_IMAGE
   echo "Backup container updates completed."
 fi
