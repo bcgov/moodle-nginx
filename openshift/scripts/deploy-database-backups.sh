@@ -2,14 +2,14 @@ helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
 if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "Backup deployment NOT FOUND. Begin backup container deployment..."
-  echo '
+  echo "
     image:
-      repository: $BACKUP_HELM_CHART
+      repository: \"$BACKUP_HELM_CHART\"
       pullPolicy: Always
       tag: dev
 
     backupConfig: |
-      mariadb=$DB_HOST/$DB_NAME
+      mariadb=\"$DB_HOST/$DB_NAME\"
 
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
@@ -21,10 +21,10 @@ if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]];
 
     env:
       DATABASE_SERVICE_NAME:
-        value: $DB_HOST
+        value: \"$DB_HOST\"
       ENVIRONMENT_FRIENDLY_NAME:
-        value: "DB Backups"
-    ' > config.yaml
+        value: \"DB Backups\"
+    " > config.yaml
   helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART -f config.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME backup-storage=$DB_BACKUP_IMAGE
 else
