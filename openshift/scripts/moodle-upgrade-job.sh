@@ -1,8 +1,10 @@
+echo "Starting Moodle upgrade job..."
+
 echo "Enabling maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --enable
 
-echo "Waiting 10 minutes to run upgrades after file copy completes (migrate-build-files)..."
-sleep 600
+# echo "Waiting 10 minutes to run upgrades after file copy completes (migrate-build-files)..."
+# sleep 600
 
 echo "Purging cache..."
 php /var/www/html/admin/cli/purge_caches.php

@@ -5,7 +5,15 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
+echo "Delete cron job if it exists..."
+# Check if cron exists
+if oc get deployment $CRON_DEPLOYMENT_NAME; then
+  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
+  oc delete deployment $CRON_DEPLOYMENT_NAME
+fi
+
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
+echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
 oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
 
 # Create ConfigMaps (first delete, if necessary)
@@ -39,20 +47,6 @@ else
   oc annotate --overwrite  dc/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
   oc rollout latest dc/$WEB_DEPLOYMENT_NAME
 fi
-
-echo "Delete cron job if it exists..."
-# Check if cron exists
-if oc get deployment $CRON_DEPLOYMENT_NAME; then
-  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
-  oc delete deployment $CRON_DEPLOYMENT_NAME
-fi
-
-# Job doesn't like being run for > 12 hrs, so added cron to template.json as a DC
-# oc process -f ./openshift/moodle-cron-job.yml  \
-#   -p IMAGE_REPO=$IMAGE_REPO \
-#   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-#   -p BUILD_NAME=$CRON_DEPLOYMENT_NAME \
-#   | oc create -f -
 
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
@@ -196,6 +190,7 @@ echo "Running Moodle upgrades..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive'
 
 # STS was scaled-down for deployment and maintenance, scale it back up
+echo "Scaling up $DB_DEPLOYMENT_NAME to 3 replicas..."
 oc scale sts $DB_DEPLOYMENT_NAME --replicas=3
 
 echo "Disabling maintenance mode..."
