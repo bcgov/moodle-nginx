@@ -130,8 +130,9 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-database.sh
         env:
-          DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
+          DB_BACKUP_DEPLOYMENT_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }}
 
       - name: Template
         if: success()

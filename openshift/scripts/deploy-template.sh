@@ -126,7 +126,11 @@ done
 
 # Enable Maintenance mode (PHP)
 echo "Enabling Moodle maintenance mode..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait
+MAINTENANCE_OUTPUT=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait 2>&1)
+if echo "$MAINTENANCE_OUTPUT" | grep -q "Error: Database connection failed"; then
+  echo "Failed to enable maintenance mode. Error message: $MAINTENANCE_OUTPUT"
+  exit 1
+fi
 
 if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
   echo "migrate-build-files job NOT FOUND..."

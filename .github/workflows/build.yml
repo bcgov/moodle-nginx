@@ -277,9 +277,12 @@ jobs:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          # 🚀 :rocket:
+          # 💥 :collision:
+          # ⛔ :no-entry:
           data: >
             {
-              "emoji": ":rocket:",
+              "emoji": "${{ needs.call-deploy-workflow.result == 'success' ? ':rocket:' : ':collision:' }}",
               "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
                 "title": "Complete Moodle Upgrades",

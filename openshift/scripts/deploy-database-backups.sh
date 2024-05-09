@@ -8,6 +8,10 @@ if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]];
       pullPolicy: Always
       tag: dev
 
+    persistence:
+      verification:
+        storageClassName: netapp-file-backup
+
     backupConfig: |
       mariadb=\"$DB_HOST/$DB_NAME\"
 
