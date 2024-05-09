@@ -59,6 +59,8 @@ jobs:
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ env.WEB_IMAGE }}
+      DB_HOST: ${{ env.DB_HOST }}
+      DB_NAME: ${{ env.DB_NAME }}
       DB_IMAGE: ${{ env.DB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
@@ -174,6 +176,8 @@ jobs:
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
+      DB_HOST: ${{ needs.checkEnv.outputs.DB_HOST }}
+      DB_NAME: ${{ needs.checkEnv.outputs.DB_NAME }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
       DB_BACKUP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_BACKUP_DEPLOYMENT_NAME }}
       BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}

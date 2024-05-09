@@ -1,15 +1,15 @@
 helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
-if [[ `oc describe deployment ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "Backup deployment NOT FOUND. Begin backup container deployment..."
   echo '
     image:
-      repository: ${{ inputs.BACKUP_HELM_CHART }}
+      repository: $BACKUP_HELM_CHART
       pullPolicy: Always
       tag: dev
 
     backupConfig: |
-      mariadb=db/moodle
+      mariadb=$DB_HOST/$DB_NAME
 
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
@@ -21,18 +21,18 @@ if [[ `oc describe deployment ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} 2>&1` =~ "
 
     env:
       DATABASE_SERVICE_NAME:
-        value: db
+        value: $DB_HOST
       ENVIRONMENT_FRIENDLY_NAME:
         value: "DB Backups"
     ' > config.yaml
-  helm install ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
-  oc set image deployment/${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} backup-storage=bcgovimages/backup-container-mariadb
+  helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART -f config.yaml
+  oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME backup-storage=$DB_BACKUP_IMAGE
 else
   echo "Backup container installation FOUND. Updating..."
-  if [[ `helm upgrade moodle-db ${{ inputs.BACKUP_HELM_CHART }} --reuse-values 2>&1` =~ "Error" ]]; then
+  if [[ `helm upgrade moodle-db $BACKUP_HELM_CHART --reuse-values 2>&1` =~ "Error" ]]; then
     echo "Backup container update FAILED."
     exit 1
   fi
-  oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb
+  oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME-backup-storage backup-storage=$DB_BACKUP_IMAGE
   echo "Backup container updates completed."
 fi

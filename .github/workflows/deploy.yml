@@ -24,6 +24,12 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
+      DB_HOST:
+        required: true
+        type: string
+      DB_NAME:
+        required: true
+        type: string
       DB_DEPLOYMENT_NAME:
         required: true
         type: string
@@ -111,6 +117,12 @@ jobs:
         uses: WyriHaximus/github-action-helm3@v3
         with:
           exec: bash ./openshift/scripts/deploy-database-backups.sh
+        env:
+          DB_BACKUP_DEPLOYMENT_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }}
+          BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
+          DB_BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
+          DB_HOST: ${{ inputs.DB_HOST }}
+          DB_NAME: ${{ inputs.DB_NAME }}
 
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
@@ -139,6 +151,6 @@ jobs:
           CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
-          BACKUP_HELM_CHART: ${{ inputs.BACKUP_IMAGE }}
+          BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
