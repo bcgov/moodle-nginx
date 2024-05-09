@@ -1,6 +1,6 @@
 helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
-echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_FULL_NAME..."
+echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound" ]]; then
   echo "Backup deployment NOT FOUND. Begin backup container deployment..."
   echo "
@@ -30,11 +30,11 @@ if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound
       ENVIRONMENT_FRIENDLY_NAME:
         value: \"DB Backups\"
     " > config.yaml
-  helm install $DB_BACKUP_DEPLOYMENT_FULL_NAME $BACKUP_HELM_CHART -f config.yaml
+  helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART -f config.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME backup-storage=$DB_BACKUP_IMAGE
 else
   echo "Backup container installation FOUND. Updating..."
-  if [[ `helm upgrade moodle-db $BACKUP_HELM_CHART --reuse-values 2>&1` =~ "Error" ]]; then
+  if [[ `helm upgrade $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --reuse-values 2>&1` =~ "Error" ]]; then
     echo "Backup container update FAILED."
     exit 1
   fi
