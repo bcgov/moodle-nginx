@@ -48,6 +48,9 @@ on:
       IMAGE_REPO:
         required: true
         type: string
+      DB_BACKUP_DEPLOYMENT_NAME:
+        required: true
+        type: string
       BACKUP_HELM_CHART:
         required: true
         type: string
@@ -154,7 +157,7 @@ jobs:
           exec:  |
             helm repo add bcgov http://bcgov.github.io/helm-charts
             helm repo update
-            if [[ `oc describe deployment moodle-db 2>&1` =~ "NotFound" ]]; then
+            if [[ `oc describe deployment ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
               echo "Backup deployment NOT FOUND. Begin backup container deployment..."
               echo '
                 image:
@@ -179,8 +182,8 @@ jobs:
                   ENVIRONMENT_FRIENDLY_NAME:
                     value: "DB Backups"
                 ' > config.yaml
-              helm install moodle-db ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
-              oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb
+              helm install ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} ${{ inputs.BACKUP_HELM_CHART }} -f config.yaml
+              oc set image deployment/${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }} backup-storage=bcgovimages/backup-container-mariadb
             else
               echo "Backup container installation FOUND. Updating..."
               if [[ `helm upgrade moodle-db ${{ inputs.BACKUP_HELM_CHART }} --reuse-values 2>&1` =~ "Error" ]]; then
