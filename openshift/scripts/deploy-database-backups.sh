@@ -6,7 +6,7 @@ echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 # Check if the Helm deployment exists
 if helm list -q | grep -q "^$DB_BACKUP_DEPLOYMENT_NAME$"; then
   echo "Helm deployment FOUND. Updating..."
-  if [[ `helm upgrade $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --atomic --wait --timeout 30 --reuse-values 2>&1` =~ "Error" ]]; then
+  if [[ `helm upgrade $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --reuse-values 2>&1` =~ "Error" ]]; then
     echo "Backup container update FAILED."
     exit 1
   fi
