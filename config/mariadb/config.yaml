@@ -193,11 +193,12 @@ spec:
   - metadata:
       name: datadir
     spec:
-      accessModes: [ "ReadWriteMany" ]
+      accessModes:
+        - "ReadWriteMany"
       storageClassName: netapp-file-standard
       resources:
         requests:
-          storage: 8Gi
+          storage: "5Gi"
 # Delete the
 # pvc's  for i in 0 1 2; do kubectl delete pvc datadir-db-$i; done
 # https://kubernetes.io/docs/tasks/run-application/run-replicated-stateful-application/
