@@ -165,7 +165,7 @@ spec:
           value: "1"
         # Give mysql user grants
         - name: MARIADB_MYSQL_LOCALHOST_GRANTS
-          value: "REPLICA MONITOR, SLAVE MONITOR"
+          value: "REPLICA MONITOR"
         # Mount volume from persistent volume claim
         volumeMounts:
         - name: datadir
@@ -188,12 +188,9 @@ spec:
   - metadata:
       name: datadir
     spec:
-      accessModes:
-        - "ReadWriteMany"
-      storageClassName: netapp-file-standard
       resources:
         requests:
-          storage: "5Gi"
+          storage: "8Gi"
 # Delete the
 # pvc's  for i in 0 1 2; do kubectl delete pvc datadir-db-$i; done
 # https://kubernetes.io/docs/tasks/run-application/run-replicated-stateful-application/
