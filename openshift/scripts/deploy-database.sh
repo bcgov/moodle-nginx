@@ -41,3 +41,22 @@ else
     exit 1
   fi
 fi
+
+echo "Checking if the database is online and contains expected Moodle data..."
+ATTEMPTS=0
+WAIT_TIME=10
+MAX_ATTEMPTS=30 # wait 5 minutes
+
+# Get the name of the first pod in the StatefulSet
+DB_POD_NAME=$(oc get pods -l app=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[0].metadata.name}')
+
+until oc exec $DB_POD_NAME -- bash -c 'mysql -u root -e "SELECT COUNT(*) FROM mdl_user;"' | grep -q "1" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
+  ATTEMPTS=$(( $ATTEMPTS + 1 ))
+  echo "Waiting for database to be online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  sleep $WAIT_TIME
+done
+
+if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+  echo "Timeout waiting for the database to be online. Exiting..."
+  exit 1
+fi
