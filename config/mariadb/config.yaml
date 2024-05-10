@@ -81,10 +81,13 @@ spec:
           # Check config map to directory that already exists
           # (but must be used as a volume for main container)
           ls /mnt/config-map
+          HOSTNAME=`hostname`
+          echo "Hostname: $HOSTNAME"
           # Statefulset has sticky identity, number should be last
           #[[ `hostname` =~ -([0-9]+)$ ]] || exit 1
           #ordinal=${BASH_REMATCH[1]}
           ordinal=$(echo `hostname` | sed 's/[^0-9]*//g')
+          echo "Ordinal: $ordinal"
           # Copy appropriate conf.d files from db-config-map to
           # db-config volume (emptyDir) depending on pod number
           if [[ $ordinal -eq 0 ]]; then
