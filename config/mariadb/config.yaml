@@ -194,7 +194,7 @@ spec:
       name: datadir
     spec:
       accessModes: [ "ReadWriteMany" ]
-      storageClassName: netapp-block-standard
+      storageClassName: netapp-file-standard
       resources:
         requests:
           storage: 8Gi
