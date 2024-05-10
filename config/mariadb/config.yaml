@@ -107,8 +107,6 @@ spec:
             mountPath: /etc/mysql/conf.d/
           - name: initdb
             mountPath: /docker-entrypoint-initdb.d
-          - name: backup-vol
-            mountPath: /tmp/backups
       restartPolicy: Always
       containers:
       - name: db
@@ -174,8 +172,6 @@ spec:
           mountPath: /etc/mysql/conf.d/
         - name: initdb
           mountPath: /docker-entrypoint-initdb.d
-        - name: backup-vol
-          mountPath: /tmp/backups
       volumes:
       - name: db-config-map
         configMap:
@@ -185,9 +181,6 @@ spec:
         emptyDir: {}
       - name: initdb
         emptyDir: {}
-      - name: backup-vol
-        persistentVolumeClaim:
-            claimName: $DB_BACKUP_DEPLOYMENT_FULL_NAME-backup-pvc
 
   volumeClaimTemplates:
   - metadata:
