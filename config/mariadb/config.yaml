@@ -74,8 +74,10 @@ spec:
         - bash
         - "-c"
         - |
+          #!/bin/bash
           set -ex
           echo 'Starting init-db';
+          echo $BASH_VERSION
           # Check config map to directory that already exists
           # (but must be used as a volume for main container)
           ls /mnt/config-map
