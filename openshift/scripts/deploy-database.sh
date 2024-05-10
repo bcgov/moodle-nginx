@@ -48,14 +48,23 @@ WAIT_TIME=10
 MAX_ATTEMPTS=30 # wait 5 minutes
 
 # Get the name of the first pod in the StatefulSet
-DB_POD_NAME=$(oc get pods -l app=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[0].metadata.name}')
+DB_POD_NAME=""
+until [ -n "$DB_POD_NAME" ]; do
+  ATTEMPTS=$(( $ATTEMPTS + 1 ))
+  DB_POD_NAME=$(oc get pods -l app=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
 
-# until oc exec $DB_POD_NAME -- bash -c 'mariadb -u root -e "USE moodle; SELECT COUNT(*) FROM user;"' | grep -qE "[1-9][0-9]*" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
-#   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-#   echo "Waiting for database to be online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+    echo "Timeout waiting for the pod to have status.phase:Running. Exiting..."
+    exit 1
+  fi
 
-#   sleep $WAIT_TIME
-# done
+  if [ -z "$DB_POD_NAME" ]; then
+    echo "Waiting for the database pod to be ready..."
+    sleep $WAIT_TIME
+  fi
+done
+
+ATTEMPTS=0
 
 until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
