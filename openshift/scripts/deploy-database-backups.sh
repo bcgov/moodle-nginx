@@ -34,14 +34,13 @@ else
 
     persistence:
       backup:
-        accessModes: ["ReadWriteMany"]
-        storageClassName: netapp-file-backup
+        accessModes: [\"ReadWriteMany\"]
+        storageClassName: netapp-file-standard
       verification:
-        storageClassName: netapp-file-backup
+        storageClassName: netapp-file-standard
 
     backupConfig: |
       mariadb=\"$DB_HOST/$DB_NAME\"
-
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
 
