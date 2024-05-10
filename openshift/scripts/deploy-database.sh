@@ -50,9 +50,32 @@ MAX_ATTEMPTS=30 # wait 5 minutes
 # Get the name of the first pod in the StatefulSet
 DB_POD_NAME=$(oc get pods -l app=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[0].metadata.name}')
 
-until oc exec $DB_POD_NAME -- bash -c 'mysql -u root -e "SELECT COUNT(*) FROM mdl_user;"' | grep -q "1" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
+# until oc exec $DB_POD_NAME -- bash -c 'mariadb -u root -e "USE moodle; SELECT COUNT(*) FROM user;"' | grep -qE "[1-9][0-9]*" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
+#   ATTEMPTS=$(( $ATTEMPTS + 1 ))
+#   echo "Waiting for database to be online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+
+#   sleep $WAIT_TIME
+# done
+
+until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  echo "Waiting for database to be online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+  echo "Waiting for database to come online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
+
+  # Capture the output of the mariadb command
+  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u root -e 'USE $DB_NAME; SELECT COUNT(*) FROM user;'" 2>&1)
+
+  # Check if the output contains an error
+  if echo "$OUTPUT" | grep -qi "error"; then
+    echo "Database error: $OUTPUT"
+    exit 1
+  fi
+
+  # Check if the output contains a positive count
+  if echo "$OUTPUT" | grep -qE "[1-9][0-9]*"; then
+    echo "$DB_NAME Database is online and contains data."
+    break
+  fi
+
   sleep $WAIT_TIME
 done
 

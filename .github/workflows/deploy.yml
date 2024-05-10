@@ -137,6 +137,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
+          DB_NAME: ${{ inputs.DB_NAME }}
 
       - name: Template
         if: success()
