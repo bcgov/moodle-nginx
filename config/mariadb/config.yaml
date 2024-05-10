@@ -88,6 +88,10 @@ spec:
           #ordinal=${BASH_REMATCH[1]}
           ordinal=$(echo `hostname` | sed 's/[^0-9]*//g')
           echo "Ordinal: $ordinal"
+          if ! [[ $ordinal =~ ^[0-9]+$ ]]; then
+            echo "Ordinal is not a number: $ordinal"
+            exit 1
+          fi
           # Copy appropriate conf.d files from db-config-map to
           # db-config volume (emptyDir) depending on pod number
           if [[ $ordinal -eq 0 ]]; then
