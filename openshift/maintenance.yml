@@ -14,8 +14,8 @@ objects:
       - port: 8080
         targetPort: 8080
 
-  - apiVersion: apps/v1
-    kind: Deployment
+  - apiVersion: apps.openshift.io/v1
+    kind: DeploymentConfig
     metadata:
       name: ${BUILD_NAME}
       namespace: ${DEPLOY_NAMESPACE}
@@ -43,13 +43,27 @@ objects:
                 items:
                   - key: index.html
                     path: index.html
+            - name: maintenance-config
+              configMap:
+                name: maintenance-config
+                defaultMode: 420
+                items:
+                  - key: default.conf
+                    path: default.conf
+            - name: nginx-cache
+              emptyDir: {}
           containers:
             - name: ${BUILD_NAME}
-              image: nginx:stable-alpine
+              image: ${WEB_IMAGE}
               volumeMounts:
                 - name: maintenance-page
                   mountPath: usr/share/nginx/html/index.html
                   subPath: index.html
+                - name: nginx-cache
+                  mountPath: /var/cache/nginx
+                - name: maintenance-config
+                  mountPath: /etc/nginx/conf.d/default.conf
+                  subPath: default.conf
               imagePullPolicy: Always
               resources:
                 limits:
@@ -69,3 +83,6 @@ parameters:
   - name: BUILD_NAME
     required: true
     value: "maintenance-message"
+  - name: WEB_IMAGE
+    required: true
+    value: "nginxinc/nginx-unprivileged:1.25.4-alpine-slim"
