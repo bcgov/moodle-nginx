@@ -8,13 +8,13 @@ data:
   primary.cnf: |
     [mariadb]
     log-bin                         # enable binary logging
-    log-basename=mariadb         # used to be independent of hostname changes (otherwise is in datadir/mysql)
+    log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
-    server-id=0
 
   replica.cnf: |
     [mariadb]
-    log-basename=mariadb         # used to be independent of hostname changes (otherwise is in datadir/mysql)
+    log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
+    super-read-only
     max_allowed_packet=1073741824
     slave-skip-errors=1396
 
@@ -28,10 +28,14 @@ data:
     # We have to know name of sts (`db`) and
     # service `db` in advance as an FQDN.
     # No need to use master_port
-    MASTER_HOST='db-0.db',
-    MASTER_USER='repluser',
-    MASTER_PASSWORD='replsecret',
-    MASTER_CONNECT_RETRY=10;
+    CHANGE MASTER TO
+      MASTER_HOST='db-0.db',
+      MASTER_USER='repluser',
+      MASTER_PASSWORD='replsecret',
+      MASTER_CONNECT_RETRY=10;
+      MASTER_LOG_FILE='mariadb-bin.000020',
+      MASTER_LOG_POS=568,
+      MASTER_CONNECT_RETRY=10;
 
 # Headless service
 ---
@@ -57,7 +61,7 @@ metadata:
   name: db
 spec:
   serviceName: "db"
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: db
@@ -168,7 +172,7 @@ spec:
         - name: datadir
           mountPath: /var/lib/mysql/
         - name: db-config-map
-          mountPath: /etc/mysql/conf.d/
+          mountPath: /mnt/config-map
         - name: initdb
           mountPath: /docker-entrypoint-initdb.d
       volumes:

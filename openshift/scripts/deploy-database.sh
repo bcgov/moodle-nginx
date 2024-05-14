@@ -25,8 +25,8 @@ else
   # oc annotate --overwrite  sts/$DB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n $DEPLOY_NAMESPACE
   # oc rollout restart sts/$DB_DEPLOYMENT_NAME
 
-  echo "Scaling $DB_DEPLOYMENT_NAME to 1..."
-  oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
+  # echo "Scaling $DB_DEPLOYMENT_NAME to 1..."
+  # oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
 
   # Wait for the deployment to scale to 1
   ATTEMPTS=0
@@ -45,7 +45,7 @@ fi
 echo "Checking if the database is online and contains expected Moodle data..."
 ATTEMPTS=0
 WAIT_TIME=10
-MAX_ATTEMPTS=30 # wait 5 minutes
+MAX_ATTEMPTS=30 # wait up to 5 minutes
 
 # Get the name of the first pod in the StatefulSet
 DB_POD_NAME=""
@@ -59,10 +59,12 @@ until [ -n "$DB_POD_NAME" ]; do
   fi
 
   if [ -z "$DB_POD_NAME" ]; then
-    echo "Waiting for the database pod to be ready..."
+    echo "Waiting for the database pod to be ready... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
     sleep $WAIT_TIME
   fi
 done
+
+echo "Database pod name: $DB_POD_NAME has been found and is running."
 
 ATTEMPTS=0
 
@@ -81,7 +83,7 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
 
   # Check if the output contains a positive count
   if echo "$OUTPUT" | grep -qE "[1-9][0-9]*"; then
-    echo "$DB_NAME Database is online and contains data."
+    echo "$DB_NAME Database is online and contains data. Users Found: $OUTPUT"
     break
   fi
 
@@ -92,3 +94,5 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   echo "Timeout waiting for the database to be online. Exiting..."
   exit 1
 fi
+
+echo "$DB_NAME Database deployment is complete."
