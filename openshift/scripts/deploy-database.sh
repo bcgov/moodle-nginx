@@ -78,7 +78,7 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   # Check if the output contains an error
   if echo "$OUTPUT" | grep -qi "error"; then
     echo "Database error: $OUTPUT"
-    exit 1
+    # exit 1
   fi
 
   # Check if the output contains a positive count

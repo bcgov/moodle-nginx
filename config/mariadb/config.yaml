@@ -119,8 +119,8 @@ spec:
           name: db-port
         resources:
           limits:
-            cpu: 400m
-            memory: 282Mi
+            cpu: 800m
+            memory: 1024Mi
           requests:
             cpu: 50m
             memory: 256Mi
