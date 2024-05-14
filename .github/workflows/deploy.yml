@@ -120,7 +120,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
-          BUILD_NAME: maintenance-message
+          BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
 

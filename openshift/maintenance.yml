@@ -9,7 +9,7 @@ objects:
       name: ${BUILD_NAME}
     spec:
       selector:
-        app: ${BUILD_NAME}
+        deploymentconfig: ${BUILD_NAME}
       ports:
       - port: 8080
         targetPort: 8080
