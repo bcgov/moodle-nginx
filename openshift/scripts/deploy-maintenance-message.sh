@@ -1,3 +1,19 @@
+# maintenance html page
+if [[ `oc describe configmap maintenance-page 2>&1` =~ "NotFound" ]]; then
+  oc create configmap maintenance-page --from-file=./config/maintenance/index.html
+else
+  oc delete configmap maintenance-page
+  oc create configmap maintenance-page --from-file=./config/maintenance/index.html
+fi
+
+# maintenance nginx config
+if [[ `oc describe configmap maintenance-config 2>&1` =~ "NotFound" ]]; then
+  oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
+else
+  oc delete configmap maintenance-config
+  oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
+fi
+
 if [[ `oc describe dc $BUILD_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$BUILD_NAME NOT FOUND: Beginning dc..."
   oc process -f ./openshift/maintenance.yml \
