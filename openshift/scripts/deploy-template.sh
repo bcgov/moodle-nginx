@@ -139,7 +139,7 @@ else
   oc delete job/migrate-build-files
 fi
 
-echo "Create and run migratet-build-files job..."
+echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 
 echo "Waiting for Moodle build migration job status to complete..."
@@ -199,5 +199,9 @@ oc scale sts $DB_DEPLOYMENT_NAME --replicas=3
 
 echo "Disabling maintenance mode..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
+
+# Redirect traffic to maintenance-message
+echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
+oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
 
 echo "Deployment complete."
