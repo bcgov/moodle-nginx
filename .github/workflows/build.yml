@@ -9,7 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}

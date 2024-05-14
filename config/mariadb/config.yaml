@@ -87,7 +87,7 @@ spec:
           ordinal=$(echo `hostname` | sed 's/[^0-9]*//g')
           # Copy appropriate conf.d files from db-config-map to
           # db-config volume (emptyDir) depending on pod number
-          if [[ $ordinal -eq 0 ]]; then
+          if [[ ${ordinal} -eq 0 ]]; then
             # This file holds SQL for connecting to primary
             cp /mnt/config-map/primary.cnf /etc/mysql/conf.d/server-id.cnf
             # Create the users needed for replication on primary on a volume
