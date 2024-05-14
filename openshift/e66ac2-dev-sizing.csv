@@ -1,5 +1,5 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB)
-db,sts,3,6,3,2048,50,400,256,1024
+db,sts,3,6,3,2048,50,400,256,2048
 php,dc,3,6,1,5120,100,500,15,182
 web,dc,3,6,0,0,25,400,13,33
 moodle-db-backup-storage,deployment,1,1,1,15360,0,0,0,0
