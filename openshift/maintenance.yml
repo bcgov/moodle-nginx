@@ -32,33 +32,33 @@ objects:
           name: ${BUILD_NAME}
           labels:
             deploymentconfig: ${BUILD_NAME}
-      spec:
-        imagePullSecrets:
-          - name: artifactory-m950-learning
-        volumes:
-          - name: maintenance-page
-            configMap:
-              name: maintenance-page
-              defaultMode: 420
-              items:
-                - key: index.html
-                  path: index.html
-        containers:
-          - name: ${BUILD_NAME}
-            image: nginx:stable-alpine
-            volumeMounts:
-              - name: maintenance-page
-                mountPath: usr/share/nginx/html/index.html
-                subPath: index.html
-            imagePullPolicy: Always
-            resources:
-              limits:
-                memory: '0'
-                cpu: '0'
-              requests:
-                memory: '0'
-                cpu: '0'
-            restartPolicy: OnFailure
+        spec:
+          imagePullSecrets:
+            - name: artifactory-m950-learning
+          volumes:
+            - name: maintenance-page
+              configMap:
+                name: maintenance-page
+                defaultMode: 420
+                items:
+                  - key: index.html
+                    path: index.html
+          containers:
+            - name: ${BUILD_NAME}
+              image: nginx:stable-alpine
+              volumeMounts:
+                - name: maintenance-page
+                  mountPath: usr/share/nginx/html/index.html
+                  subPath: index.html
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  memory: '0'
+                  cpu: '0'
+                requests:
+                  memory: '0'
+                  cpu: '0'
+              restartPolicy: OnFailure
 parameters:
   - name: IMAGE_REPO
     required: true
