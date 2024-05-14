@@ -14,7 +14,6 @@ data:
   replica.cnf: |
     [mariadb]
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
-    super-read-only
     max_allowed_packet=1073741824
     slave-skip-errors=1396
 

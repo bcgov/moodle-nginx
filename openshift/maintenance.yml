@@ -1,0 +1,60 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: ${BUILD_NAME}
+objects:
+ - apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: ${BUILD_NAME}
+     namespace: ${DEPLOY_NAMESPACE}
+     annotations:
+       template.alpha.openshift.io/wait-for-ready: "true"
+     labels:
+       service: web
+   spec:
+     replicas: 1
+     selector:
+       deploymentconfig: ${BUILD_NAME}
+     template:
+       metadata:
+         name: ${BUILD_NAME}
+         labels:
+           deploymentconfig: ${BUILD_NAME}
+     spec:
+       imagePullSecrets:
+         - name: artifactory-m950-learning
+       volumes:
+         - name: maintenance-page
+           configMap:
+             name: maintenance-page
+             defaultMode: 420
+             items:
+               - key: index.html
+                 path: index.html
+       containers:
+        - name: ${BUILD_NAME}
+          image: nginx:stable-alpine
+          volumeMounts:
+            - name: maintenance-page
+              mountPath: usr/share/nginx/html/index.html
+              subPath: index.html
+          imagePullPolicy: Always
+          resources:
+            limits:
+              memory: '0'
+              cpu: '0'
+            requests:
+              memory: '0'
+              cpu: '0'
+          restartPolicy: OnFailure
+parameters:
+  - name: IMAGE_REPO
+    required: true
+    value: "image-registry.openshift-image-registry.svc:5000/"
+  - name: DEPLOY_NAMESPACE
+    required: true
+    value: "e66ac2-dev"
+  - name: BUILD_NAME
+    required: true
+    value: "maintenance-message"
