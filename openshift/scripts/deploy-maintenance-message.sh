@@ -62,6 +62,10 @@ fi
 
 echo "$BUILD_NAME dc complete"
 
+sleep 20
+
 # Redirect traffic to $BUILD_NAME
 echo "Redirecting traffic to $BUILD_NAME..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "$BUILD_NAME"}]'
+
+sleep 30
