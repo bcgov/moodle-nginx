@@ -106,7 +106,7 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      - name: Deploy Maintenance Message
+      - name: Deploy/Enable Maintenance Messaging
         if: success()
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
@@ -125,7 +125,7 @@ jobs:
             oc create configmap moodle-env --from-file=.env=./example.env
           fi
 
-      - name: Backups
+      - name: Deploy Backups via Helm
         uses: WyriHaximus/github-action-helm3@v3
         with:
           exec: bash ./openshift/scripts/deploy-database-backups.sh
@@ -139,7 +139,7 @@ jobs:
 
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
-      - name: ${{ inputs.DB_DEPLOYMENT_NAME  }}
+      - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         if: success()
         run: bash ./openshift/scripts/deploy-database.sh
         env:
@@ -148,7 +148,7 @@ jobs:
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           DB_NAME: ${{ inputs.DB_NAME }}
 
-      - name: Template
+      - name: Deploy Moodle Template and Run Upgrades
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
