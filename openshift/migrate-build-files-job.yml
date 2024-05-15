@@ -32,6 +32,13 @@ objects:
                defaultMode: 420
          imagePullSecrets:
            - name: artifactory-m950-learning
+         initContainers:
+           - name: chown-init-container
+             image: busybox
+             command: ['sh', '-c', 'chown -R www-data:www-data /var/www/html']
+             volumeMounts:
+              - name: moodle-app-data
+                mountPath: /var/www/html
          containers:
            - name: migrate-build-files-job
              image: ${IMAGE_REPO}${BUILD_NAME}:${BUILD_NAMESPACE}
@@ -65,6 +72,7 @@ objects:
                - |
                 echo "Migrating build files from /app/public to /var/www/html..."
                 sh /usr/local/bin/migrate-build-files.sh
+                chown -R www-data:www-data /var/www/html
              imagePullPolicy: Always
          restartPolicy: OnFailure
 parameters:
