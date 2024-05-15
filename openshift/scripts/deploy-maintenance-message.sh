@@ -27,7 +27,7 @@ else
 
   ATTEMPTS=0
   MAX_ATTEMPTS=60
-  while [[ $(oc get dc $BUILD_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
+  while [[ $(oc get dc/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
     echo "Waiting for $BUILD_NAME to scale to 0..."
     sleep 10
     ATTEMPTS=$((ATTEMPTS + 1))
@@ -38,7 +38,10 @@ else
   fi
 
   echo "Recreating $BUILD_NAME..."
-  oc delete dc $BUILD_NAME -n $DEPLOY_NAMESPACE
+  oc delete dc/$BUILD_NAME -n $DEPLOY_NAMESPACE
+  oc delete svc/$BUILD_NAME -n $DEPLOY_NAMESPACE
+
+  sleep 5
 
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
@@ -66,6 +69,6 @@ sleep 20
 
 # Redirect traffic to $BUILD_NAME
 echo "Redirecting traffic to $BUILD_NAME..."
-oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "$BUILD_NAME"}]'
+oc patch route moodle-web --type=json -p "[{\"op\": \"replace\", \"path\": \"/spec/to/name\", \"value\": \"$BUILD_NAME\"}]"
 
 sleep 30

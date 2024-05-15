@@ -294,7 +294,7 @@ jobs:
           data: >
             {
               "emoji": "${{ steps.notification-emoji.outputs.EMOJI }}",
-              "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
+              "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}, status: ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
