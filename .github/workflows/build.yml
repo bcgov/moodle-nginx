@@ -128,18 +128,18 @@ jobs:
     uses: ./.github/workflows/cron.yml
     secrets: inherit
 
+  web:
+    name: 🔨 Web
+    needs: [checkEnv]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/web.yml
+    secrets: inherit
+
   moodle:
     name: 🔨 Moodle
     needs: [checkEnv, php]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
-    secrets: inherit
-
-  web:
-    name: 🔨 Web
-    needs: [checkEnv, php, db, moodle]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/web.yml
     secrets: inherit
 
   call-cleanup-workflow:
