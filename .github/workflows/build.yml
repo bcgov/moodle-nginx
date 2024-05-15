@@ -9,7 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "YES"
+  SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -296,10 +296,6 @@ jobs:
               "emoji": "${{ steps.notification-emoji.outputs.EMOJI }}",
               "text": "Deployment to: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }} was a ${{ needs.call-deploy-workflow.result }}",
               "attachments": [{
-                "title": "Complete Moodle Upgrades",
-                "title_link": "https://${{ env.APP_HOST_URL }}/admin/index.php",
-                "text": "Please ensure system upgrades are complete before tesing."
-              },{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "${{ steps.formatter.outputs.comments }}"

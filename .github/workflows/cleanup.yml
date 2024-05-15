@@ -124,8 +124,8 @@ jobs:
             echo "${{ inputs.DB_DEPLOYMENT_NAME }} NOT FOUND: Skipping..."
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME }} FOUND: Cleaning..."
-            oc scale sts ${{ inputs.DB_DEPLOYMENT_NAME }} --replicas=0
-            oc delete sts ${{ inputs.DB_DEPLOYMENT_NAME }}
+            oc scale sts/${{ inputs.DB_DEPLOYMENT_NAME }} --replicas=0
+            oc delete sts/${{ inputs.DB_DEPLOYMENT_NAME }}
             # for i in 0 1 2; do
             #   if ! [[ `oc describe pvc datadir-${{ inputs.DB_DEPLOYMENT_NAME }}-$i 2>&1` =~ "NotFound" ]]; then
             #     kubectl delete pvc datadir-${{ inputs.DB_DEPLOYMENT_NAME }}-$i;
@@ -149,8 +149,8 @@ jobs:
             echo "${{ inputs.WEB_DEPLOYMENT_NAME }} NOT FOUND: Skipping..."
           else
             echo "${{ inputs.WEB_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
-            oc scale dc ${{ inputs.WEB_DEPLOYMENT_NAME }} --replicas=0
-            oc delete dc ${{ inputs.WEB_DEPLOYMENT_NAME }}
+            oc scale dc/${{ inputs.WEB_DEPLOYMENT_NAME }} --replicas=0
+            oc delete dc/${{ inputs.WEB_DEPLOYMENT_NAME }}
             echo "DELETED dc ${{ inputs.WEB_DEPLOYMENT_NAME }}"
           fi
           if [[ `oc describe configmap $configmap_name 2>&1` =~ "NotFound" ]]; then
@@ -180,8 +180,8 @@ jobs:
             echo "${{ inputs.PHP_DEPLOYMENT_NAME }} NOT FOUND: Skipping..."
           else
             echo "${{ inputs.PHP_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
-            oc scale dc ${{ inputs.PHP_DEPLOYMENT_NAME }} --replicas=0
-            oc delete dc ${{ inputs.PHP_DEPLOYMENT_NAME }}
+            oc scale dc/${{ inputs.PHP_DEPLOYMENT_NAME }} --replicas=0
+            oc delete dc/${{ inputs.PHP_DEPLOYMENT_NAME }}
             echo "DELETED dc ${{ inputs.PHP_DEPLOYMENT_NAME }}"
           fi
           if [[ `oc describe configmap $configmap_name 2>&1` =~ "NotFound" ]]; then

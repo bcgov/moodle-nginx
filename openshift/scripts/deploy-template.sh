@@ -14,7 +14,7 @@ fi
 
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
 echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
-oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
@@ -66,18 +66,19 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
+# Redirect traffic to maintenance-message
+echo "Redirecting traffic to maintenance-message..."
+oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+
 echo "Right-sizing cluster..."
 #!/bin/bash
-
 # Read the CSV file line by line and set deployment resources
 # The file is chosen using the DEPLOY_NAMESPACE environment variable (+ '-sizing.csv')
 # Ensure that there is a CSV file for each namespace
 # This is to allow the correct resources to be set for each deployment
 # Example: ./openshift/e66ac2-dev-sizing.csv
-
 ## Hope to replace this with a direct call to the Microsoft Graph API in the future
 ## If we can get permissions sorted out for a service account
-
 # For now, the CSV file is generated manually by exporting the "Export" tabs from the
 # "OpenShift Cluster Right-Sizing" sheet:
 # https://bcgov-my.sharepoint.com/:x:/r/personal/warren_christian_gov_bc_ca/_layouts/15/Doc.aspx?sourcedoc=%7BC236A074-8A5C-4B2F-AE7C-9F2F393AF8CE%7D&file=OpenShift%20Cluster%20Right-Sizing.xlsx&action=default&mobileredirect=true
@@ -99,9 +100,6 @@ done
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 oc rollout latest dc/$PHP_DEPLOYMENT_NAME
 
-# echo "Rolling out $CRON_DEPLOYMENT_NAME..."
-# oc rollout latest dc/$CRON_DEPLOYMENT_NAME
-
 # Check PHP deployment rollout status until complete.
 ATTEMPTS=0
 WAIT_TIME=30
@@ -112,17 +110,6 @@ until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
   echo "Waiting for dc/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
-
-# Check Moodle deployment rollout status until complete.
-# ATTEMPTS=0
-# WAIT_TIME=5
-# ROLLOUT_STATUS_CMD="oc rollout status dc/$MOODLE_DEPLOYMENT_NAME"
-# until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 120 ]; do
-#   $ROLLOUT_STATUS_CMD
-#   ATTEMPTS=$((attempts + 1))
-#   echo "Waited: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
-#   sleep $WAIT_TIME
-# done
 
 # Enable Maintenance mode (PHP)
 echo "Enabling Moodle maintenance mode..."
@@ -142,16 +129,16 @@ fi
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 
-echo "Waiting for Moodle build migration job status to complete..."
-ATTEMPTS=0
-WAIT_TIME=30
-MAX_ATTEMPTS=30 # wait 15 minutes
-#  2>&1` =~ "NotFound"
-# Wait for jobs to complete with ststus=succeeded, or evenuallly timeout
-until oc get jobs migrate-build-files -o=jsonpath='{.status.succeeded}' | grep -q "1" || [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
-  ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  echo "Waiting for migrate-build-files job to complete... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
-  sleep $WAIT_TIME
+# Get the name of the pod created by the job
+pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
+
+# Wait for the "File copy complete." message
+oc logs -f $pod_name | while read line
+do
+  echo $line
+  if [[ $line == *"File copy complete."* ]]; then
+    pkill -P $$ oc
+  fi
 done
 
 # Check if the moodle-upgrade-job exists
@@ -167,41 +154,47 @@ oc process -f ./openshift/moodle-upgrade-job.yml \
   -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
 
-# # Ensure moodle config is cleared (Moodle)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'rm -f /var/www/html/config.php'
+# Get the name of the pod created by the job
+pod_name=$(oc get pods --selector=job-name=moodle-upgrade-job -o jsonpath='{.items[0].metadata.name}')
 
-# MOODLE_APP_DIR=/var/www/html
-
-# # Delete existing plugins (PHP)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/trigger"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/admin/tool/dataflows"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/facetoface"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/hvp"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/course/format/topcoll"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/customcert"
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c "rm -f $MOODLE_APP_DIR/mod/certificate"
-
-# # Copy / update all files from docker build to shared PVC (Moodle)
-# oc exec dc/$MOODLE_DEPLOYMENT_NAME -- bash -c 'cp -ru /app/public/* /var/www/html'
+# Wait for the "File copy complete." message
+oc logs -f $pod_name | while read line
+do
+  echo $line
+  if [[ $line == *"Maintenance mode has been disabled and the site is running normally again"* ]]; then
+    pkill -P $$ oc
+  fi
+done
 
 echo "Purging caches..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
 
+sleep 10
+
 echo "Purging missing plugins..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run'
+plugin_purge=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run')
+echo "Result: $plugin_purge"
+
+sleep 10
 
 echo "Running Moodle upgrades..."
-oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive'
+moodle_upgrade_result=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
+echo "Result: $moodle_upgrade_result"
 
-# STS was scaled-down for deployment and maintenance, scale it back up
+sleep 10
+
+# DB was scaled-down for deployment and maintenance, scale it back up
 echo "Scaling up $DB_DEPLOYMENT_NAME to 3 replicas..."
-oc scale sts $DB_DEPLOYMENT_NAME --replicas=3
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
+
+sleep 10
 
 echo "Disabling maintenance mode..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
-
-# Redirect traffic to maintenance-message
 echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
+oc scale dc/maintenance-message --replicas=0
+
+sleep 10
 
 echo "Deployment complete."

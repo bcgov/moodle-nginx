@@ -23,7 +23,7 @@ if [[ `oc describe dc $BUILD_NAME 2>&1` =~ "NotFound" ]]; then
     | oc create -f -
 else
   echo "$BUILD_NAME Installation found...Scaling to 0..."
-  oc scale dc $BUILD_NAME --replicas=0
+  oc scale dc/$BUILD_NAME --replicas=0
 
   ATTEMPTS=0
   MAX_ATTEMPTS=60

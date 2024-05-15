@@ -3,7 +3,7 @@ if [[ `oc describe sts $DB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
 else
   echo "$DB_DEPLOYMENT_NAME Installation found...Scaling to 0..."
-  oc scale sts $DB_DEPLOYMENT_NAME --replicas=0
+  oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
 
   ATTEMPTS=0
   MAX_ATTEMPTS=60
@@ -22,11 +22,6 @@ else
   oc delete configmap $DB_DEPLOYMENT_NAME-config -n $DEPLOY_NAMESPACE
   oc delete service $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
-  # oc annotate --overwrite  sts/$DB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T` -n $DEPLOY_NAMESPACE
-  # oc rollout restart sts/$DB_DEPLOYMENT_NAME
-
-  # echo "Scaling $DB_DEPLOYMENT_NAME to 1..."
-  # oc scale sts $DB_DEPLOYMENT_NAME --replicas=1
 
   # Wait for the deployment to scale to 1
   ATTEMPTS=0

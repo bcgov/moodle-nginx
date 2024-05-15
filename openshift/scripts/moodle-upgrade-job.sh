@@ -28,6 +28,3 @@ php /var/www/html/info/phpconfigcheck.php
 
 echo "Disabling maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --disable
-
-echo "Run cron..."
-php /var/www/html/admin/cli/cron.php

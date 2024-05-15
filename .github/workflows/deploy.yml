@@ -106,7 +106,7 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      - name: Template
+      - name: Deploy Maintenance Message
         if: success()
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
@@ -115,7 +115,7 @@ jobs:
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
 
-      - name: ConfigMap (moodle-env)
+      - name: Create ConfigMap (moodle-env)
         if: success()
         run: |
           if [[ `oc describe configmap moodle-env 2>&1` =~ "NotFound" ]]; then
