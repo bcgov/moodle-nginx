@@ -194,7 +194,7 @@ jobs:
 
   wait:
     runs-on: ubuntu-latest
-    name: ⌛ Wait for Moodle Upgrades (20 min)
+    name: ⌛ Wait for 1 min
     needs: [checkEnv, call-deploy-workflow]
     if: |
       always() &&
@@ -203,8 +203,8 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     steps:
-      - name: Sleep for 20 minutes
-        run: sleep 1200s
+      - name: Wait a minute
+        run: sleep 60s
         shell: bash
 
   lighthouse-check:

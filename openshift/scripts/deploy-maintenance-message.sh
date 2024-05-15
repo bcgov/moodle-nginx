@@ -39,7 +39,6 @@ else
 
   echo "Recreating $BUILD_NAME..."
   oc delete dc $BUILD_NAME -n $DEPLOY_NAMESPACE
-  oc delete configmap maintenance-page -n $DEPLOY_NAMESPACE
 
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
