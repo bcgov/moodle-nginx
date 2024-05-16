@@ -214,6 +214,7 @@ jobs:
     outputs:
       lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
     if: |
+      always() &&
       needs.call-deploy-workflow.result == 'success' &&
       !contains(needs.*.result, 'failure')
     steps:
@@ -282,15 +283,12 @@ jobs:
             `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
           fi
 
-      - name: Rocket.Chat Notification
+      - name: Send Notification to Rocket.Chat
         uses: muinmomin/webhook-action@v1.0.0
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
           url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          # 🚀 :rocket:
-          # 💥 :boom:
-          # ⛔ :no_entry:
           data: >
             {
               "emoji": "${{ steps.notification-emoji.outputs.EMOJI }}",
@@ -298,6 +296,10 @@ jobs:
               "attachments": [{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "${{ steps.formatter.outputs.comments }}"
+                "text": "${{ needs.call-deploy-workflow.result }} ${{ steps.notification-emoji.outputs.EMOJI }}"
+              },{
+                "title": "Verify Moodle",
+                "title_link": "${{ env.APP_HOST_URL }}/admin/index.php",
+                "text": "Verify that the site still works and updates have been completed (admin access required for updates)"
               }]
             }
