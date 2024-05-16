@@ -1,11 +1,11 @@
 #!/bin/bash
 
-canary_line='Moodle frontpage.'
+text_to_find='Moodle frontpage.'
 file='/var/www/html/index.php'
 
 echo 'Waiting for file copy to complete...'
 
-until grep -q "${canary_line}" "${file}"
+until grep -q "${text_to_find}" "${file}"
 do
   sleep 5s
 done
