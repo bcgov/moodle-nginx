@@ -5,6 +5,16 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
+# Enable Maintenance mode (PHP)
+echo "Enabling Moodle maintenance mode..."
+MAINTENANCE_OUTPUT=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait 2>&1)
+if echo "$MAINTENANCE_OUTPUT" | grep -q "Error"; then
+  echo "Failed to enable maintenance mode. Error message: $MAINTENANCE_OUTPUT"
+  exit 1
+fi
+
+sleep 10
+
 echo "Delete cron job if it exists..."
 # Check if cron exists
 if oc get deployment $CRON_DEPLOYMENT_NAME; then
@@ -124,14 +134,6 @@ until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
   sleep $WAIT_TIME
 done
 
-# Enable Maintenance mode (PHP)
-echo "Enabling Moodle maintenance mode..."
-MAINTENANCE_OUTPUT=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait 2>&1)
-if echo "$MAINTENANCE_OUTPUT" | grep -q "Error: Database connection failed"; then
-  echo "Failed to enable maintenance mode. Error message: $MAINTENANCE_OUTPUT"
-  exit 1
-fi
-
 # Check if the moodle-upgrade exists, if so, delete it
 if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
   echo "moodle-upgrade job NOT FOUND..."
@@ -165,9 +167,9 @@ done
 # Wait for the migrate-build-files job to complete
 echo "Pod $pod_name is now running."
 
-sleep 10
-
 echo "Waiting for $pod_name job to complete..."
+sleep 60
+
 while [[ $(oc get jobs $pod_name -o 'jsonpath={..status.active}') == "1" ]]; do
   echo "$pod_name job is still running..."
   sleep 10
