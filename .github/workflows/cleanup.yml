@@ -216,17 +216,17 @@ jobs:
             echo "DELETED job migrate-build-files"
           fi
 
-      - name: 🧹️ Clean Cron Job
+      - name: 🧹️ Clean Cron
         id: clean-cron-job
         run: |
-          if [[ `oc describe job cron 2>&1` =~ "NotFound" ]]; then
+          if [[ `oc describe deployment cron 2>&1` =~ "NotFound" ]]; then
             echo "cron NOT FOUND: Skipping..."
           else
             echo "cron FOUND: Cleaning resources..."
-            oc delete job cron
-            echo "DELETED job cron"
+            oc delete deployment cron
+            echo "DELETED deployment: cron"
           fi
-          if [[ `oc describe dc ${{ inputs.CRON_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+          if [[ `oc describe deployment ${{ inputs.CRON_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
             echo "${{ inputs.CRON_DEPLOYMENT_NAME }} deployment NOT FOUND: Skipping..."
           else
             echo "${{ inputs.CRON_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."

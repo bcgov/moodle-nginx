@@ -5,13 +5,8 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
-# Enable Maintenance mode (PHP)
-echo "Enabling Moodle maintenance mode..."
-MAINTENANCE_OUTPUT=$(oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --enable' --wait 2>&1)
-if echo "$MAINTENANCE_OUTPUT" | grep -q "Error"; then
-  echo "Failed to enable maintenance mode. Error message: $MAINTENANCE_OUTPUT"
-  exit 1
-fi
+# Enable Moodle maintenance mode
+sh ./enable-maintenance.sh
 
 sleep 10
 
@@ -153,7 +148,7 @@ fi
 sleep 30
 
 echo "Create and run migrate-build-files job..."
-oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
+oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
