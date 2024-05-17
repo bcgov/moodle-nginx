@@ -297,9 +297,31 @@ jobs:
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "${{ needs.call-deploy-workflow.result }} ${{ steps.notification-emoji.outputs.EMOJI }}"
-              },{
-                "title": "Verify Moodle",
-                "title_link": "${{ env.APP_HOST_URL }}/admin/index.php",
-                "text": "Verify that the site still works and updates have been completed (admin access required for updates)"
+                "fields": [{
+                  "title": "Verify Moodle",
+                  "title_link": "${{ env.APP_HOST_URL }}/admin/index.php",
+                  "value": "Verify that the site still works and updates have been completed. Admin access required for updates."
+                },{
+                  "title": "DB",
+                  "value": "${{ needs.db.result }}"
+                },{
+                  "title": "PHP",
+                  "value": "${{ needs.php.result }}"
+                },{
+                  "title": "Cron",
+                  "value": "${{ needs.cron.result }}"
+                },{
+                  "title": "Web",
+                  "value": "${{ needs.web.result }}"
+                },{
+                  "title": "Moodle",
+                  "value": "${{ needs.moodle.result }}"
+                },{
+                  "title": "Cleanup",
+                  "value": "${{ needs.call-cleanup-workflow.result }}"
+                },{
+                  "title": "Lighthouse",
+                  "value": "${{ needs.lighthouse-check.result }}"
+                }]
               }]
             }
