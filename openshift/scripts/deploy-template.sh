@@ -145,10 +145,12 @@ else
   oc delete job/migrate-build-files
 fi
 
-sleep 30
+sleep 10
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
+
+sleep 10
 
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
@@ -165,11 +167,13 @@ echo "Pod $pod_name is now running."
 echo "Waiting for $pod_name job to complete..."
 sleep 60
 
-while [[ $(oc get jobs $pod_name -o 'jsonpath={..status.active}') == "1" ]]; do
-  echo "$pod_name job is still running..."
+while [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') == "1" ]]; do
+  echo "migrate-build-files job is still running..."
   sleep 10
 done
-echo "$pod_name job has completed."
+echo "migrate-build-files job has completed."
+
+sleep 15
 
 echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade.yml \
@@ -177,6 +181,8 @@ oc process -f ./openshift/moodle-upgrade.yml \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
+
+sleep 15
 
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
@@ -187,12 +193,14 @@ while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]];
   sleep 10
 done
 
-echo "Waiting for $pod_name job to complete..."
-while [[ $(oc get jobs $pod_name -o 'jsonpath={..status.active}') == "1" ]]; do
-  echo "$pod_name job is still running..."
+sleep 30
+
+echo "Waiting formoodle-upgrade job to complete..."
+while [[ $(oc get jobs moodle-upgrade -o 'jsonpath={..status.active}') == "1" ]]; do
+  echo "moodle-upgrade job is still running..."
   sleep 10
 done
-echo "$pod_name job has completed."
+echo "moodle-upgrade job has completed."
 
 # Wait for the "File copy complete." message
 oc logs -f $pod_name | while read line
@@ -202,6 +210,8 @@ do
     pkill -P $$ oc
   fi
 done
+
+sleep 10
 
 echo "Purging caches..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
