@@ -234,7 +234,7 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
-          outputDirectory: artifacts
+          outputDirectory: tmp/artifacts
           urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
           overridesJsonFile: config/lighthouse/overrides.json
       - name: Verify Lighthouse Check results
@@ -273,7 +273,7 @@ jobs:
       #   uses: manrueda/lighthouse-report-action@v1.1.2
       #   id: lhreport
       #   with:
-      #     reports: ${{ github.workspace }}/tmp/artifacts
+      #     reports: tmp/artifacts
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
