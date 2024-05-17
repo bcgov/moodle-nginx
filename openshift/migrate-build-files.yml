@@ -73,7 +73,7 @@ objects:
                - |
                 echo "Migrating build files from /app/public to /var/www/html..."
                 sh /usr/local/bin/migrate-build-files.sh
-                chown -R www-data:www-data /var/www/html
+                # chown -R www-data:www-data /var/www/html
              imagePullPolicy: Always
          restartPolicy: OnFailure
 parameters:
