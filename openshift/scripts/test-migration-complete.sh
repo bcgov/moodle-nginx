@@ -25,6 +25,8 @@ if [ $src_count -eq $dest_count ]; then
   echo "All files have been copied (count of src and dest match)."
 else
   echo "File copy is not complete. Source has $src_count files, but destination has $dest_count files."
+  echo "Finding missing files..."
+  diff <(cd $src_dir && find . -type f | sort) <(cd $dest_dir && find . -type f | sort)
   exit 1
 fi
 

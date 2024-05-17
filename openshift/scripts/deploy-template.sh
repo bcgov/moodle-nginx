@@ -167,9 +167,22 @@ echo "Pod $pod_name is now running."
 echo "Waiting for $pod_name job to complete..."
 sleep 60
 
-while [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') == "1" ]]; do
-  echo "migrate-build-files job is still running..."
-  sleep 10
+COUNT=0
+SLEEP=10
+while true; do
+  job_status=$(oc get jobs migrate-build-files -o 'jsonpath={..status.conditions[?(@.type=="Failed")].status}')
+  message=$(oc get jobs migrate-build-files -o 'jsonpath={..status.conditions[?(@.type=="Failed")].message}')
+  if [[ $job_status == "True" ]]; then
+    echo "Error: $message"
+    echo "migrate-build-files job has failed... Exiting..."
+    exit 1
+  fi
+  if [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') != "1" ]]; then
+    break
+  fi
+  echo "migrate-build-files job is still running... $(($COUNT * $SLEEP)) seconds..."
+  COUNT=$((COUNT + 1))
+  sleep $SLEEP
 done
 echo "migrate-build-files job has completed."
 
@@ -196,9 +209,11 @@ done
 sleep 30
 
 echo "Waiting formoodle-upgrade job to complete..."
+COUNT=0
 while [[ $(oc get jobs moodle-upgrade -o 'jsonpath={..status.active}') == "1" ]]; do
   echo "moodle-upgrade job is still running..."
-  sleep 10
+  COUNT=$((COUNT + 1))
+  sleep $SLEEP
 done
 echo "moodle-upgrade job has completed."
 
