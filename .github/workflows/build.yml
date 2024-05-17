@@ -236,7 +236,7 @@ jobs:
         with:
           outputDirectory: artifacts
           urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
-          overridesJsonFile: ${{ github.workspace }}/config/lighthouse/overrides.json
+          overridesJsonFile: config/lighthouse/overrides.json
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master
         with:
