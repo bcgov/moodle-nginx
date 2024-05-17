@@ -1,12 +1,12 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
-  name: moodle-cron-job
+  name: cron
 objects:
  - apiVersion: batch/v1
    kind: Job
    metadata:
-     name: moodle-cron-job
+     name: cron
      namespace: ${DEPLOY_NAMESPACE}
    spec:
      parallelism: 1
@@ -14,7 +14,7 @@ objects:
      backoffLimit: 6
      template:
        metadata:
-         name: moodle-cron-job
+         name: cron
        spec:
          volumes:
            - name: moodle-data
@@ -72,7 +72,7 @@ objects:
                - "-c"
                - |
                 echo "Running Moodle Cron..."
-                sh /usr/local/bin/moodle-cron-job.sh
+                sh /usr/local/bin/cron.sh
              imagePullPolicy: Always
              resources:
                limits:

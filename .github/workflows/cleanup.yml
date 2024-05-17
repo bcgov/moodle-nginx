@@ -219,12 +219,12 @@ jobs:
       - name: 🧹️ Clean Cron Job
         id: clean-cron-job
         run: |
-          if [[ `oc describe job moodle-cron-job 2>&1` =~ "NotFound" ]]; then
-            echo "moodle-cron-job NOT FOUND: Skipping..."
+          if [[ `oc describe job cron 2>&1` =~ "NotFound" ]]; then
+            echo "cron NOT FOUND: Skipping..."
           else
-            echo "moodle-cron-job FOUND: Cleaning resources..."
-            oc delete job moodle-cron-job
-            echo "DELETED job moodle-cron-job"
+            echo "cron FOUND: Cleaning resources..."
+            oc delete job cron
+            echo "DELETED job cron"
           fi
           if [[ `oc describe dc ${{ inputs.CRON_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
             echo "${{ inputs.CRON_DEPLOYMENT_NAME }} deployment NOT FOUND: Skipping..."
@@ -242,12 +242,12 @@ jobs:
       - name: 🧹️ Clean Upgrade Job
         id: clean-upgrade-job
         run: |
-          if [[ `oc describe job moodle-upgrade-job 2>&1` =~ "NotFound" ]]; then
-            echo "moodle-upgrade-job NOT FOUND: Skipping..."
+          if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
+            echo "moodle-upgrade NOT FOUND: Skipping..."
           else
-            echo "moodle-upgrade-job FOUND: Cleaning resources..."
-            oc delete job moodle-upgrade-job
-            echo "DELETED job moodle-upgrade-job"
+            echo "moodle-upgrade FOUND: Cleaning resources..."
+            oc delete job moodle-upgrade
+            echo "DELETED job moodle-upgrade"
           fi
 
       - name: 🧹️ Clean ${{ inputs.APP }}-${{ inputs.WEB_DEPLOYMENT_NAME }} | ${{ inputs.APP_HOST_URL }}

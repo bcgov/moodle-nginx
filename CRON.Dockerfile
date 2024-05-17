@@ -49,5 +49,5 @@ COPY ./config/php/php-fpm.conf "/usr/local/etc/php-fpm.d"
 
 # CMD ["sh", "-c", "cron && tail -f /dev/null"]
 
-COPY ./config/cron/moodle-cron-job.sh /usr/local/bin/moodle-cron-job.sh
-CMD ["/bin/bash", "/usr/local/bin/moodle-cron-job.sh"]
+COPY ./config/cron/cron.sh /usr/local/bin/cron.sh
+CMD ["/bin/bash", "/usr/local/bin/cron.sh"]

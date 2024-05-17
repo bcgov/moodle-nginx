@@ -12,7 +12,7 @@ rm -rf ${dest_dir}/* || true
 # chown -R www-data:www-data /var/www/html || true
 
 echo "Replace Moodle index with maintenance page..."
-cp ./config/moodle/moodle_index_during_maintenance.php ${dest_dir}/index.php
+cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
 cp ${src_dir}/* ${dest_dir} -rp || true

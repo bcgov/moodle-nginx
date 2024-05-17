@@ -132,12 +132,21 @@ if echo "$MAINTENANCE_OUTPUT" | grep -q "Error: Database connection failed"; the
   exit 1
 fi
 
+# Check if the moodle-upgrade exists, if so, delete it
+if oc get job moodle-upgrade; then
+  # If the job exists, delete it
+  oc delete job moodle-upgrade
+fi
+
+# Check if the migrate-build-files job exists, if so, delete it
 if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
   echo "migrate-build-files job NOT FOUND..."
 else
   echo "migrate-build-files job FOUND...Deleting..."
   oc delete job/migrate-build-files
 fi
+
+sleep 30
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
@@ -148,39 +157,43 @@ pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.it
 # Wait until the pod is in the "Running" state
 while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
   echo "Waiting for pod $pod_name to be running."
+  sleep 30
+done
+
+# Wait for the migrate-build-files job to complete
+echo "Pod $pod_name is now running."
+
+sleep 10
+
+echo "Waiting for $pod_name job to complete..."
+while [[ $(oc get jobs $pod_name -o 'jsonpath={..status.active}') == "1" ]]; do
+  echo "$pod_name job is still running..."
   sleep 10
 done
-
-# Wait for the "File copy complete." message
-oc logs -f $pod_name | while read line
-do
-  echo $line
-  if [[ $line == *"File copy complete."* ]]; then
-    pkill -P $$ oc
-  fi
-done
-
-# Check if the moodle-upgrade-job exists
-if oc get job moodle-upgrade-job; then
-  # If the job exists, delete it
-  oc delete job moodle-upgrade-job
-fi
+echo "$pod_name job has completed."
 
 echo "Create and run Moodle upgrade job..."
-oc process -f ./openshift/moodle-upgrade-job.yml \
+oc process -f ./openshift/moodle-upgrade.yml \
   -p IMAGE_REPO=$IMAGE_REPO \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
 
 # Get the name of the pod created by the job
-pod_name=$(oc get pods --selector=job-name=moodle-upgrade-job -o jsonpath='{.items[0].metadata.name}')
+pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
 
 # Wait until the pod is in the "Running" state
 while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
   echo "Waiting for pod $pod_name to be running."
   sleep 10
 done
+
+echo "Waiting for $pod_name job to complete..."
+while [[ $(oc get jobs $pod_name -o 'jsonpath={..status.active}') == "1" ]]; do
+  echo "$pod_name job is still running..."
+  sleep 10
+done
+echo "$pod_name job has completed."
 
 # Wait for the "File copy complete." message
 oc logs -f $pod_name | while read line
