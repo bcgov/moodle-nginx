@@ -16,6 +16,7 @@ objects:
        metadata:
          name: migrate-build-files
        spec:
+         terminationGracePeriodSeconds: 600
          volumes:
            - name: moodle-data
              persistentVolumeClaim:
@@ -32,13 +33,13 @@ objects:
                defaultMode: 420
          imagePullSecrets:
            - name: artifactory-m950-learning
-         initContainers:
-           - name: chown-init-container
-             image: busybox
-             command: ['sh', '-c', 'chown -R www-data:www-data /var/www/html']
-             volumeMounts:
-              - name: moodle-app-data
-                mountPath: /var/www/html
+        #  initContainers:
+        #    - name: chown-init-container
+        #      image: busybox
+        #      command: ['sh', '-c', 'chown -R www-data:www-data /var/www/html']
+        #      volumeMounts:
+        #       - name: moodle-app-data
+        #         mountPath: /var/www/html
          containers:
            - name: migrate-build-files-job
              image: ${IMAGE_REPO}${BUILD_NAME}:${BUILD_NAMESPACE}

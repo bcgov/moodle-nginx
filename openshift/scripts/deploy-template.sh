@@ -21,6 +21,9 @@ if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
   oc delete configmap $WEB_DEPLOYMENT_NAME-config
 fi
+
+sleep 10
+
 echo "Creating configMap: $WEB_DEPLOYMENT_NAME-config"
 oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/default.conf
 
@@ -28,6 +31,9 @@ if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $APP-config"
   oc delete configmap $APP-config
 fi
+
+sleep 10
+
 echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$MOODLE_ENVIRONMENT.config.php
 
@@ -35,8 +41,13 @@ if [[ ! `oc describe configmap $CRON_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" 
   echo "ConfigMap exists... Deleting: $CRON_DEPLOYMENT_NAME-config"
   oc delete configmap $CRON_DEPLOYMENT_NAME-config
 fi
+
+sleep 10
+
 echo "Creating configMap: $CRON_DEPLOYMENT_NAME-config"
 oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$MOODLE_ENVIRONMENT.config.php
+
+sleep 10
 
 echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
 
@@ -47,6 +58,8 @@ else
   oc annotate --overwrite  dc/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
   oc rollout latest dc/$WEB_DEPLOYMENT_NAME
 fi
+
+sleep 30
 
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
