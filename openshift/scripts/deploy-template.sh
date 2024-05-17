@@ -133,8 +133,10 @@ if echo "$MAINTENANCE_OUTPUT" | grep -q "Error: Database connection failed"; the
 fi
 
 # Check if the moodle-upgrade exists, if so, delete it
-if oc get job moodle-upgrade; then
-  # If the job exists, delete it
+if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
+  echo "moodle-upgrade job NOT FOUND..."
+else
+  echo "moodle-upgrade job found... deleting..."
   oc delete job moodle-upgrade
 fi
 
