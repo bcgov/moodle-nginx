@@ -132,6 +132,12 @@ oc process -f ./openshift/migrate-build-files-job.yml | oc create -f -
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
 
+# Wait until the pod is in the "Running" state
+while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
+  echo "Waiting for pod $pod_name to be running."
+  sleep 10
+done
+
 # Wait for the "File copy complete." message
 oc logs -f $pod_name | while read line
 do
@@ -156,6 +162,12 @@ oc process -f ./openshift/moodle-upgrade-job.yml \
 
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=moodle-upgrade-job -o jsonpath='{.items[0].metadata.name}')
+
+# Wait until the pod is in the "Running" state
+while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
+  echo "Waiting for pod $pod_name to be running."
+  sleep 10
+done
 
 # Wait for the "File copy complete." message
 oc logs -f $pod_name | while read line

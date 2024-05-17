@@ -264,16 +264,16 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      # - name: Test Results to Markdown Table
-      #   uses: buildingcash/json-to-markdown-table-action@v1
-      #   id: table
-      #   with:
-      #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
-      # - name: Lighthouse Report
-      #   uses: manrueda/lighthouse-report-action@v1.1.2
-      #   id: lhreport
-      #   with:
-      #     reports: tmp/artifacts
+      - name: Test Results to Markdown Table
+        uses: buildingcash/json-to-markdown-table-action@v1
+        id: table
+        with:
+          json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+      - name: Lighthouse Report
+        uses: manrueda/lighthouse-report-action@v1.1.2
+        id: lhreport
+        with:
+          reports: tmp/artifacts
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
@@ -298,9 +298,11 @@ jobs:
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "text": "${{ needs.call-deploy-workflow.result }} ${{ steps.notification-emoji.outputs.EMOJI }}"
                 "fields": [{
+                  "title": "LightHouse Results",
+                  "value": "${{ steps.table.outputs.table }}"
+                },{
                   "title": "Verify Moodle",
-                  "title_link": "${{ env.APP_HOST_URL }}/admin/index.php",
-                  "value": "Verify that the site still works and updates have been completed. Admin access required for updates."
+                  "value": "Verify that the site still works and updates have been completed. Admin access required for updates.<p><a href=\"${{ env.APP_HOST_URL }}/admin/index.php\">Moodle (${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }})</a></p>"
                 },{
                   "title": "DB",
                   "value": "${{ needs.db.result }}"
