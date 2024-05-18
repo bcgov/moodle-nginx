@@ -6,7 +6,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 oc secrets link default artifactory-m950-learning --for=pull
 
 # Enable Moodle maintenance mode
-sh ./enable-maintenance.sh
+sh ./openshift/scripts/enable-maintenance.sh
 
 sleep 10
 
