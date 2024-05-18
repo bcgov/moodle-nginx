@@ -171,11 +171,12 @@ sleep 60
 COUNT=0
 SLEEP=10
 while true; do
+  # Make sure we have the most current name of the pod created by the job
   job_status=$(oc get jobs migrate-build-files -o 'jsonpath={..status.failed}')
+  pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
   message=$(oc logs $pod_name)
   if [[ $job_status > 0 ]]; then
-    echo "Error: $message"
-    echo "migrate-build-files job has failed... Exiting..."
+    echo "migrate-build-files job has failed... Exiting due to error: $message"
     exit 1
   fi
   if [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') != "1" ]]; then

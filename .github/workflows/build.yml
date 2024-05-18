@@ -254,11 +254,24 @@ jobs:
       #   id: table
       #   with:
       #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+      - name: Audit URLs using Lighthouse
+        uses: treosh/lighthouse-ci-action@v11
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
+        with:
+          urls: |
+            https://${{ env.APP_HOST_URL }}
+            https://${{ env.APP_HOST_URL }}/login/
+          budgetPath: config/lighthouse/overrides.json # test performance budgets
+          uploadArtifacts: true # save results as an action artifacts
+          temporaryPublicStorage: true # upload lighthouse report to the temporary storage
+          configPath: config/lighthouse/lighthouserc.json # custom lighthouse configuration
       - name: Lighthouse Report
         uses: manrueda/lighthouse-report-action@v1.1.2
         id: lhreport
         with:
-          reports: tmp/artifacts
+          reports: '.lighthouseci'
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
