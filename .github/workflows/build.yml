@@ -192,25 +192,10 @@ jobs:
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
-  wait:
-    runs-on: ubuntu-latest
-    name: ⌛ Wait for 1 min
-    needs: [checkEnv, call-deploy-workflow]
-    if: |
-      always() &&
-      needs.checkEnv.result == 'success' &&
-      needs.call-deploy-workflow.result == 'success' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
-    steps:
-      - name: Wait a minute
-        run: sleep 60s
-        shell: bash
-
   lighthouse-check:
     name: 👀 Test
     runs-on: ubuntu-latest
-    needs: [checkEnv, call-deploy-workflow, wait]
+    needs: [checkEnv, call-deploy-workflow]
     outputs:
       lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
     if: |

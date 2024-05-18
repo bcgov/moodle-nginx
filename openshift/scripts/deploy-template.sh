@@ -165,6 +165,7 @@ done
 echo "Pod $pod_name is now running."
 
 echo "Waiting for $pod_name job to complete..."
+
 sleep 60
 
 COUNT=0
@@ -180,7 +181,7 @@ while true; do
   if [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') != "1" ]]; then
     break
   fi
-  echo "migrate-build-files job is still running... $(($COUNT * $SLEEP)) seconds..."
+  echo "migrate-build-files job is still running... $(($COUNT * $SLEEP + 60)) seconds..."
   COUNT=$((COUNT + 1))
   sleep $SLEEP
 done
@@ -253,6 +254,7 @@ sleep 10
 
 echo "Disabling maintenance mode..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
+
 echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
 oc scale dc/maintenance-message --replicas=0

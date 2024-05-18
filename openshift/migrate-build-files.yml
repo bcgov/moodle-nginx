@@ -75,7 +75,7 @@ objects:
                 sh /usr/local/bin/migrate-build-files.sh
                 # chown -R www-data:www-data /var/www/html
              imagePullPolicy: Always
-         restartPolicy: OnFailure
+         restartPolicy: Never
 parameters:
   - name: IMAGE_REPO
     required: true

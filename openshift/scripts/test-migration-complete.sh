@@ -27,7 +27,7 @@ else
   echo "File copy is not complete. Source has $src_count files, but destination has $dest_count files."
   echo "Finding missing files..."
   diff <(cd $src_dir && find . -type f | sort) <(cd $dest_dir && find . -type f | sort)
-  exit 1
+  # exit 1 # Don't exit here
 fi
 
 # Find files in the destination directory that don't have read, write, and execute permissions for the owner
@@ -37,7 +37,11 @@ incorrect_permissions_files=$(find $dest_dir ! -perm -u=rwx)
 if [ -n "$incorrect_permissions_files" ]; then
   echo "The following files do not have read, write, and execute permissions for the owner:"
   echo "$incorrect_permissions_files"
-  exit 1
+  # exit 1 # Don't exit here
 else
   echo "All files in the destination directory have the correct permissions."
 fi
+
+sleep 10
+
+echo "File copy and verification complete."

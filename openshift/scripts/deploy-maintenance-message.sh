@@ -41,7 +41,7 @@ else
   oc delete dc/$BUILD_NAME -n $DEPLOY_NAMESPACE
   oc delete svc/$BUILD_NAME -n $DEPLOY_NAMESPACE
 
-  sleep 5
+  sleep 10
 
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
