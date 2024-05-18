@@ -171,9 +171,9 @@ sleep 60
 COUNT=0
 SLEEP=10
 while true; do
-  job_status=$(oc get jobs migrate-build-files -o 'jsonpath={..status.conditions[?(@.type=="Failed")].status}')
-  message=$(oc get jobs migrate-build-files -o 'jsonpath={..status.conditions[?(@.type=="Failed")].message}')
-  if [[ $job_status == "True" ]]; then
+  job_status=$(oc get jobs migrate-build-files -o 'jsonpath={..status.failed}')
+  message=$(oc logs $pod_name -o 'jsonpath={..status.conditions[?(@.type=="Failed")].message}')
+  if [[ $job_status > 0 ]]; then
     echo "Error: $message"
     echo "migrate-build-files job has failed... Exiting..."
     exit 1
