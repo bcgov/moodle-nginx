@@ -11,12 +11,12 @@ objects:
    spec:
      parallelism: 1
      completions: 1
-     backoffLimit: 6
+     backoffLimit: 80
      template:
        metadata:
          name: migrate-build-files
        spec:
-         terminationGracePeriodSeconds: 600
+         terminationGracePeriodSeconds: 108000
          volumes:
            - name: moodle-data
              persistentVolumeClaim:
