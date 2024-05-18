@@ -264,11 +264,11 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Test Results to Markdown Table
-        uses: buildingcash/json-to-markdown-table-action@v1
-        id: table
-        with:
-          json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+      # - name: Test Results to Markdown Table
+      #   uses: buildingcash/json-to-markdown-table-action@v1
+      #   id: table
+      #   with:
+      #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
       - name: Lighthouse Report
         uses: manrueda/lighthouse-report-action@v1.1.2
         id: lhreport
