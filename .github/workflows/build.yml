@@ -259,6 +259,7 @@ jobs:
         id: lhreport
         with:
           reports: tmp/artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
