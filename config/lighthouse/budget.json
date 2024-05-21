@@ -29,6 +29,20 @@
       {
         "metric": "largest-contentful-paint",
         "budget": 6000
+      },
+      {
+        "metric": "interactive",
+        "budget": 8000
+      },
+      {
+        "metric": "total-blocking-time",
+        "budget": 1500
+      }
+    ],
+    "accessibility": [
+      {
+        "resourceType": "total",
+        "budget": 100
       }
     ]
   }
