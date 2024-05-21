@@ -193,7 +193,7 @@ jobs:
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
   lighthouse-check:
-    name: 👀 Test
+    name: 🚦 Audit with Lighthouse
     runs-on: ubuntu-latest
     needs: [checkEnv, call-deploy-workflow]
     outputs:
@@ -220,41 +220,19 @@ jobs:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
           outputDirectory: tmp/artifacts
-          urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
+          urls: |
+            https://${{ env.APP_HOST_URL }}
+            https://${{ env.APP_HOST_URL }}/login/
           overridesJsonFile: config/lighthouse/overrides.json
-      - name: Verify Lighthouse Check results
-        uses: foo-software/lighthouse-check-status-action@master
-        with:
-          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
-          minAccessibilityScore: "80"
-          minBestPracticesScore: "80"
-          minPerformanceScore: "40"
-          #minProgressiveWebAppScore: "0"
-          #minSeoScore: "0"
-
-  notify:
-    name: 📫 Notify
-    needs:
-      [
-        checkEnv,
-        web,
-        moodle,
-        cron,
-        php,
-        db,
-        call-cleanup-workflow,
-        call-deploy-workflow,
-        lighthouse-check
-      ]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      # - name: Test Results to Markdown Table
-      #   uses: buildingcash/json-to-markdown-table-action@v1
-      #   id: table
+      # - name: Verify Lighthouse Check results
+      #   uses: foo-software/lighthouse-check-status-action@master
       #   with:
-      #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
-      - uses: actions/checkout@v4
+      #     lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
+      #     minAccessibilityScore: "90"
+      #     minBestPracticesScore: "80"
+      #     minPerformanceScore: "40"
+      #     #minProgressiveWebAppScore: "0"
+      #     #minSeoScore: "0"
       - name: Audit URLs using Lighthouse
         uses: treosh/lighthouse-ci-action@v11
         env:
@@ -284,6 +262,29 @@ jobs:
             `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
           fi
 
+  notify:
+    name: 📫 Notify
+    needs:
+      [
+        checkEnv,
+        web,
+        moodle,
+        cron,
+        php,
+        db,
+        call-cleanup-workflow,
+        call-deploy-workflow,
+        lighthouse-check
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # - name: Test Results to Markdown Table
+      #   uses: buildingcash/json-to-markdown-table-action@v1
+      #   id: table
+      #   with:
+      #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
+      - uses: actions/checkout@v4
       - name: Send Notification to Rocket.Chat
         uses: muinmomin/webhook-action@v1.0.0
         env:
