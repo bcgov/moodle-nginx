@@ -264,7 +264,7 @@ jobs:
             https://${{ env.APP_HOST_URL }}
             https://${{ env.APP_HOST_URL }}/login/
           budgetPath: config/lighthouse/budget.json # test performance budgets
-          uploadArtifacts: true # save results as an action artifacts
+          uploadArtifacts: false # save results as an action artifacts
           temporaryPublicStorage: true # upload lighthouse report to the temporary storage
           #configPath: ../config/lighthouse/lighthouserc.json # custom lighthouse configuration
       - name: Lighthouse Report
