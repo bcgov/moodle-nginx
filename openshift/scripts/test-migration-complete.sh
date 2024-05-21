@@ -28,7 +28,8 @@ else
   echo "Finding missing files..."
   cd $src_dir && find . -type f | sort > /tmp/src_files
   cd $dest_dir && find . -type f | sort > /tmp/dest_files
-  diff /tmp/src_files /tmp/dest_files
+  # diff /tmp/src_files /tmp/dest_files
+  diff -qr /tmp/src_files /tmp/dest_files -x ".git"
   rm /tmp/src_files /tmp/dest_files
 
   # exit 1 # Don't exit here

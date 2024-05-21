@@ -266,7 +266,7 @@ jobs:
           budgetPath: config/lighthouse/budget.json # test performance budgets
           uploadArtifacts: true # save results as an action artifacts
           temporaryPublicStorage: true # upload lighthouse report to the temporary storage
-          configPath: ./config/lighthouse/lighthouserc.json # custom lighthouse configuration
+          configPath: ../config/lighthouse/lighthouserc.json # custom lighthouse configuration
       - name: Lighthouse Report
         uses: manrueda/lighthouse-report-action@v1.1.2
         id: lhreport
