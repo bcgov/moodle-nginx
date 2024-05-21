@@ -228,8 +228,6 @@ do
   fi
 done
 
-sleep 10
-
 echo "Purging caches..."
 oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
 
