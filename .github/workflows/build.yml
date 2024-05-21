@@ -224,15 +224,15 @@ jobs:
             https://${{ env.APP_HOST_URL }}
             https://${{ env.APP_HOST_URL }}/login/
           overridesJsonFile: config/lighthouse/overrides.json
-      # - name: Verify Lighthouse Check results
-      #   uses: foo-software/lighthouse-check-status-action@master
-      #   with:
-      #     lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
-      #     minAccessibilityScore: "90"
-      #     minBestPracticesScore: "80"
-      #     minPerformanceScore: "40"
-      #     #minProgressiveWebAppScore: "0"
-      #     #minSeoScore: "0"
+      - name: Verify Lighthouse Check results
+        uses: foo-software/lighthouse-check-status-action@master
+        with:
+          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
+          minAccessibilityScore: "90"
+          minBestPracticesScore: "80"
+          minPerformanceScore: "40"
+          #minProgressiveWebAppScore: "0"
+          #minSeoScore: "0"
       - name: Audit URLs using Lighthouse
         uses: treosh/lighthouse-ci-action@v11
         env:
