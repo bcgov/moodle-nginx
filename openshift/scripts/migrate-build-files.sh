@@ -1,11 +1,11 @@
 src_dir='/app/public'
 dest_dir='/var/www/html'
 
-echo "Starting migration... Script should take ~10 min..."
-echo "Deleting shared Moodle files... in 10...9...8..."
-
-echo "Replace Moodle index with maintenance page..."
+echo "Replacing Moodle index with maintenance page..."
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
+
+echo "Starting migration... Script should take about 10 min."
+echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
