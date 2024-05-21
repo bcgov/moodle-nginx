@@ -165,7 +165,7 @@ jobs:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
+    needs: [checkEnv, db, php, cron, moodle, web, call-cleanup-workflow]
     if: |
       always() &&
       needs.checkEnv.result == 'success' &&

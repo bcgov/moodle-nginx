@@ -4,11 +4,31 @@
     "resourceSizes": [
       {
         "resourceType": "document",
-        "budget": 18
+        "budget": 30000
       },
       {
         "resourceType": "total",
-        "budget": 200
+        "budget": 4000
+      }
+    ],
+    "resourceCounts": [
+      {
+        "resourceType": "font",
+        "budget": 5
+      },
+      {
+        "resourceType": "total",
+        "budget": 100
+      }
+    ],
+    "timings": [
+      {
+        "metric": "first-contentful-paint",
+        "budget": 4000
+      },
+      {
+        "metric": "largest-contentful-paint",
+        "budget": 6000
       }
     ]
   }
