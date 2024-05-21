@@ -82,5 +82,5 @@ COPY ./config/php/php.ini "$PHP_INI_DIR/conf.d/moodle-php.ini"
 COPY ./config/php/php-fpm.conf "$ETC_DIR/php-fpm.d/moodle.conf"
 
 # Add commands for site maintenance / upgrades
-COPY ./openshift/scripts/enable-maintenence.sh /usr/local/bin/enable-maintenence.sh
+COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 COPY ./openshift/scripts/moodle-upgrade.sh /usr/local/bin/moodle-upgrade.sh
