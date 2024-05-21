@@ -16,9 +16,16 @@ echo 'File copy complete.'
 
 echo 'Verifying file copy...'
 
+echo ""
+
+echo "Comparing files in source and destination directories..."
+(rsync -rcn --out-format="%n" $src_dir $dest_dir && rsync -rcn --out-format="%n" $dest_dir $src_dir) | sort | uniq
+
 # Count the number of files in source and destination directories
 src_count=$(find $src_dir -type f | wc -l)
 dest_count=$(find $dest_dir -type f | wc -l)
+
+echo ""
 
 # Compare the file counts
 if [ $src_count -eq $dest_count ]; then
@@ -36,17 +43,19 @@ else
 fi
 
 # Find files in the destination directory that don't have read, write, and execute permissions for the owner
-incorrect_permissions_files=$(find $dest_dir ! -perm -u=rwx)
+incorrect_permissions_files=$(find $dest_dir -type d ! -perm 755 -o -type f ! -perm 644)
+
+echo ""
 
 # Check if any files were found
 if [ -n "$incorrect_permissions_files" ]; then
-  echo "The following files do not have read, write, and execute permissions for the owner:"
+  echo "The following files in the moodle directory do not have the correct permissions:"
   echo "$incorrect_permissions_files"
   # exit 1 # Don't exit here
 else
   echo "All files in the destination directory have the correct permissions."
 fi
 
-sleep 10
+echo ""
 
 echo "File copy and verification complete."

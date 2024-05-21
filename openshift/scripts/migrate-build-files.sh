@@ -36,7 +36,9 @@ cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 echo "Copying files..."
 cp ${src_dir}/* ${dest_dir} -rp || true
 
-# echo "Changing file ownership to www-data..."
-# chown -R www-data:www-data /var/www/html || true
+# Set permissions for moodle directory
+find $dest_dir -type d -exec chmod 755 {} \;
+find $dest_dir -type f -exec chmod 644 {} \;
+chown -R root:root $dest_dir
 
 sh /usr/local/bin/test-migration-complete.sh
