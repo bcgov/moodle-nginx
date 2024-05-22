@@ -41,8 +41,8 @@
     ],
     "accessibility": [
       {
-        "resourceType": "total",
-        "budget": 100
+        "metric": "accessibility",
+        "budget": 1500
       }
     ]
   }
