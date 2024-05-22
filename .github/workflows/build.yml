@@ -296,7 +296,7 @@ jobs:
               "attachments": [{
                 "title": "View Job on GitHub",
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
-                "text": "${{ needs.call-deploy-workflow.result }} ${{ steps.notification-emoji.outputs.EMOJI }}"
+                "text": "${{ needs.call-deploy-workflow.result }} ${{ steps.notification-emoji.outputs.EMOJI }}",
                 "fields": [{
                   "title": "LightHouse Results",
                   "value": "${{ steps.table.outputs.table }}"
