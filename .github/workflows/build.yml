@@ -9,7 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "YES"
+  SKIP_BUILDS: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -251,14 +251,6 @@ jobs:
         with:
           reports: '.lighthouseci'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set Emoji for Notification Status Icon
-        id: notification-emoji
-        run: |
-          if [[ "${{ needs.call-deploy-workflow.result }}" == "success" ]]; then
-            `echo "EMOJI=:rocket:" >> $GITHUB_OUTPUT`
-          else
-            `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
-          fi
 
   notify:
     name: 📫 Notify
@@ -283,6 +275,14 @@ jobs:
       #   with:
       #     json: ${{ needs.lighthouse-check.outputs.lighthouseCheckResults }}
       - uses: actions/checkout@v4
+      - name: Set Emoji for Notification Status Icon
+        id: notification-emoji
+        run: |
+          if [[ "${{ needs.call-deploy-workflow.result }}" == "success" ]]; then
+            `echo "EMOJI=:rocket:" >> $GITHUB_OUTPUT`
+          else
+            `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
+          fi
       - name: Send Notification to Rocket.Chat
         uses: muinmomin/webhook-action@v1.0.0
         env:
@@ -304,25 +304,28 @@ jobs:
                   "title": "Verify Moodle",
                   "value": "Verify that the site still works and updates have been completed. Admin access required for updates.<p><a href=\"${{ env.APP_HOST_URL }}/admin/index.php\">Moodle (${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }})</a></p>"
                 },{
-                  "title": "DB",
+                  "title": "Build DB",
                   "value": "${{ needs.db.result }}"
                 },{
-                  "title": "PHP",
+                  "title": "Build PHP",
                   "value": "${{ needs.php.result }}"
                 },{
-                  "title": "Cron",
+                  "title": "Build Cron",
                   "value": "${{ needs.cron.result }}"
                 },{
-                  "title": "Web",
+                  "title": "Build Web",
                   "value": "${{ needs.web.result }}"
                 },{
-                  "title": "Moodle",
+                  "title": "Build Moodle",
                   "value": "${{ needs.moodle.result }}"
                 },{
-                  "title": "Cleanup",
+                  "title": "Cleanup Resources",
                   "value": "${{ needs.call-cleanup-workflow.result }}"
                 },{
-                  "title": "Lighthouse",
+                  "title": "Deploy to OpenShift",
+                  "value": "${{ needs.call-deploy-workflow.result }}"
+                },{
+                  "title": "Tested with Lighthouse",
                   "value": "${{ needs.lighthouse-check.result }}"
                 }]
               }]
