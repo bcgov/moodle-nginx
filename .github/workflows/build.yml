@@ -9,7 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -220,9 +220,7 @@ jobs:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
         with:
           outputDirectory: tmp/artifacts
-          urls: |
-            https://${{ env.APP_HOST_URL }}
-            https://${{ env.APP_HOST_URL }}/login/
+          urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
           overridesJsonFile: config/lighthouse/overrides.json
       - name: Verify Lighthouse Check results
         uses: foo-software/lighthouse-check-status-action@master

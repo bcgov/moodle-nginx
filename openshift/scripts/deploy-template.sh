@@ -258,6 +258,7 @@ echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
 oc scale dc/maintenance-message --replicas=0
 
-sleep 10
-
 echo "Deployment complete."
+
+# Wait for things to warm up a bit before proceeding with the [lighthouse] tests
+sleep 60
