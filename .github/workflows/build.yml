@@ -219,51 +219,12 @@ jobs:
         uses: browser-actions/setup-chrome@latest
         with:
           install-dependencies: false
-      # - name: Lighthouse
-      #   uses: foo-software/lighthouse-check-action@master
-      #   id: lighthouseCheck
-      #   env:
-      #     CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-      #     APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
-      #   with:
-      #     outputDirectory: tmp/artifacts
-      #     urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
-      #     overridesJsonFile: config/lighthouse/overrides.json
       - name: Lighthouse
         run: node config/lighthouse/lighthouse-auth.js
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
           USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
           PASSWORD: ${{ secrets.MOODLE_TESTER_PASSWORD }}
-      - name: Verify Lighthouse Check results
-        uses: foo-software/lighthouse-check-status-action@master
-        with:
-          lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
-          minAccessibilityScore: "90"
-          minBestPracticesScore: "80"
-          minPerformanceScore: "40"
-          #minProgressiveWebAppScore: "0"
-          #minSeoScore: "0"
-      - name: Audit URLs using Lighthouse
-        uses: treosh/lighthouse-ci-action@v11
-        env:
-          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.sha }}
-          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-          APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
-        with:
-          urls: |
-            https://${{ env.APP_HOST_URL }}
-            https://${{ env.APP_HOST_URL }}/login/
-          budgetPath: config/lighthouse/budget.json # test performance budgets
-          uploadArtifacts: false # save results as an action artifacts
-          temporaryPublicStorage: true # upload lighthouse report to the temporary storage
-          configPath: config/lighthouse/lighthouserc.json # custom lighthouse configuration
-      - name: Lighthouse Report
-        uses: manrueda/lighthouse-report-action@v1.1.2
-        id: lhreport
-        with:
-          reports: '.lighthouseci'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   notify:
     name: 📫 Notify

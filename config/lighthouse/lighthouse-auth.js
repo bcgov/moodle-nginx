@@ -7,7 +7,7 @@ async function run() {
   const page = await browser.newPage();
   const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
-  console.log("🚀 ~ puppeteer > run ~ testURL:", testURL);
+  console.log("🚦 Test URL: ", testURL);
 
   await page.goto(testURL); // Use the APP_HOST_URL environment variable
 
@@ -16,13 +16,11 @@ async function run() {
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
-    throw new Error('MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
+    throw new Error('🚦 MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
   }
 
   await page.type('#username', username);
   await page.type('#password', password);
-
-  console.log('About to click login button');
   await page.screenshot({path: 'before_click.png'}); // Take a screenshot before clicking the login button
 
   // Wait for both the click and navigation
@@ -31,10 +29,9 @@ async function run() {
     page.waitForNavigation({timeout: 60000}),
   ]);
 
-  console.log('Clicked login button');
   await page.screenshot({path: 'after_click.png'}); // Take a screenshot after clicking the login button
 
-  console.log('Logged in to ' + process.env.APP_HOST_URL);
+  console.log('🚦 Logged in to ' + process.env.APP_HOST_URL);
 
   // Define the paths you want to navigate
   const paths = [
@@ -52,14 +49,31 @@ async function run() {
   for (const path of paths) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
 
-    console.log(`Running Lighthouse on ${url}`);
+    console.log(`🚦 Running Lighthouse on ${url}`);
 
     const {lhr} = await lighthouse(url, {
       port: (new URL(browser.wsEndpoint())).port,
-      output: 'html',
+      output: 'json',
       logLevel: 'info',
     });
-    console.log(`Lighthouse score for ${path}: ${Object.values(lhr.categories).map(c => c.score).join(', ')}`);
+
+    // Get the scores
+    const accessibilityScore = lhr.categories.accessibility.score * 100;
+    const performanceScore = lhr.categories.performance.score * 100;
+    const bestPracticesScore = lhr.categories['best-practices'].score * 100;
+
+    // Verify the scores
+    if (accessibilityScore < 90) {
+      throw new Error(`🚦 Accessibility score ${accessibilityScore} is less than 90`);
+    }
+    if (performanceScore < 40) {
+      throw new Error(`🚦 Performance score ${performanceScore} is less than 40`);
+    }
+    if (bestPracticesScore < 80) {
+      throw new Error(`🚦 Best Practices score ${bestPracticesScore} is less than 80`);
+    }
+
+    console.log('✔️ PASSED: All scores are above the minimum thresholds');
   }
 
   await browser.close();
