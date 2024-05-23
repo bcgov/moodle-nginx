@@ -138,7 +138,7 @@ jobs:
           DB_NAME: ${{ inputs.DB_NAME }}
 
       # Deploy Redis
-      - name: Deploy Redis Deployment
+      - name: Deploy Redis StatefulSet (${{ inputs.REDIS_DEPLOYMENT_NAME  }})
         if: success()
         run: bash ./openshift/scripts/deploy-redis.sh
         env:

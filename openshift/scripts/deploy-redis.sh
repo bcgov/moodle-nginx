@@ -1,11 +1,7 @@
 #!/bin/bash
 
 # Create a headless service to control the domain of the Redis cluster
-oc create service clusterip $REDIS_DEPLOYMENT_NAME --tcp=6379:6379 -n $DEPLOY_NAMESPACE
-
-export REDIS_IMAGE=$REDIS_IMAGE
-export REDIS_DEPLOYMENT_NAME=$REDIS_DEPLOYMENT_NAME
-export REPLICAS=$REPLICAS
+oc create service clusterip $REDIS_DEPLOYMENT_NAME --tcp=6379:6379 -n $DEPLOY_NAMESPACE``
 
 # Create a StatefulSet for Redis
 echo "Deploy Redis to OpenShift ..."
