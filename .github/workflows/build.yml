@@ -169,7 +169,7 @@ jobs:
     secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, web, call-cleanup-workflow]
     if: |
-      needs.checkEnv.outputs.SKIP_DEPLOY == 'NO' &&
+      (always() && needs.checkEnv.outputs.SKIP_DEPLOY == 'NO') &&
       needs.checkEnv.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
