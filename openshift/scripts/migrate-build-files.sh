@@ -9,11 +9,19 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Count the number of files before deletion
-initial_count=$(find ${dest_dir} -type f | wc -l)
+# Use shopt to make globbing include hidden files
+shopt -s dotglob
+
+# Now the cp and rm commands will include hidden files
+cp -R /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
+rm -rf ${dest_dir}/*
+
+# Use find with -not -name to exclude directories from the file count
+initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
+final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 
 echo "Deleting..."
-rm -rf ${dest_dir}/* || true
+rm -rf ${dest_dir}/* # || true
 
 # Count the number of files after deletion
 final_count=$(find ${dest_dir} -type f | wc -l)
