@@ -3,17 +3,13 @@ const {URL} = require('url');
 
 async function run() {
   // Use Puppeteer to launch a browser and perform the login
-  console.log("Starting Lighthouse Authenticated Test with Puppeteer");
   const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
   const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
-
-  console.log("Test URL: ", testURL);
-
-  await page.goto(testURL); // Use the APP_HOST_URL environment variable
-
   const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
   const password = process.env.PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
+
+  await page.goto(testURL); // Use the APP_HOST_URL environment variable
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
@@ -32,8 +28,6 @@ async function run() {
 
   await page.screenshot({path: 'after_click.png'}); // Take a screenshot after clicking the login button
 
-  console.log('Logged in to ', process.env.APP_HOST_URL);
-
   // Define the paths you want to navigate
   const paths = [
     '/course/view.php?id=60',
@@ -43,14 +37,15 @@ async function run() {
     '/mod/url/view.php?id=3143'
   ];
 
+  const pathCount = paths.length;
+  let pathsPassed = 0;
+
   // Import Lighthouse
   const lighthouse = (await import('lighthouse')).default;
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
-
-    console.log(`Running Lighthouse on ${url}`);
 
     const {lhr} = await lighthouse(url, {
       port: (new URL(browser.wsEndpoint())).port,
@@ -65,17 +60,19 @@ async function run() {
 
     // Verify the scores
     if (accessibilityScore < 90) {
-      throw new Error(`Accessibility score ${accessibilityScore} is less than 90`);
+      throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
     }
     if (performanceScore < 40) {
-      throw new Error(`Performance score ${performanceScore} is less than 40`);
+      throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
     }
     if (bestPracticesScore < 80) {
-      throw new Error(`Best Practices score ${bestPracticesScore} is less than 80`);
+      throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
-    console.log('✔️ PASSED: All scores are above the minimum thresholds');
+    pathsPassed++;
   }
+
+  console.log(`✔️ PASSED: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 
   await browser.close();
 }
