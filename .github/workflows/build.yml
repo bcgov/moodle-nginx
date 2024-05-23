@@ -225,7 +225,7 @@ jobs:
       #     urls: 'https://${{ env.APP_HOST_URL }},https://${{ env.APP_HOST_URL }}/login/'
       #     overridesJsonFile: config/lighthouse/overrides.json
       - name: Lighthouse
-        run: node fig/lighthouse/lighthouse-auth.js
+        run: node config/lighthouse/lighthouse-auth.js
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
           USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
