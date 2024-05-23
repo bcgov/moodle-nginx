@@ -9,8 +9,8 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "YES"
-  SKIP_DEPLOY: "YES"
+  SKIP_BUILDS: "NO"
+  SKIP_DEPLOY: "NO"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -195,7 +195,7 @@ jobs:
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
   lighthouse-check:
-    name: 🚦 Audit with Lighthouse
+    name: 🚦 Audit
     runs-on: ubuntu-latest
     needs: [checkEnv, call-deploy-workflow]
     outputs:
