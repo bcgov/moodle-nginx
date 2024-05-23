@@ -3,6 +3,7 @@ const {URL} = require('url');
 
 async function run() {
   // Use Puppeteer to launch a browser and perform the login
+  console.log("Starting Lighthouse Authenticated Test with Puppeteer");
   const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
   const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
@@ -31,7 +32,7 @@ async function run() {
 
   await page.screenshot({path: 'after_click.png'}); // Take a screenshot after clicking the login button
 
-  console.log('Logged in to ' + process.env.APP_HOST_URL);
+  console.log('Logged in to ', process.env.APP_HOST_URL);
 
   // Define the paths you want to navigate
   const paths = [
