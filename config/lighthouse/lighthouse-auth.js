@@ -11,8 +11,8 @@ async function run() {
 
   await page.goto(testURL); // Use the APP_HOST_URL environment variable
 
-  const username = process.env.MOODLE_TESTER_USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
-  const password = process.env.MOODLE_TESTER_PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
+  const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
+  const password = process.env.PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
