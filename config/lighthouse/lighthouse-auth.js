@@ -10,8 +10,17 @@ async function run() {
   console.log("🚀 ~ puppeteer > run ~ testURL:", testURL);
 
   await page.goto(testURL); // Use the APP_HOST_URL environment variable
-  await page.type('#username', process.env.MOODLE_TESTER_USERNAME); // Use the MOODLE_TESTER_USERNAME environment variable
-  await page.type('#password', process.env.MOODLE_TESTER_PASSWORD); // Use the MOODLE_TESTER_PASSWORD environment variable
+
+  const username = process.env.MOODLE_TESTER_USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
+  const password = process.env.MOODLE_TESTER_PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
+
+  // Check that the username and password are set and are strings
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    throw new Error('MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
+  }
+
+  await page.type('#username', username);
+  await page.type('#password', password);
   await page.click('#loginbtn');
   await page.waitForNavigation();
 
