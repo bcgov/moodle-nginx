@@ -25,12 +25,14 @@ async function run() {
   console.log('About to click login button');
   await page.screenshot({path: 'before_click.png'}); // Take a screenshot before clicking the login button
 
-  await page.click('#loginbtn');
+  // Wait for both the click and navigation
+  await Promise.all([
+    page.click('#loginbtn'),
+    page.waitForNavigation({timeout: 60000}),
+  ]);
 
   console.log('Clicked login button');
   await page.screenshot({path: 'after_click.png'}); // Take a screenshot after clicking the login button
-
-  await page.waitForNavigation({timeout: 60000}); // Increase the timeout to 60 seconds
 
   console.log('Logged in to ' + process.env.APP_HOST_URL);
 
@@ -49,7 +51,9 @@ async function run() {
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
+
     console.log(`Running Lighthouse on ${url}`);
+
     const {lhr} = await lighthouse(url, {
       port: (new URL(browser.wsEndpoint())).port,
       output: 'html',
