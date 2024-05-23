@@ -41,11 +41,10 @@ cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
 # Copy all files, including hidden ones
-find /path/to/source -type f -exec cp -t ${dest_dir} {} \+
+find ${src_dir} -type f -exec cp -t ${dest_dir} {} \+
 
 # Set permissions for moodle directory
 find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
 find $dest_dir -type f -mindepth 1 -exec chmod 644 {} \;
-# chown -R root:root $dest_dir
 
 sh /usr/local/bin/test-migration-complete.sh
