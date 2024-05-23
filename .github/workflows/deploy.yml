@@ -137,6 +137,16 @@ jobs:
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ inputs.DB_NAME }}
 
+      # Deploy Redis
+      - name: Deploy Redis Deployment
+        if: success()
+        run: bash ./openshift/scripts/deploy-redis.sh
+        env:
+          REDIS_IMAGE=${{ inputs.REDIS_IMAGE }}
+          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          REPLICAS=3
+
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})

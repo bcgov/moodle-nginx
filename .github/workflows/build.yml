@@ -254,7 +254,7 @@ jobs:
           else
             `echo "EMOJI=:boom:" >> $GITHUB_OUTPUT`
           fi
-      - name: Send Notification to Rocket.Chat
+      - name: 📫 Send Notification
         uses: muinmomin/webhook-action@v1.0.0
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca

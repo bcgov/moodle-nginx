@@ -19,7 +19,7 @@ echo 'Verifying file copy...'
 echo ""
 
 echo "Comparing files in source and destination directories..."
-(rsync -rcn --out-format="%n" $src_dir $dest_dir && rsync -rcn --out-format="%n" $dest_dir $src_dir) | sort | uniq
+(rsync -rcn --out-format="%n" --existing $src_dir/ $dest_dir/ | sort | uniq)
 
 # Count the number of files in source and destination directories
 # src_count=$(find $src_dir -type f | wc -l)
