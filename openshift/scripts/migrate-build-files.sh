@@ -21,7 +21,8 @@ initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 
 echo "Deleting..."
-rm -rf ${dest_dir}/* # || true
+# Delete all files, including hidden ones
+find ${dest_dir} -type f -exec rm -f {} \;
 
 # Count the number of files after deletion
 final_count=$(find ${dest_dir} -type f | wc -l)
@@ -42,8 +43,8 @@ echo "Replace Moodle index with maintenance page (again, since we deleted it)...
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
-cp ${src_dir}/* ${dest_dir} -rp # || true
-cp ${src_dir}/.* ${dest_dir} -rp
+# Copy all files, including hidden ones
+find /path/to/source -type f -exec cp -t ${dest_dir} {} \+
 
 # Set permissions for moodle directory
 find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
