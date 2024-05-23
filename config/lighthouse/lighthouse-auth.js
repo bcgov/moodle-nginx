@@ -21,8 +21,16 @@ async function run() {
 
   await page.type('#username', username);
   await page.type('#password', password);
+
+  console.log('About to click login button');
+  await page.screenshot({path: 'before_click.png'}); // Take a screenshot before clicking the login button
+
   await page.click('#loginbtn');
-  await page.waitForNavigation();
+
+  console.log('Clicked login button');
+  await page.screenshot({path: 'after_click.png'}); // Take a screenshot after clicking the login button
+
+  await page.waitForNavigation({timeout: 60000}); // Increase the timeout to 60 seconds
 
   console.log('Logged in to ' + process.env.APP_HOST_URL);
 
