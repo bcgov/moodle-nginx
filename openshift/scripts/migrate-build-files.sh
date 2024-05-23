@@ -34,7 +34,8 @@ echo "Replace Moodle index with maintenance page (again, since we deleted it)...
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
-cp ${src_dir}/* ${dest_dir} -rp || true
+cp ${src_dir}/* ${dest_dir} -rp # || true
+cp ${src_dir}/.* ${dest_dir} -rp
 
 # Set permissions for moodle directory
 find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
