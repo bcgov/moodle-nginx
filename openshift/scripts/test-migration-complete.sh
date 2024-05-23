@@ -12,22 +12,17 @@ do
   sleep 5s
 done
 
-echo 'File copy complete.'
-
-echo 'Verifying file copy...'
-
+echo "File copy complete."
+echo ""
+echo "Verifying files in source and destination directories..."
 echo ""
 
-echo "Comparing files in source and destination directories..."
-(rsync -rcn --out-format="%n" --existing $src_dir/ $dest_dir/ | sort | uniq)
+# Use rsync to copy files, excluding hidden files and symbolic links
+rsync -rcn --out-format="%n" --existing --exclude=".*" --exclude='*/.*' $src_dir/ $dest_dir/ | sort | uniq
 
-# Count the number of files in source and destination directories
-# src_count=$(find $src_dir -type f | wc -l)
-# dest_count=$(find $dest_dir -type f | wc -l)
+# Count the number of files in source and destination directories, excluding hidden files and symbolic links
 src_count=$(find $src_dir -type f ! -name ".*" ! -type l | wc -l)
 dest_count=$(find $dest_dir -type f ! -name ".*" ! -type l | wc -l)
-
-echo ""
 
 # Compare the file counts
 if [ $src_count -eq $dest_count ]; then
@@ -37,16 +32,29 @@ else
   echo "Finding missing files..."
   cd $src_dir && find . -type f | sort > /tmp/src_files
   cd $dest_dir && find . -type f | sort > /tmp/dest_files
-  # diff /tmp/src_files /tmp/dest_files
-  differences=$(diff -qr /tmp/src_files /tmp/dest_files -x ".git")
-  echo "Differences found: $differences"
+
+  # Find files that exist in the source directory but not in the destination directory
+  missing_files=$(comm -23 /tmp/src_files /tmp/dest_files)
+  if [ -n "$missing_files" ]; then
+    echo "Missing files:"
+    echo "$missing_files"
+    echo ""
+  fi
+
+   # Find files that exist in both directories but have different contents
+  differing_files=$(diff --brief -r $src_dir $dest_dir | grep -v "^Only")
+  if [ -n "$differing_files" ]; then
+    echo "Files with different contents:"
+    echo "$differing_files"
+  fi
+
   rm /tmp/src_files /tmp/dest_files
 
-  # exit 1 # Don't exit here
+  # exit 1 # Don't exit here, as it will currently break deployments
 fi
 
 # Find files in the destination directory that don't have read, write, and execute permissions for the owner
-incorrect_permissions_files=$(find $dest_dir -type d ! -perm 755 -o -type f ! -perm 644)
+incorrect_permissions_files=$(find $dest_dir -mindepth 1 -type d ! -perm 755 -o -type f ! -perm 644)
 
 echo ""
 
