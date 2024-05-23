@@ -202,7 +202,10 @@ jobs:
       lighthouseCheckResults: ${{ steps.lighthouseCheck.outputs.lighthouseCheckResults }}
     if: |
       always() &&
-      needs.call-deploy-workflow.result == 'success' &&
+      (
+        needs.call-deploy-workflow.result == 'success' ||
+        needs.checkEnv.outputs.SKIP_DEPLOY == 'YES'
+      ) &&
       !contains(needs.*.result, 'failure')
     steps:
       - uses: actions/checkout@v4
