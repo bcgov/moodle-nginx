@@ -188,6 +188,7 @@ jobs:
       BACKUP_HELM_CHART: ${{ needs.checkEnv.outputs.BACKUP_HELM_CHART }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
+      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
       REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}

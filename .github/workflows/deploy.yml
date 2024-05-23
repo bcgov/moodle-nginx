@@ -39,6 +39,9 @@ on:
       CRON_DEPLOYMENT_NAME:
         required: true
         type: string
+      REDIS_IMAGE:
+        required: true
+        type: string
       REDIS_DEPLOYMENT_NAME:
         required: true
         type: string
