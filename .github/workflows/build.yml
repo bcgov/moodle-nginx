@@ -9,7 +9,8 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
+  SKIP_DEPLOY: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -72,6 +73,7 @@ jobs:
       BACKUP_HELM_CHART: ${{ env.BACKUP_HELM_CHART }}
       CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
       SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
+      SKIP_DEPLOY: ${{ env.SKIP_DEPLOY }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -167,7 +169,7 @@ jobs:
     secrets: inherit
     needs: [checkEnv, db, php, cron, moodle, web, call-cleanup-workflow]
     if: |
-      always() &&
+      needs.checkEnv.outputs.SKIP_DEPLOY == 'NO' &&
       needs.checkEnv.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
