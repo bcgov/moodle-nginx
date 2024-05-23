@@ -3,7 +3,7 @@ const {URL} = require('url');
 
 async function run() {
   // Use Puppeteer to launch a browser and perform the login
-  const browser = await puppeteer.launch({headless: false});
+  const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
   const testURL = process.env.APP_HOST_URL + '/login/index.php'
   await page.goto(testURL); // Use the APP_HOST_URL environment variable
