@@ -48,7 +48,7 @@ async function run() {
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
-    const url = process.env.APP_HOST_URL + path;
+    const url = 'https://' + process.env.APP_HOST_URL + path;
     console.log(`Running Lighthouse on ${url}`);
     const {lhr} = await lighthouse(url, {
       port: (new URL(browser.wsEndpoint())).port,
