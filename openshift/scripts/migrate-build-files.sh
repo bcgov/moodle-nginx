@@ -9,9 +9,6 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Use shopt to make globbing include hidden files
-shopt -s dotglob
-
 # Now the cp and rm commands will include hidden files
 cp -R /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 rm -rf ${dest_dir}/*
