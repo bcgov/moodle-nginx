@@ -68,7 +68,7 @@ jobs:
       clean1: ${{ steps.delete-from-os.outputs.clean1 }}
     steps:
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: dev
 
