@@ -1,6 +1,6 @@
 #!/bin/bash
 
-$route_name=$REDIS_DEPLOYMENT_NAME
+route_name=$REDIS_DEPLOYMENT_NAME
 if [[ `oc describe route $route_name 2>&1` =~ "NotFound" ]]; then
   echo "Route NOT FOUND: $route_name - Skipping..."
 else
