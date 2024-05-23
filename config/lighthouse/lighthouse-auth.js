@@ -1,5 +1,4 @@
 const puppeteer = require('puppeteer');
-const lighthouse = require('lighthouse');
 const {URL} = require('url');
 
 async function run() {
@@ -23,6 +22,9 @@ async function run() {
     '/course/view.php?id=60&section=2#module-3080',
     '/mod/url/view.php?id=3143'
   ];
+
+  // Import Lighthouse
+  const lighthouse = (await import('lighthouse')).default;
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
