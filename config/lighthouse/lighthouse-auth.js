@@ -5,7 +5,10 @@ async function run() {
   // Use Puppeteer to launch a browser and perform the login
   const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
-  const testURL = process.env.APP_HOST_URL + '/login/index.php'
+  const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
+
+  console.log("🚀 ~ puppeteer > run ~ testURL:", testURL);
+
   await page.goto(testURL); // Use the APP_HOST_URL environment variable
   await page.type('#username', process.env.MOODLE_TESTER_USERNAME); // Use the MOODLE_TESTER_USERNAME environment variable
   await page.type('#password', process.env.MOODLE_TESTER_PASSWORD); // Use the MOODLE_TESTER_PASSWORD environment variable
