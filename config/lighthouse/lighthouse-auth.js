@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+const chromeLauncher = require('chrome-launcher');
 const {URL} = require('url');
 const options = {
   chromeFlags: ['--headless'],
@@ -7,8 +8,12 @@ const options = {
 const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
+  // Launch a new Chrome instance
+  const chrome = await chromeLauncher.launch({chromeFlags: ['--headless']});
+  options.port = chrome.port;
+
   // Use Puppeteer to launch a browser and perform the login
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.connect({browserURL: `http://127.0.0.1:${chrome.port}`});
   const page = await browser.newPage();
   const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
   const password = process.env.PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
@@ -88,6 +93,7 @@ async function runLighthouse(url, options, config = null) {
   // console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 
   await browser.close();
+  await chrome.kill();
 
   // Write the results to a JSON file:
   fs.writeFileSync('lighthouse-results.json', JSON.stringify(results));
