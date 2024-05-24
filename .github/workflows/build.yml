@@ -308,7 +308,7 @@ jobs:
                   "value": "${{ needs.call-deploy-workflow.result }}"
                 },{
                   "title": "Lighthouse Test Results",
-                  "value": "${{ needs.call-deploy-workflow.result }}"
+                  "value": "${{ needs.lighthouse-check.outputs.LHRESULT }}"
                 }]
               }]
             }
