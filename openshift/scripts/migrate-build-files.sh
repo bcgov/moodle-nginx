@@ -9,16 +9,13 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Relete all files - including hidden
-rm -rf ${dest_dir}/*
-
 # Use find with -not -name to exclude directories from the file count
 initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
-final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
-
+# Delete all files - including hidden ones
 echo "Deleting..."
-# Delete all files, including hidden ones
-find ${dest_dir} -type f -exec rm -f {} \;
+# find ${dest_dir} -type f -exec rm -f {} \;
+rm -rf ${dest_dir}/*
+final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 
 # Count the number of files after deletion
 final_count=$(find ${dest_dir} -type f | wc -l)
