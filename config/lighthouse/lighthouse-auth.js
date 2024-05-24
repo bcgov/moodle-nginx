@@ -1,5 +1,4 @@
 const puppeteer = require('puppeteer');
-const chromeLauncher = require('chrome-launcher');
 const {URL} = require('url');
 const options = {
   chromeFlags: ['--headless'],
@@ -9,6 +8,7 @@ const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
   // Launch a new Chrome instance
+  const chromeLauncher = (await import('chrome-launcher')).default;
   const chrome = await chromeLauncher.launch({chromeFlags: ['--headless']});
   options.port = chrome.port;
 
