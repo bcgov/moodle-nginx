@@ -34,7 +34,8 @@ async function runLighthouse(url, options, config = null) {
   await page.type('#username', username);
   await page.type('#password', password);
 
-  console.log('Current working directory:', process.cwd());
+  // console.log('Current working directory:', process.cwd());
+  // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
   await page.screenshot({path: 'before_click.png'}); // Take a screenshot before clicking the login button
 
