@@ -221,8 +221,7 @@ jobs:
           install-dependencies: false
       - name: Lighthouse
         run: |
-          LIGHTHOUSE_RESULTS=$(node config/lighthouse/lighthouse-auth.js)
-          echo "LIGHTHOUSE_RESULTS=$LIGHTHOUSE_RESULTS" >> $GITHUB_OUTPUT
+          `echo "lh_result=$(node config/lighthouse/lighthouse-auth.js)" >> $GITHUB_OUTPUT`
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
           USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
@@ -298,7 +297,7 @@ jobs:
                   "value": "${{ needs.call-deploy-workflow.result }}"
                 },{
                   "title": "Tested with Lighthouse",
-                  "value": "${{ needs.lighthouse-check.result }} : ${{ needs.lighthouse-check.outputs.LIGHTHOUSE_RESULTS }}"
+                  "value": "${{ needs.lighthouse-check.result }} : ${{ needs.lighthouse-check.outputs.lh_result }}"
                 }]
               }]
             }
