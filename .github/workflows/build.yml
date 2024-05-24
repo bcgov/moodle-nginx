@@ -229,6 +229,14 @@ jobs:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
           USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
           PASSWORD: ${{ secrets.MOODLE_TESTER_PASSWORD }}
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: lighthouse-artifacts
+          path: |
+            before_click.png
+            after_click.png
+            lighthouse-results.md
 
   notify:
     name: 📫 Notify
@@ -248,6 +256,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: lighthouse-artifacts
+          path: artifacts
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
@@ -299,8 +312,20 @@ jobs:
                   "title": "Deploy to OpenShift",
                   "value": "${{ needs.call-deploy-workflow.result }}"
                 },{
-                  "title": "Test with Lighthouse",
+                  "title": "Test with **Lighthouse**",
                   "value": "${{ needs.lighthouse-check.outputs.LHRESULT }}"
-                }]
+                },{
+                  "title": "View Lighthouse Results Markdown",
+                  "title_link": "artifacts/lighthouse-results.md",
+                  "value": "View the Lighthouse test results"
+                },{
+                  "title": "View Lighthouse Screenshot: Before Click",
+                  "title_link": "artifacts/before_click.png",
+                  "value": "View the Lighthouse test screenshots"
+                },{
+                  "title": "View Lighthouse Screenshot: After Click",
+                  "title_link": "artifacts/after_click.png",
+                  "value": "View the Lighthouse test screenshots"
+                }],
               }]
             }

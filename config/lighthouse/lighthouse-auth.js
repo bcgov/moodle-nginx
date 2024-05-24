@@ -1,15 +1,23 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
+const options = {
+  chromeFlags: ['--headless'],
+  output: 'json'
+};
+const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
-async function run() {
+async function runLighthouse(url, options, config = null) {
   // Use Puppeteer to launch a browser and perform the login
-  const browser = await puppeteer.launch({headless: true});
+  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
-  const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
   const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
   const password = process.env.PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
 
-  await page.goto(testURL); // Use the APP_HOST_URL environment variable
+  // Import Lighthouse
+  const lighthouse = (await import('lighthouse')).default;
+  const fs = (await import('fs')).default;
+
+  await page.goto(url); // Use the APP_HOST_URL environment variable
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
@@ -39,19 +47,13 @@ async function run() {
 
   const pathCount = paths.length;
   let pathsPassed = 0;
-
-  // Import Lighthouse
-  const lighthouse = (await import('lighthouse')).default;
+  let results = [];
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
-    const url = 'https://' + process.env.APP_HOST_URL + path;
 
-    const {lhr} = await lighthouse(url, {
-      port: (new URL(browser.wsEndpoint())).port,
-      output: 'json',
-      logLevel: 'info',
-    });
+    const url = 'https://' + process.env.APP_HOST_URL + path;
+    const {lhr} = await lighthouse(url, options, config);
 
     // Get the scores
     const accessibilityScore = lhr.categories.accessibility.score * 100;
@@ -69,12 +71,32 @@ async function run() {
       throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
+    // Add the scores to the results array
+    results.push({
+      path,
+      accessibilityScore,
+      performanceScore,
+      bestPracticesScore
+    });
+
     pathsPassed++;
   }
 
-  console.log(`✔️ PASSED: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  // console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 
   await browser.close();
+
+  // Write the results to a JSON file:
+  fs.writeFileSync('lighthouse-results.json', JSON.stringify(results));
+  // Convert the results to a markdown table
+  let markdown = '| Path | Accessibility Score | Performance Score | Best Practices Score |\n|------|---------------------|-------------------|----------------------|\n';
+  for (const result of results) {
+    markdown += `| ${result.path} | ${result.accessibilityScore} | ${result.performanceScore} | ${result.bestPracticesScore} |\n`;
+  }
+  // Write the markdown to a file
+  fs.writeFileSync('lighthouse-results.md', markdown);
+
+  return markdown;
 }
 
-run();
+const report = await runLighthouse(testURL, options);
