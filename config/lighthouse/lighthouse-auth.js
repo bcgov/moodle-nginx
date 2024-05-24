@@ -26,6 +26,9 @@ async function runLighthouse(url, options, config = null) {
 
   await page.type('#username', username);
   await page.type('#password', password);
+
+  console.log('Current working directory:', process.cwd());
+
   await page.screenshot({path: 'before_click.png'}); // Take a screenshot before clicking the login button
 
   // Wait for both the click and navigation

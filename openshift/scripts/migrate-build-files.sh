@@ -12,16 +12,16 @@ sleep 10
 # Delete all files - including hidden ones
 echo "Deleting all files in ${dest_dir}..."
 # Use find with -not -name to exclude directories from the file count
-initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
+initial_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 # Delete all files, including hidden files and directories (permissions errors)
 # rm -rf ${dest_dir}/*
 # Delete all files, including hidden files and directories (permissions errors)
 # find ${dest_dir} -type f -exec rm -f {} \;
 # Delate all files, excluding hidden files and directories
-find ${dest_dir} -type f -mindepth 1 -delete
+find ${dest_dir} -mindepth 1 -delete
 
 # Count the number of files in the destination directory, excluding hidden files and directories
-final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
+final_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 
 # Count the number of files remaining in the destination directory
 remaining_count=$((initial_count - final_count))
