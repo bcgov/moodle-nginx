@@ -7,9 +7,11 @@ const options = {
 const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
+  // Import chrome-launcher
+  const { launch } = await import('chrome-launcher');
+
   // Launch a new Chrome instance
-  const chromeLauncher = (await import('chrome-launcher')).default;
-  const chrome = await chromeLauncher.launch({chromeFlags: ['--headless']});
+  const chrome = await launch({chromeFlags: ['--headless']});
   options.port = chrome.port;
 
   // Use Puppeteer to launch a browser and perform the login
