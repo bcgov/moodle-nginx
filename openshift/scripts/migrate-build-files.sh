@@ -9,8 +9,7 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Now the cp and rm commands will include hidden files
-cp -R /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
+# Relete all files - including hidden
 rm -rf ${dest_dir}/*
 
 # Use find with -not -name to exclude directories from the file count
@@ -40,8 +39,8 @@ echo "Replace Moodle index with maintenance page (again, since we deleted it)...
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
-# Copy all files, including hidden ones
-find ${src_dir} -type f -exec cp -t ${dest_dir} {} \+
+# Copy all files, including hidden ones, preserving directory structure
+rsync -a ${src_dir}/ ${dest_dir}/
 
 # Set permissions for moodle directory
 find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
