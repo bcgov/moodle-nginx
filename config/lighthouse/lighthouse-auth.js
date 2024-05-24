@@ -102,4 +102,8 @@ async function runLighthouse(url, options, config = null) {
   return markdown;
 }
 
-const report = await runLighthouse(testURL, options);
+async function runTests() {
+  const report = await runLighthouse(testURL, options);
+}
+
+runTests();
