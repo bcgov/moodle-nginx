@@ -17,15 +17,14 @@ echo "Deleting..."
 rm -rf ${dest_dir}/*
 final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 
-# Count the number of files after deletion
-final_count=$(find ${dest_dir} -type f | wc -l)
-
 # Calculate the number of files deleted
 deleted_count=$((initial_count - final_count))
 echo "Deleted $deleted_count of $initial_count files."
 
+remaining_count=$initial_count-$final_count
+
 # Check if all files have been deleted
-if [ $final_count -eq 0 ]; then
+if [ $remaining_count -eq 0 ]; then
   echo "All files have been deleted."
 else
   echo "Not all files have been deleted. Remaining files:"
@@ -37,7 +36,7 @@ cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
 # Copy all files, including hidden ones, preserving directory structure
-rsync -a ${src_dir}/ ${dest_dir}/
+rsync -a --no-perms --no-owner ${src_dir}/ ${dest_dir}/
 
 # Set permissions for moodle directory
 find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
