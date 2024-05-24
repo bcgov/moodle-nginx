@@ -234,8 +234,8 @@ jobs:
         with:
           name: lighthouse-artifacts
           path: |
-            /home/runner/work/moodle-nginx/moodle-nginx/lighthouse_report/*.png
-            /home/runner/work/moodle-nginx/moodle-nginx/lighthouse_report/*.md
+            /home/runner/work/moodle-nginx/moodle-nginx/*.png
+            /home/runner/work/moodle-nginx/moodle-nginx/*.md
 
   notify:
     name: 📫 Notify

@@ -37,7 +37,7 @@ async function runLighthouse(url, options, config = null) {
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
-  await page.screenshot({path: './lighthouse_report/before_login_click.png'}); // Take a screenshot before clicking the login button
+  await page.screenshot({path: 'before_login_click.png'}); // Take a screenshot before clicking the login button
 
   // Wait for both the click and navigation
   await Promise.all([
@@ -45,7 +45,7 @@ async function runLighthouse(url, options, config = null) {
     page.waitForNavigation({timeout: 60000}),
   ]);
 
-  await page.screenshot({path: './lighthouse_report/after_login_click.png'}); // Take a screenshot after clicking the login button
+  await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
   // Define the paths you want to navigate
   const paths = [
@@ -73,7 +73,7 @@ async function runLighthouse(url, options, config = null) {
 
     const filename = 'screenshot_' + pathsPassed.toString();
 
-    await page.screenshot({path: './lighthouse_report/' + filename + '.png'}); // Take a screenshot after clicking the login button
+    await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
 
     // Verify the scores
     if (accessibilityScore < 90) {
@@ -110,7 +110,7 @@ async function runLighthouse(url, options, config = null) {
     markdown += `| ${result.path} | ${result.accessibilityScore} | ${result.performanceScore} | ${result.bestPracticesScore} |\n`;
   }
   // Write the markdown to a file
-  fs.writeFileSync('./lighthouse_report/lighthouse-results.md', markdown);
+  fs.writeFileSync('lighthouse-results.md', markdown);
 
   return markdown;
 }
