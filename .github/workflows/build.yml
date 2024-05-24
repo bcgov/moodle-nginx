@@ -299,8 +299,8 @@ jobs:
                   "title": "Deploy to OpenShift",
                   "value": "${{ needs.call-deploy-workflow.result }}"
                 },{
-                  "title": "Tested with Lighthouse",
-                  "value": "${{ needs.lighthouse-check.result }} : ${{ needs.lighthouse-check.outputs.LHRESULT }}"
+                  "title": "Test with Lighthouse",
+                  "value": "${{ needs.lighthouse-check.outputs.LHRESULT }}"
                 }]
               }]
             }

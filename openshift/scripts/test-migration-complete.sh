@@ -26,7 +26,7 @@ dest_count=$(find $dest_dir -type f ! -name ".*" ! -type l | wc -l)
 
 # Compare the file counts
 if [ $src_count -eq $dest_count ]; then
-  echo "All files have been copied (count of src and dest match)."
+  echo "All files have been copied. Count of src and dest match: $dest_count."
 else
   echo "File copy is not complete. Source has $src_count files, but destination has $dest_count files."
   echo "Finding missing files..."

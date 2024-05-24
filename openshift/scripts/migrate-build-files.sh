@@ -9,21 +9,26 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Use find with -not -name to exclude directories from the file count
-initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 # Delete all files - including hidden ones
 echo "Deleting all files in ${dest_dir}..."
+# Use find with -not -name to exclude directories from the file count
+initial_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
+# Delete all files, including hidden files and directories (permissions errors)
 # rm -rf ${dest_dir}/*
+# Delete all files, including hidden files and directories (permissions errors)
 # find ${dest_dir} -type f -exec rm -f {} \;
+# Delate all files, excluding hidden files and directories
 find ${dest_dir} -type f -mindepth 1 -delete
 
+# Count the number of files in the destination directory, excluding hidden files and directories
 final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 
-# Calculate the number of files deleted
-deleted_count=$((initial_count - final_count))
-echo "Deleted $deleted_count of $initial_count files."
+# Count the number of files remaining in the destination directory
+remaining_count=$((initial_count - final_count))
 
-remaining_count=$(($initial_count)) - $((final_count))
+# Calculate the number of files deleted
+deleted_count=$((initial_count - remaining_count))
+echo "Deleted $deleted_count of $initial_count files."
 
 # Check if all files have been deleted
 if [ $((remaining_count)) -eq 0 ]; then
