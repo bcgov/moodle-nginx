@@ -115,7 +115,7 @@ async function runLighthouse(url, options, config = null) {
   fs.writeFileSync('lighthouse-results.md', markdown);
 
   // console.log(markdown);
-  // console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 }
 
 async function runTests() {
