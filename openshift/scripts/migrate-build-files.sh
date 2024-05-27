@@ -21,16 +21,18 @@ echo "Initial file count: $initial_count"
 # Delate all files, excluding hidden files and directories
 find ${dest_dir} -mindepth 1 -delete
 
+sleep 10
+
 # Count the number of files in the destination directory, excluding hidden files and directories
 final_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 echo "Final file count: $final_count"
 
-# Count the number of files remaining in the destination directory
-remaining_count=$((initial_count - final_count))
-
 # Calculate the number of files deleted
-deleted_count=$((initial_count - remaining_count))
+deleted_count=$((initial_count - final_count))
 echo "Deleted $deleted_count of $initial_count files."
+
+# Count the number of files remaining in the destination directory
+remaining_count=$((initial_count - deleted_count))
 
 # Check if all files have been deleted
 if [ $((remaining_count)) -eq 0 ]; then
