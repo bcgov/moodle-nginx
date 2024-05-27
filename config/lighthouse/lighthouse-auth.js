@@ -110,7 +110,7 @@ async function runLighthouse(url, options, config = null) {
   // Write the markdown to a file
   fs.writeFileSync('lighthouse-results.md', markdown);
 
-  // return markdown;
+  // echo markdown;
   echo `✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`;
 }
 
