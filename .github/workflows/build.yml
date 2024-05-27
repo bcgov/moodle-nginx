@@ -283,11 +283,9 @@ jobs:
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "fields": [{
                   "title": "Verify Moodle",
-                  "title_link": "${{ env.APP_HOST_URL }}/admin/index.php",
-                  "value": "Verify that the site still works and updates have been completed (Admin access required)"
+                  "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](https://${{ env.APP_HOST_URL }}/admin/index.php)"
                 },{
-                  "title": "Build DB",
-                  "value": "${{ needs.db.result }}"
+                  "title": "Build DB: ${{ needs.db.result }}"
                 },{
                   "title": "Build PHP",
                   "value": "${{ needs.php.result }}"
