@@ -46,7 +46,7 @@ async function runLighthouse(url, options, config = null) {
   ]);
 
   const cookies = await page.cookies();
-  console.log('cookies: ', cookies);
+  console.log('cookies: ', JSON.stringify(cookies));
 
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
