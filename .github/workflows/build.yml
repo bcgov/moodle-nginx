@@ -9,8 +9,8 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
-  SKIP_DEPLOY: "NO"
+  SKIP_BUILDS: "YES"
+  SKIP_DEPLOY: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -287,25 +287,19 @@ jobs:
                 },{
                   "title": "Build DB: ${{ needs.db.result }}"
                 },{
-                  "title": "Build PHP",
-                  "value": "${{ needs.php.result }}"
+                  "title": "Build PHP: ${{ needs.php.result }}"
                 },{
-                  "title": "Build Cron",
-                  "value": "${{ needs.cron.result }}"
+                  "title": "Build Cron: ${{ needs.cron.result }}"
                 },{
-                  "title": "Build Web",
-                  "value": "${{ needs.web.result }}"
+                  "title": "Build Web: ${{ needs.web.result }}"
                 },{
-                  "title": "Build Moodle",
-                  "value": "${{ needs.moodle.result }}"
+                  "title": "Build Moodle: ${{ needs.moodle.result }}"
                 },{
-                  "title": "Cleanup Resources",
-                  "value": "${{ needs.call-cleanup-workflow.result }}"
+                  "title": "Cleanup Resources: ${{ needs.call-cleanup-workflow.result }}"
                 },{
-                  "title": "Deploy to OpenShift",
-                  "value": "${{ needs.call-deploy-workflow.result }}"
+                  "title": "Deploy to OpenShift: ${{ needs.call-deploy-workflow.result }}"
                 },{
-                  "title": "Lighthouse Test Results",
+                  "title": "Lighthouse Test Results:",
                   "value": "${{ needs.lighthouse-check.outputs.LHRESULT }}"
                 }]
               }]
