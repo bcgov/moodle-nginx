@@ -45,6 +45,9 @@ async function runLighthouse(url, options, config = null) {
     page.waitForNavigation({timeout: 60000}),
   ]);
 
+  const cookies = await page.cookies();
+  console.log('cookies: ', cookies);
+
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
   // Define the paths you want to navigate
@@ -111,7 +114,7 @@ async function runLighthouse(url, options, config = null) {
   fs.writeFileSync('lighthouse-results.md', markdown);
 
   // console.log(markdown);
-  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  // console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 }
 
 async function runTests() {
