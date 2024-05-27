@@ -46,7 +46,7 @@ async function runLighthouse(url, options, config = null) {
   ]);
 
   const cookies = await page.cookies();
-  console.log('cookies: ', JSON.stringify(cookies));
+  // console.log('cookies: ', JSON.stringify(cookies));
 
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
@@ -67,6 +67,7 @@ async function runLighthouse(url, options, config = null) {
   for (const path of paths) {
 
     const url = 'https://' + process.env.APP_HOST_URL + path;
+    await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
 
     // Get the scores
