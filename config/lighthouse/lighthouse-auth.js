@@ -46,7 +46,8 @@ async function runLighthouse(url, options, config = null) {
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
   await page.screenshot({path: 'before_login_click.png'}); // Take a screenshot before clicking the login button
-  await page.content({path: 'before_login.html'});
+  const content = await page.content();
+  await fs.writeFile('before_login.html', content);
 
   // Wait for both the click and navigation
   await Promise.all([
@@ -78,13 +79,17 @@ async function runLighthouse(url, options, config = null) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
     await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
+    await page.goto(path, { waitUntil: 'networkidle0' }); // Navigate to the new URL
 
     // Get the scores
     const accessibilityScore = lhr.categories.accessibility.score * 100;
     const performanceScore = lhr.categories.performance.score * 100;
     const bestPracticesScore = lhr.categories['best-practices'].score * 100;
 
-    const filename = 'screenshot_' + pathsPassed.toString();
+    const filename = 'screenshot_' +
+      pathsPassed.toString() +
+      '_' +
+      path.replace(/\W+/g, "_");
 
     await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
 
