@@ -32,7 +32,7 @@ async function runLighthouse(url, options, config = null) {
   const lighthouse = (await import('lighthouse')).default;
   const fs = (await import('fs')).default;
 
-  await page.goto(url); // Use the APP_HOST_URL environment variable
+  await page.goto(url, { waitUntil: 'networkidle0' }); // Use the APP_HOST_URL environment variable
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
@@ -42,12 +42,11 @@ async function runLighthouse(url, options, config = null) {
   await page.type('#username', username);
   await page.type('#password', password);
 
-  const testStr = `u: ${username}, t: ${password}`;
-
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
   await page.screenshot({path: 'before_login_click.png'}); // Take a screenshot before clicking the login button
+  await page.content({path: 'before_login.html'});
 
   // Wait for both the click and navigation
   await Promise.all([
@@ -125,7 +124,7 @@ async function runLighthouse(url, options, config = null) {
   fs.writeFileSync('lighthouse-results.md', markdown);
 
   // console.log(markdown);
-  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) & ${testStr}`);
+  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
 }
 
 async function runTests() {
