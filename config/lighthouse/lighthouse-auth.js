@@ -80,7 +80,7 @@ async function runLighthouse(url, options, config = null) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
     await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
-    await page.goto(path, { waitUntil: 'networkidle0' }); // Navigate to the new URL
+    await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
 
     // Get the scores
     const accessibilityScore = lhr.categories.accessibility.score * 100;
