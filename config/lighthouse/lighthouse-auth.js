@@ -117,7 +117,7 @@ async function runLighthouse(url, options, config = null) {
 
     for (const char of badCharacters) {
       if (pageContent.includes(char)) {
-        errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
+        errors.push(`Character encoding error found in: ${path}`);
         // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
       }
     }
