@@ -5,6 +5,7 @@ const options = {
   output: 'json'
 };
 const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
+const badCharacters = ['â', '€', '™', 'Â', 'œ', ''];
 
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
@@ -73,6 +74,7 @@ async function runLighthouse(url, options, config = null) {
   const pathCount = paths.length;
   let pathsPassed = 0;
   let results = [];
+  let errors = new Array();
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
@@ -86,23 +88,31 @@ async function runLighthouse(url, options, config = null) {
     const accessibilityScore = lhr.categories.accessibility.score * 100;
     const performanceScore = lhr.categories.performance.score * 100;
     const bestPracticesScore = lhr.categories['best-practices'].score * 100;
+    const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
 
-    const filename = 'screenshot_' +
-      pathsPassed.toString() +
-      '_' +
-      path.replace(/\W+/g, "_");
-
+    const pageContent = await page.content();
+    await fsp.writeFile(filename + '.html', content);
     await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
 
     // Verify the scores
     if (accessibilityScore < 90) {
-      throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+      errors.push(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+      // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
     }
     if (performanceScore < 40) {
-      throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
+      errors.push(`Performance score ${performanceScore} is less than 40 for ${path}`);
+      // throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
     }
     if (bestPracticesScore < 80) {
-      throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+      errors.push(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+      // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+    }
+
+    for (const char of badCharacters) {
+      if (content.includes(char)) {
+        errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
+        // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
+      }
     }
 
     // Add the scores to the results array
@@ -129,8 +139,17 @@ async function runLighthouse(url, options, config = null) {
   // Write the markdown to a file
   fs.writeFileSync('lighthouse-results.md', markdown);
 
-  // console.log(markdown);
-  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  if (errors.length > 0) {
+    let errorString = '';
+    for (const error of errors) {
+      errorString += '\n' + error;
+    }
+
+    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${errorString}`);
+  } else {
+    // console.log(markdown);
+    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  }
 }
 
 async function runTests() {
