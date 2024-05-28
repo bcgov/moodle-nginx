@@ -149,10 +149,10 @@ async function runLighthouse(url, options, config = null) {
   if (errors.length > 0) {
     let errorString = '';
     for (const error of errors) {
-      errorString += '\n' + error;
+      errorString += ' - ' + error;
     }
 
-    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${errorString}`);
+    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${errorString}`);
   } else {
     // console.log(markdown);
     console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
