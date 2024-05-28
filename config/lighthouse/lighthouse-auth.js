@@ -14,11 +14,19 @@ async function runLighthouse(url, options, config = null) {
   const chrome = await launch({chromeFlags: ['--headless']});
   options.port = chrome.port;
 
+  const sanitizeInput = (str) => {
+    return str.replace(/[\n\r\t]/g, "");
+  }
+
+  function containsControlCharacters(str) {
+    return /[\b\f\n\r\t\v]/.test(str);
+  }
+
   // Use Puppeteer to launch a browser and perform the login
   const browser = await puppeteer.connect({browserURL: `http://127.0.0.1:${chrome.port}`});
   const page = await browser.newPage();
   const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
-  const password = process.env.PASSWORD; // Use the MOODLE_TESTER_PASSWORD environment variable
+  const password = sanitizeInput(process.env.PASSWORD); // Use the MOODLE_TESTER_PASSWORD environment variable
 
   // Import Lighthouse
   const lighthouse = (await import('lighthouse')).default;
@@ -115,7 +123,7 @@ async function runLighthouse(url, options, config = null) {
   fs.writeFileSync('lighthouse-results.md', markdown);
 
   // console.log(markdown);
-  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)  - Control chars? ${containsControlCharacters(password)}`);
 }
 
 async function runTests() {
