@@ -31,6 +31,7 @@ async function runLighthouse(url, options, config = null) {
   // Import Lighthouse
   const lighthouse = (await import('lighthouse')).default;
   const fs = (await import('fs')).default;
+  const fsp = (await import('fs')).promises;
 
   await page.goto(url, { waitUntil: 'networkidle0' }); // Use the APP_HOST_URL environment variable
 
@@ -47,7 +48,7 @@ async function runLighthouse(url, options, config = null) {
 
   await page.screenshot({path: 'before_login_click.png'}); // Take a screenshot before clicking the login button
   const content = await page.content();
-  await fs.writeFile('before_login.html', content);
+  await fsp.writeFile('before_login.html', content);
 
   // Wait for both the click and navigation
   await Promise.all([
