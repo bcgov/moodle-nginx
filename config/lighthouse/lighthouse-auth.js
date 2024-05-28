@@ -42,6 +42,8 @@ async function runLighthouse(url, options, config = null) {
   await page.type('#username', username);
   await page.type('#password', password);
 
+  const testStr = `u: ${username}, t: ${password}`;
+
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
@@ -123,7 +125,7 @@ async function runLighthouse(url, options, config = null) {
   fs.writeFileSync('lighthouse-results.md', markdown);
 
   // console.log(markdown);
-  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)  - Control chars? ${containsControlCharacters(password)}`);
+  console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) & ${testStr}`);
 }
 
 async function runTests() {
