@@ -9,6 +9,7 @@ const badCharacters = ['â', '€', '™', 'Â', 'œ', ''];
 
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
+  let errors = new Array();
   const { launch } = await import('chrome-launcher');
 
   // Launch a new Chrome instance
@@ -60,6 +61,13 @@ async function runLighthouse(url, options, config = null) {
   const cookies = await page.cookies();
   // console.log('cookies: ', JSON.stringify(cookies));
 
+  for (const char of badCharacters) {
+    if (content.includes(char)) {
+      errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
+      // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
+    }
+  }
+
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
   // Define the paths you want to navigate
@@ -74,7 +82,6 @@ async function runLighthouse(url, options, config = null) {
   const pathCount = paths.length;
   let pathsPassed = 0;
   let results = [];
-  let errors = new Array();
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
