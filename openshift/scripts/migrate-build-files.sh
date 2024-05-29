@@ -39,7 +39,7 @@ if [ $((remaining_count)) -eq 0 ]; then
   echo "All files have been deleted."
 else
   echo "Not all files have been deleted. Remaining files:"
-  ls -l ${dest_dir}
+  ls -lA ${dest_dir}
 fi
 
 echo "Replace Moodle index with maintenance page (again, since we deleted it)..."

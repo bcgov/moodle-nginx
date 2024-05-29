@@ -5,10 +5,10 @@ const options = {
   output: 'json'
 };
 const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
-const badCharacters = ['â', '€', '™', 'Â', 'œ', ''];
 
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
+  const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
   let errors = new Array();
   let warnings = new Array();
   const { launch } = await import('chrome-launcher');
@@ -62,7 +62,7 @@ async function runLighthouse(url, options, config = null) {
   const cookies = await page.cookies();
   // console.log('cookies: ', JSON.stringify(cookies));
 
-  for (const char of badCharacters) {
+  for (const char of detectEncodingIssues) {
     if (content.includes(char)) {
       errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
       // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
@@ -120,7 +120,7 @@ async function runLighthouse(url, options, config = null) {
       // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
-    for (const char of badCharacters) {
+    for (const char of detectEncodingIssues) {
       if (pageContent.includes(char)) {
         warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
         // throw new Error(`⚠️ Found improperly encoded character "${char}" in the HTML content`);
@@ -153,20 +153,22 @@ async function runLighthouse(url, options, config = null) {
 
   let warningString = '';
   if (warnings.length > 0) {
+    if (warningString == '') {
+      warningString += ' - Warnings: ';
+    }
     for (const warning of warnings) {
       warningString += ' - ' + warning;
     }
-    // console.log(`⚠️ **WARNING**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${warningString}`);
   }
 
   if (errors.length > 0) {
     let errorString = '';
     for (const error of errors) {
-      errorString += ' - ❌ ' + error;
+      errorString += ' - ' + error;
     }
-    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsFailed} of ${pathCount} urls failed) - Errors: ${errorString} - Warnings: ${warningString}`);
+    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsFailed} of ${pathCount} urls failed) - Errors: ${errorString} ${warningString}`);
   } else {
-    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) - Warnings: ${warningString}`);
+    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${warningString}`);
   }
 }
 
