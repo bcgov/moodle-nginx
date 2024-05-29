@@ -21,7 +21,7 @@ spec:
         - "-c"
         - |
           set -ex
-          # Generate mysql server-id from pod ordinal index.
+          # Generate server-id from pod ordinal index.
           [[ `hostname` =~ -([0-9]+)$ ]] || exit 1
           ordinal=${BASH_REMATCH[1]}
           # Copy appropriate conf.d files from config-map to emptyDir.
@@ -34,11 +34,16 @@ spec:
         - name: conf
           mountPath: /etc
           subPath: redis.conf
-        - name: config-map
+        - name: redis-config
           mountPath: /mnt/config-map
+      volumes:
+        - name: ${REDIS_DEPLOYMENT_NAME}-data
+          persistentVolumeClaim:
+            claimName: ${REDIS_DEPLOYMENT_NAME}-data
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
         image: ${REDIS_IMAGE}
+        imagePullPolicy: Always
         command: ["redis-server"]
         args: ["/etc/redis.conf"]
         env:
@@ -48,8 +53,5 @@ spec:
         - containerPort: 6379
           name: ${REDIS_DEPLOYMENT_NAME}
         volumeMounts:
-        - name: redis-data
+        - name: ${REDIS_DEPLOYMENT_NAME}-data
           mountPath: /data
-        - name: conf
-          mountPath: /etc/
-          subPath: redis.conf

@@ -25,7 +25,7 @@ else
   echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME"
 fi
 
-echo "Creating configMap: $REDIS_DEPLOYMENT_NAME"
+echo "Creating configMap: $REDIS_DEPLOYMENT_NAME-config"
 oc apply -f ./config/redis/redis-config.yml
 
 # Create a headless service to control the domain of the Redis cluster
