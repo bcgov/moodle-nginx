@@ -38,9 +38,9 @@ spec:
           persistentVolumeClaim:
             claimName: ${REDIS_DEPLOYMENT_NAME}-data
         - name: redis-config
-             configMap:
-               name: redis-config
-               defaultMode: 420
+          configMap:
+            name: redis-config
+            defaultMode: 420
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
         image: ${REDIS_IMAGE}
