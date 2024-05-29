@@ -162,7 +162,7 @@ async function runLighthouse(url, options, config = null) {
     }
     console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${errorString} ${warningString}`);
   } else {
-    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
+    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${warningString}`);
   }
 }
 
