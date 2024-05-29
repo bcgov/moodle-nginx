@@ -256,6 +256,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: lighthouse-artifacts
