@@ -17,12 +17,13 @@ spec:
       - name: init-redis
         image: ${REDIS_IMAGE}
         command:
-        - bash
+        - /bin/ash
         - "-c"
         - |
           set -ex
           # Generate server-id from pod ordinal index.
-          [[ `hostname` =~ -([0-9]+)$ ]] || exit 1
+          ordinal=$(expr "$(hostname)" : '.*-\([0-9]\+\)$')
+          [ -n "$ordinal" ] || exit 1
           ordinal=${BASH_REMATCH[1]}
           # Copy appropriate conf.d files from config-map to emptyDir.
           if [[ $ordinal -eq 0 ]]; then
@@ -33,13 +34,6 @@ spec:
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /mnt/config-map
-      volumes:
-        - name: ${REDIS_DEPLOYMENT_NAME}-data
-          emptyDir: {}
-        - name: ${REDIS_DEPLOYMENT_NAME}-config
-          configMap:
-            name: ${REDIS_DEPLOYMENT_NAME}-config
-            defaultMode: 420
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
         image: ${REDIS_IMAGE}
@@ -54,4 +48,18 @@ spec:
           name: ${REDIS_DEPLOYMENT_NAME}
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
+          emptyDir: {}
           mountPath: /data
+        - name: ${REDIS_DEPLOYMENT_NAME}-config
+          mountPath: /mnt/config-map
+          configMap:
+            name: ${REDIS_DEPLOYMENT_NAME}-config
+            defaultMode: 420
+
+      volumes:
+        - name: ${REDIS_DEPLOYMENT_NAME}-data
+          emptyDir: {}
+        - name: ${REDIS_DEPLOYMENT_NAME}-config
+          configMap:
+            name: ${REDIS_DEPLOYMENT_NAME}-config
+            defaultMode: 420
