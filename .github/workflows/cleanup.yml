@@ -239,6 +239,29 @@ jobs:
             oc delete configmap ${{ inputs.CRON_DEPLOYMENT_NAME }}-config
           fi
 
+      - name: 🧹️ Clean Redis
+        id: clean-redis
+        run: |
+          if [[ `oc describe sts/${{ inputs.REDIS_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_DEPLOYMENT_NAME }} NOT FOUND: Skipping..."
+          else
+            echo "${{ inputs.REDIS_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
+            oc delete sts/${{ inputs.REDIS_DEPLOYMENT_NAME }}
+            echo "DELETED sts: ${{ inputs.REDIS_DEPLOYMENT_NAME }}"
+          fi
+          if [[ `oc describe sts/${{ inputs.REDIS_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_DEPLOYMENT_NAME }} sts NOT FOUND: Skipping..."
+          else
+            echo "${{ inputs.REDIS_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
+            oc delete sts/${{ inputs.REDIS_DEPLOYMENT_NAME }}
+            echo "DELETED sts: ${{ inputs.REDIS_DEPLOYMENT_NAME }}"
+          fi
+          if [[ `oc describe configmap ${{ inputs.REDIS_DEPLOYMENT_NAME }}-config 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_DEPLOYMENT_NAME }}-config NOT FOUND: Skipping..."
+          else
+            oc delete configmap ${{ inputs.REDIS_DEPLOYMENT_NAME }}-config
+          fi
+
       - name: 🧹️ Clean Upgrade Job
         id: clean-upgrade-job
         run: |

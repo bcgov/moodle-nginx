@@ -22,8 +22,8 @@ if [[ `oc describe configmap $REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME - Skipping..."
 else
   echo "$REDIS_DEPLOYMENT_NAME configmap FOUND: Cleaning resources..."
-  oc delete configmap $REDIS_DEPLOYMENT_NAME
-  echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME"
+  oc delete configmap $REDIS_DEPLOYMENT_NAME-config
+  echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME-config"
 fi
 
 if [[ `oc describe sts/$REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then

@@ -31,14 +31,14 @@ spec:
             cp /mnt/config-map/slave.conf /etc/redis.conf
           fi
         volumeMounts:
-        - name: redis-config
+        - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /mnt/config-map
       volumes:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
           emptyDir: {}
-        - name: redis-config
+        - name: ${REDIS_DEPLOYMENT_NAME}-config
           configMap:
-            name: redis-config
+            name: ${REDIS_DEPLOYMENT_NAME}-config
             defaultMode: 420
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
