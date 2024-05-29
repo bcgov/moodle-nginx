@@ -82,6 +82,7 @@ async function runLighthouse(url, options, config = null) {
 
   const pathCount = paths.length;
   let pathsPassed = 0;
+  let pathsFailed = 0;
   let results = [];
 
   // Loop over the paths and run Lighthouse on each one
@@ -105,21 +106,24 @@ async function runLighthouse(url, options, config = null) {
     // Verify the scores
     if (accessibilityScore < 90) {
       errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+      pathsFailed++;
       // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
     }
     if (performanceScore < 40) {
       errors.push(`❌ Performance score ${performanceScore} is less than 40 for ${path}`);
+      pathsFailed++;
       // throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
     }
     if (bestPracticesScore < 80) {
       errors.push(`❌ Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+      pathsFailed++;
       // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
     for (const char of badCharacters) {
       if (pageContent.includes(char)) {
-        warnings.push(`Character encoding error found in: ${path}`);
-        // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
+        warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
+        // throw new Error(`⚠️ Found improperly encoded character "${char}" in the HTML content`);
       }
     }
 
@@ -150,7 +154,7 @@ async function runLighthouse(url, options, config = null) {
   let warningString = '';
   if (warnings.length > 0) {
     for (const warning of warnings) {
-      warningString += ' - ⚠️ ' + warning;
+      warningString += ' - ' + warning;
     }
     // console.log(`⚠️ **WARNING**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${warningString}`);
   }
@@ -160,9 +164,9 @@ async function runLighthouse(url, options, config = null) {
     for (const error of errors) {
       errorString += ' - ❌ ' + error;
     }
-    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${errorString} ${warningString}`);
+    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsFailed} of ${pathCount} urls failed) - Errors: ${errorString} - Warnings: ${warningString}`);
   } else {
-    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${warningString}`);
+    console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) - Warnings: ${warningString}`);
   }
 }
 

@@ -25,6 +25,14 @@ else
   echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME"
 fi
 
+if [[ `oc describe sts/$REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "$REDIS_DEPLOYMENT_NAME StatefulSet NOT FOUND - Skipping..."
+else
+  echo "$REDIS_DEPLOYMENT_NAME StatefulSet FOUND: Cleaning resources..."
+  oc delete sts/$REDIS_DEPLOYMENT_NAME
+  echo "DELETED StatefulSet:  $REDIS_DEPLOYMENT_NAME"
+fi
+
 echo "Creating configMap: $REDIS_DEPLOYMENT_NAME-config"
 oc apply -f ./config/redis/redis-config.yml
 

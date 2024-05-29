@@ -31,15 +31,16 @@ spec:
             cp /mnt/config-map/slave.conf /etc/redis.conf
           fi
         volumeMounts:
-        - name: conf
-          mountPath: /etc
-          subPath: redis.conf
         - name: redis-config
           mountPath: /mnt/config-map
       volumes:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
           persistentVolumeClaim:
             claimName: ${REDIS_DEPLOYMENT_NAME}-data
+        - name: redis-config
+             configMap:
+               name: redis-config
+               defaultMode: 420
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
         image: ${REDIS_IMAGE}
