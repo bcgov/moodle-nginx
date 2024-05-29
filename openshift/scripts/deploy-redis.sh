@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e # Exit on error
 
 route_name=$REDIS_DEPLOYMENT_NAME
 if [[ `oc describe route $route_name 2>&1` =~ "NotFound" ]]; then

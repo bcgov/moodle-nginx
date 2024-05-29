@@ -35,8 +35,7 @@ spec:
           mountPath: /mnt/config-map
       volumes:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
-          persistentVolumeClaim:
-            claimName: ${REDIS_DEPLOYMENT_NAME}-data
+          emptyDir: {}
         - name: redis-config
           configMap:
             name: redis-config

@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e # Exit on error
+
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
