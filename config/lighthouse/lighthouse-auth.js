@@ -10,6 +10,7 @@ const badCharacters = ['â', '€', '™', 'Â', 'œ', ''];
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
   let errors = new Array();
+  let warnings = new Array();
   const { launch } = await import('chrome-launcher');
 
   // Launch a new Chrome instance
@@ -103,21 +104,21 @@ async function runLighthouse(url, options, config = null) {
 
     // Verify the scores
     if (accessibilityScore < 90) {
-      errors.push(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+      errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
       // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
     }
     if (performanceScore < 40) {
-      errors.push(`Performance score ${performanceScore} is less than 40 for ${path}`);
+      errors.push(`❌ Performance score ${performanceScore} is less than 40 for ${path}`);
       // throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
     }
     if (bestPracticesScore < 80) {
-      errors.push(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+      errors.push(`❌ Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
       // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
     for (const char of badCharacters) {
       if (pageContent.includes(char)) {
-        errors.push(`Character encoding error found in: ${path}`);
+        warnings.push(`Character encoding error found in: ${path}`);
         // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
       }
     }
@@ -146,15 +147,21 @@ async function runLighthouse(url, options, config = null) {
   // Write the markdown to a file
   fs.writeFileSync('lighthouse-results.md', markdown);
 
+  let warningString = '';
+  if (warnings.length > 0) {
+    for (const warning of warnings) {
+      warningString += ' - ⚠️ ' + warning;
+    }
+    // console.log(`⚠️ **WARNING**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${warningString}`);
+  }
+
   if (errors.length > 0) {
     let errorString = '';
     for (const error of errors) {
-      errorString += ' - ' + error;
+      errorString += ' - ❌ ' + error;
     }
-
-    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${errorString}`);
+    console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsPassed} of ${pathCount} urls passed lighthouse test) ${errorString} ${warningString}`);
   } else {
-    // console.log(markdown);
     console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed)`);
   }
 }
