@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e # Exit on error
+#set -e # Exit on error
 
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
