@@ -26,7 +26,7 @@ spec:
           # ordinal=${BASH_REMATCH[1]}
           [ -n "$ordinal" ] || exit 1
           # Copy appropriate conf.d files from config-map to emptyDir.
-          if [[ $ordinal -eq 0 ]]; then
+          if [ $ordinal -eq 0 ]; then
             echo "Copying master.conf to /etc/redis.conf"
             cp /mnt/config-map/master.conf /etc/redis.conf
           else
