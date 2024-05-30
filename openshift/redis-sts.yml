@@ -23,16 +23,21 @@ spec:
           set -ex
           # Generate server-id from pod ordinal index.
           ordinal=$(expr "$(hostname)" : '.*-\([0-9]\+\)$')
+          echo "Ordinal: $ordinal"
           # ordinal=${BASH_REMATCH[1]}
           [ -n "$ordinal" ] || exit 1
           # Copy appropriate conf.d files from config-map to emptyDir.
-          if [ $ordinal -eq 0 ]; then
+          echo "Testing ordinal > 0 : $ordinal"
+          case "$ordinal" in
+          0)
             echo "Copying master.conf to /etc/redis.conf"
             cp /mnt/config-map/master.conf /etc/redis.conf
-          else
+            ;;
+          *)
             echo "Copying slave.conf to /etc/redis.conf"
             cp /mnt/config-map/slave.conf /etc/redis.conf
-          fi
+            ;;
+          esac
           echo "Script completed successfully"
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-config
