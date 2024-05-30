@@ -17,7 +17,7 @@ spec:
       - name: init-redis
         image: ${REDIS_IMAGE}
         command:
-        - /bin/ash
+        - /bin/bash
         - "-c"
         - |
           set -ex
