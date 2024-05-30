@@ -27,10 +27,13 @@ spec:
           [ -n "$ordinal" ] || exit 1
           # Copy appropriate conf.d files from config-map to emptyDir.
           if [[ $ordinal -eq 0 ]]; then
+            echo "Copying master.conf to /etc/redis.conf"
             cp /mnt/config-map/master.conf /etc/redis.conf
           else
+            echo "Copying slave.conf to /etc/redis.conf"
             cp /mnt/config-map/slave.conf /etc/redis.conf
           fi
+          echo "Script completed successfully"
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /mnt/config-map
