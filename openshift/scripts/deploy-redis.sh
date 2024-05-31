@@ -42,7 +42,8 @@ oc create service clusterip $REDIS_DEPLOYMENT_NAME --tcp=6379:6379 -n $DEPLOY_NA
 
 # Create a StatefulSet for Redis
 echo "Deploy Redis to OpenShift ($REDIS_IMAGE) ..."
-envsubst "${REDIS_DEPLOYMENT_NAME},${REDIS_IMAGE},${REDIS_REPLICAS}" < ./openshift/redis-sts.yml | oc apply -f -
+# envsubst "${REDIS_DEPLOYMENT_NAME},${REDIS_IMAGE},${REDIS_REPLICAS}" < ./openshift/redis-sts.yml | oc apply -f -
+sed -e "s/\${REDIS_DEPLOYMENT_NAME}/$REDIS_DEPLOYMENT_NAME/g" -e "s/\${REDIS_IMAGE}/$REDIS_IMAGE/g" -e "s/\${REDIS_REPLICAS}/$REDIS_REPLICAS/g" < ./openshift/redis-sts.yml | oc apply -f -
 
 # Expose the service
 oc expose svc/$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
