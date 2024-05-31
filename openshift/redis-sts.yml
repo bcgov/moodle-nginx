@@ -4,7 +4,7 @@ metadata:
   name: ${REDIS_DEPLOYMENT_NAME}
 spec:
   serviceName: ${REDIS_DEPLOYMENT_NAME}
-  replicas: ${REPLICAS}
+  replicas: ${REDIS_REPLICAS}
   selector:
     matchLabels:
       app: ${REDIS_DEPLOYMENT_NAME}
