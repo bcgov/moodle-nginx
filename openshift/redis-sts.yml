@@ -26,7 +26,11 @@ spec:
           ls /mnt/config-map/master.conf
           echo "Checking if slave.conf exists"
           ls /mnt/config-map/slave.conf
-          host=$(hostname)
+          # Wait for hostname to be set
+          while [ -z "$host" ]; do
+            host=$(hostname)
+            sleep 1
+          done
           echo "Hostname: $host"
           ordinal=$(expr "$host" : '.*-\([0-9]\+\)$')
           echo "Ordinal: $ordinal"
