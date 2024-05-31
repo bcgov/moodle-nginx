@@ -22,6 +22,10 @@ spec:
         - |
           set -ex
           # Generate server-id from pod ordinal index.
+          echo "Checking if master.conf exists"
+          ls /mnt/config-map/master.conf
+          echo "Checking if slave.conf exists"
+          ls /mnt/config-map/slave.conf
           host=$(hostname)
           echo "Hostname: $host"
           ordinal=$(expr "$host" : '.*-\([0-9]\+\)$')
@@ -33,22 +37,26 @@ spec:
           case "$ordinal" in
           0)
             echo "Copying master.conf to /etc/redis.conf"
-            cp /mnt/config-map/master.conf /etc/redis.conf
+            cp /mnt/config-map/master.conf /redis-conf/redis.conf
+            echo "Copied master.conf to /etc/redis.conf"
             ;;
           *)
             echo "Copying slave.conf to /etc/redis.conf"
-            cp /mnt/config-map/slave.conf /etc/redis.conf
+            cp /mnt/config-map/slave.conf /redis-conf/redis.conf
+            echo "Copied slave.conf to /etc/redis.conf"
             ;;
           esac
           echo "Script completed successfully"
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /mnt/config-map
+        - name: ${REDIS_DEPLOYMENT_NAME}-conf
+          mountPath: /redis-conf
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
         image: ${REDIS_IMAGE}
         imagePullPolicy: Always
-        command: ["redis-server"]
+        command: ["redis-server", "-c", "/redis-conf/redis.conf"]
         args: ["/etc/redis.conf"]
         env:
         - name: ALLOW_EMPTY_PASSWORD
@@ -60,6 +68,8 @@ spec:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
           emptyDir: {}
           mountPath: /data
+        - name: ${REDIS_DEPLOYMENT_NAME}-conf
+          mountPath: /redis-conf
         - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /mnt/config-map
           configMap:
@@ -68,6 +78,8 @@ spec:
 
       volumes:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
+          emptyDir: {}
+        - name: ${REDIS_DEPLOYMENT_NAME}-conf
           emptyDir: {}
         - name: ${REDIS_DEPLOYMENT_NAME}-config
           configMap:
