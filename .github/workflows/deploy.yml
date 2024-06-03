@@ -148,6 +148,7 @@ jobs:
           REDIS_IMAGE: ${{ inputs.REDIS_IMAGE }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
       # To uninstall/delete the my-release release:

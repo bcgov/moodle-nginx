@@ -35,14 +35,13 @@ else
 fi
 
 echo "Creating configMap: $REDIS_DEPLOYMENT_NAME-config"
-oc apply -f ./config/redis/redis-config.yml
+sed -e "s/\${REDIS_PASSWORD}/$REDIS_PASSWORD/g" < ./config/redis/redis-config.yml | oc apply -f -
 
 # Create a headless service to control the domain of the Redis cluster
 oc create service clusterip $REDIS_DEPLOYMENT_NAME --tcp=6379:6379 -n $DEPLOY_NAMESPACE``
 
 # Create a StatefulSet for Redis
 echo "Deploy Redis to OpenShift ($REDIS_IMAGE) ..."
-# envsubst "${REDIS_DEPLOYMENT_NAME},${REDIS_IMAGE},${REDIS_REPLICAS}" < ./openshift/redis-sts.yml | oc apply -f -
 sed -e "s/\${REDIS_DEPLOYMENT_NAME}/$REDIS_DEPLOYMENT_NAME/g" -e "s/\${REDIS_IMAGE}/$REDIS_IMAGE/g" -e "s/\${REDIS_REPLICAS}/$REDIS_REPLICAS/g" < ./openshift/redis-sts.yml | oc apply -f -
 
 # Expose the service

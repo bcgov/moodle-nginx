@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: redis-config
+  name: redis-config-map
 data:
   master.conf: |
     bind 0.0.0.0
@@ -15,5 +15,6 @@ data:
     pidfile /var/run/redis_6379.pid
     loglevel notice
     logfile ""
+    requirepass ${REDIS_PASSWORD}
   slave.conf: |
     slaveof redis-0.redis 6379

@@ -52,9 +52,9 @@ spec:
           esac
           echo "Script completed successfully"
         volumeMounts:
-        - name: ${REDIS_DEPLOYMENT_NAME}-config
+        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
           mountPath: /mnt/config-map
-        - name: ${REDIS_DEPLOYMENT_NAME}-conf
+        - name: ${REDIS_DEPLOYMENT_NAME}-config
           mountPath: /redis-conf
       containers:
       - name: ${REDIS_DEPLOYMENT_NAME}
@@ -71,20 +71,20 @@ spec:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
           emptyDir: {}
           mountPath: /data
-        - name: ${REDIS_DEPLOYMENT_NAME}-conf
-          mountPath: /redis-conf
         - name: ${REDIS_DEPLOYMENT_NAME}-config
+          mountPath: /redis-conf
+        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
           mountPath: /mnt/config-map
           configMap:
-            name: ${REDIS_DEPLOYMENT_NAME}-config
+            name: ${REDIS_DEPLOYMENT_NAME}-config-map
             defaultMode: 420
 
       volumes:
         - name: ${REDIS_DEPLOYMENT_NAME}-data
           emptyDir: {}
-        - name: ${REDIS_DEPLOYMENT_NAME}-conf
-          emptyDir: {}
         - name: ${REDIS_DEPLOYMENT_NAME}-config
+          emptyDir: {}
+        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
           configMap:
-            name: ${REDIS_DEPLOYMENT_NAME}-config
+            name: ${REDIS_DEPLOYMENT_NAME}-config-map
             defaultMode: 420
