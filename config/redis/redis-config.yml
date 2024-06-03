@@ -5,7 +5,7 @@ metadata:
 data:
   primary.conf: |
     bind 0.0.0.0
-    protected-mode yes
+    protected-mode no
     port 6379
     tcp-backlog 511
     timeout 0
@@ -15,7 +15,6 @@ data:
     pidfile /var/run/redis_6379.pid
     loglevel notice
     logfile ""
-    requirepass ${REDIS_PASSWORD}
+    # requirepass ${REDIS_PASSWORD}
   secondary.conf: |
     slaveof redis-0.redis 6379
-    requirepass ${REDIS_PASSWORD}
