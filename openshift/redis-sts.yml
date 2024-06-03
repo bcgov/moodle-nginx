@@ -22,10 +22,10 @@ spec:
         - |
           # set -ex
           # Generate server-id from pod ordinal index.
-          echo "Checking if master.conf exists"
-          ls /mnt/config-map/master.conf
-          echo "Checking if slave.conf exists"
-          ls /mnt/config-map/slave.conf
+          echo "Checking if primary.conf exists"
+          ls /mnt/config-map/primary.conf
+          echo "Checking if secondary.conf exists"
+          ls /mnt/config-map/secondary.conf
           # Wait for hostname to be set
           while [ -z "$host" ]; do
             host=$(hostname)
@@ -40,14 +40,14 @@ spec:
           echo "Testing ordinal > 0 : $ordinal"
           case "$ordinal" in
           0)
-            echo "Copying master.conf to /etc/redis.conf"
-            cp /mnt/config-map/master.conf /redis-conf/redis.conf
-            echo "Copied master.conf to /etc/redis.conf"
+            echo "Copying primary.conf to /etc/redis.conf"
+            cp /mnt/config-map/primary.conf /redis-conf/redis.conf
+            echo "Copied primary.conf to /etc/redis.conf"
             ;;
           *)
-            echo "Copying slave.conf to /etc/redis.conf"
-            cp /mnt/config-map/slave.conf /redis-conf/redis.conf
-            echo "Copied slave.conf to /etc/redis.conf"
+            echo "Copying secondary.conf to /etc/redis.conf"
+            cp /mnt/config-map/secondary.conf /redis-conf/redis.conf
+            echo "Copied secondary.conf to /etc/redis.conf"
             ;;
           esac
           echo "Script completed successfully"

@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: redis-config-map
 data:
-  master.conf: |
+  primary.conf: |
     bind 0.0.0.0
     protected-mode yes
     port 6379
@@ -16,5 +16,6 @@ data:
     loglevel notice
     logfile ""
     requirepass ${REDIS_PASSWORD}
-  slave.conf: |
+  secondary.conf: |
     slaveof redis-0.redis 6379
+    requirepass ${REDIS_PASSWORD}
