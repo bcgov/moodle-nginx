@@ -18,12 +18,12 @@ else
   echo "DELETED service:  $route_name"
 fi
 
-if [[ `oc describe configmap $REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME - Skipping..."
+if [[ `oc describe configmap/$REDIS_DEPLOYMENT_NAME-config-map 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME-config-map - Skipping..."
 else
-  echo "$REDIS_DEPLOYMENT_NAME configmap FOUND: Cleaning resources..."
-  oc delete configmap $REDIS_DEPLOYMENT_NAME-config
-  echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME-config"
+  echo "$REDIS_DEPLOYMENT_NAME-config-map FOUND: Cleaning resources..."
+  oc delete configmap/$REDIS_DEPLOYMENT_NAME-config-map
+  echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME-config-map"
 fi
 
 if [[ `oc describe sts/$REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then

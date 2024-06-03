@@ -13,6 +13,12 @@ sh ./openshift/scripts/enable-maintenance.sh
 
 sleep 10
 
+# Redirect traffic to maintenance-message
+echo "Redirecting traffic to maintenance-message..."
+oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+
+sleep 60
+
 echo "Delete cron job if it exists..."
 # Check if cron exists
 if oc get deployment $CRON_DEPLOYMENT_NAME; then
@@ -57,9 +63,9 @@ oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config
 
 sleep 10
 
-echo "Building php to: $IMAGE_REPO/$PHP_DEPLOYMENT_NAME:$DEPLOY_NAMESPACE"
+echo "Checking for: dc/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
 
-if [[ `oc describe dc $WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
+if [[ `oc describe dc/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$WEB_DEPLOYMENT_NAME NOT FOUND..."
 else
   echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
@@ -87,9 +93,7 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
-# Redirect traffic to maintenance-message
-echo "Redirecting traffic to maintenance-message..."
-oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+sleep 60
 
 echo "Right-sizing cluster..."
 #!/bin/bash
