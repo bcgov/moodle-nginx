@@ -13,31 +13,31 @@ echo "Right-sizing cluster..."
 # You can always just edit/copy the CSV files and adjust manually
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit
 do
-    # Ignore if the type is 'job'
-    if [[ "$Type" == "sts" || "$Type" == "dc" ]]
-    then
-        # Build the command
-        cmd="oc set resources $Type $Deployment --limits=cpu=${CPULimit}m,memory=${MemLimit}Mi --requests=cpu=${CPURequest}m,memory=${MemRequest}Mi"
+  # Ignore if the type is 'job'
+  if [[ "$Type" == "sts" || "$Type" == "dc" ]]
+  then
+      # Build the command
+      cmd="oc set resources $Type $Deployment --limits=cpu=${CPULimit}m,memory=${MemLimit}Mi --requests=cpu=${CPURequest}m,memory=${MemRequest}Mi"
 
-        # Execute the command
-        echo "Executing: $cmd"
-        $cmd
-    fi
+      # Execute the command
+      echo "Executing: $cmd"
+      $cmd
+  fi
 
-    if [[ "$Type" == "sts" ]]
-then
-    # For StatefulSet, scale to the desired number of pods
-    cmd="oc scale sts $Deployment --replicas=$PodCount"
-    echo "Executing: $cmd"
-    $cmd
-elif [[ "$Type" == "dc" ]]
-then
-    # For DeploymentConfig, set the number of current pods and maximum replicas
-    cmd="oc scale dc $Deployment --replicas=$PodCount"
-    echo "Executing: $cmd"
-    $cmd
-    cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":$MaxPods}}}}'"
-    echo "Executing: $cmd"
-    $cmd
-fi
+  if [[ "$Type" == "sts" ]]
+  then
+      # For StatefulSet, scale to the desired number of pods
+      cmd="oc scale sts $Deployment --replicas=$PodCount"
+      echo "Executing: $cmd"
+      $cmd
+  elif [[ "$Type" == "dc" ]]
+  then
+      # For DeploymentConfig, set the number of current pods and maximum replicas
+      cmd="oc scale dc $Deployment --replicas=$PodCount"
+      echo "Executing: $cmd"
+      $cmd
+      cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":$MaxPods}}}}'"
+      echo "Executing: $cmd"
+      $cmd
+  fi
 done

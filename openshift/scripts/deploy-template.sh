@@ -96,7 +96,7 @@ oc apply -f -
 sleep 60
 
 # Right-sizing cluster, according to environment
-sh ./openshift/scripts/right-sizing.sh
+bash ./openshift/scripts/right-sizing.sh
 
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
