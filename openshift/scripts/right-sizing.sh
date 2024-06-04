@@ -36,7 +36,14 @@ do
       cmd="oc scale dc $Deployment --replicas=$PodCount"
       echo "Executing: $cmd"
       $cmd
-      cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":$MaxPods}}}}'"
+      # Calculate the difference
+      diff=$((MaxPods - PodCount))
+      # Calculate the percentage
+      maxSurge=$(( (diff * 100) / PodCount ))
+      # Append the percentage sign
+      maxSurge="${maxSurge}%"
+      # Patch the deployment
+      cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"33%\"}}}}'"
       echo "Executing: $cmd"
       $cmd
   fi

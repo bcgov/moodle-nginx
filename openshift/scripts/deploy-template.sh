@@ -245,4 +245,4 @@ oc scale dc/maintenance-message --replicas=0
 echo "Deployment complete."
 
 # Wait for things to warm up a bit before proceeding with the [lighthouse] tests
-sleep 60
+sleep 120
