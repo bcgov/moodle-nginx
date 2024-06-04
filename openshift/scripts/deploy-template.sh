@@ -120,6 +120,23 @@ do
         echo "Executing: $cmd"
         $cmd
     fi
+
+    if [[ "$Type" == "sts" ]]
+then
+    # For StatefulSet, scale to the desired number of pods
+    cmd="oc scale sts $Deployment --replicas=$PodCount"
+    echo "Executing: $cmd"
+    $cmd
+elif [[ "$Type" == "dc" ]]
+then
+    # For DeploymentConfig, set the number of current pods and maximum replicas
+    cmd="oc scale dc $Deployment --replicas=$PodCount"
+    echo "Executing: $cmd"
+    $cmd
+    cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$MaxPods\"}}}}'"
+    echo "Executing: $cmd"
+    $cmd
+fi
 done
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
