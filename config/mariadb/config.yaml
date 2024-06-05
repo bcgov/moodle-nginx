@@ -10,11 +10,17 @@ data:
     log-bin                         # enable binary logging
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
+    innodb_buffer_pool_size=100M
+    net_read_timeout=3600
+    net_write_timeout=3600
 
   replica.cnf: |
     [mariadb]
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
+    innodb_buffer_pool_size=100M
+    net_read_timeout=3600
+    net_write_timeout=3600
     slave-skip-errors=1396
 
   primary.sql: |
