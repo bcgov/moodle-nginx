@@ -13,6 +13,7 @@ data:
     innodb_buffer_pool_size=100M
     net_read_timeout=3600
     net_write_timeout=3600
+    innodb_ft_result_cache_limit = 1000000000
 
   replica.cnf: |
     [mariadb]
@@ -22,6 +23,7 @@ data:
     net_read_timeout=3600
     net_write_timeout=3600
     slave-skip-errors=1396
+    innodb_ft_result_cache_limit = 1000000000
 
   primary.sql: |
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';

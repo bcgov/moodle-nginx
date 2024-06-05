@@ -30,6 +30,10 @@ fi
 echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
+# Only use 1 redis replica for deployment / upgrade to avoid conflicts
+echo "Scale down $REDIS_DEPLOYMENT_NAME to 1 replica..."
+oc scale sts/$REDIS_DEPLOYMENT_NAME --replicas=1
+
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"

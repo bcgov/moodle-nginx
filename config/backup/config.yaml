@@ -1,5 +1,5 @@
 backupConfig: |
-  mariadb=db/moodle
+  mariadb=db:3306/moodle
   0 1 * * * default ./backup.sh -s
   0 4 * * * default ./backup.sh -s -v all
 
