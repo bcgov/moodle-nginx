@@ -38,9 +38,9 @@ data:
       MASTER_USER='repluser',
       MASTER_PASSWORD='replsecret',
       MASTER_CONNECT_RETRY=10;
-      MASTER_LOG_FILE='mariadb-bin.000020',
-      MASTER_LOG_POS=568,
-      MASTER_CONNECT_RETRY=10;
+      MASTER_LOG_FILE='moodle-db-bin.000004',
+      MASTER_LOG_POS=547,
+      MASTER_CONNECT_RETRY=60;
 
 # Headless service
 ---
