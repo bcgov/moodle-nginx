@@ -23,6 +23,12 @@ else
   oc delete service $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
 
+  sleep 10
+
+  oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
+
+  sleep 15
+
   # Wait for the deployment to scale to 1
   ATTEMPTS=0
   MAX_ATTEMPTS=60

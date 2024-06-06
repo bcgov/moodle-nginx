@@ -40,7 +40,7 @@ else
         storageClassName: netapp-file-standard
 
     backupConfig: |
-      mariadb=\"$DB_HOST/$DB_NAME\"
+      mariadb=$DB_HOST/$DB_NAME
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
 
