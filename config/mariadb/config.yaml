@@ -17,18 +17,20 @@ data:
 
   replica.cnf: |
     [mariadb]
+    replica-parallel-mode=optimistic
+    replica-parallel-threads=2  # Adjust this value based on your system's capabilities
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
     innodb_buffer_pool_size=800M
     net_read_timeout=3600
     net_write_timeout=3600
-    slave-skip-errors=1062,1396
+    replica-skip-errors=1062,1396
     innodb_ft_result_cache_limit = 1000000000
 
   primary.sql: |
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';
     GRANT REPLICATION REPLICA ON *.* TO 'repluser'@'%';
-    GRANT SLAVE MONITOR ON *.* TO 'repluser'@'%';
+    GRANT REPLICA MONITOR ON *.* TO 'repluser'@'%';
     CREATE DATABASE moodle;
 
   secondary.sql: |

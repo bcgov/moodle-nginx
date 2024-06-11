@@ -27,9 +27,6 @@ on:
       DB_HOST:
         required: true
         type: string
-      DB_NAME:
-        required: true
-        type: string
       DB_DEPLOYMENT_NAME:
         required: true
         type: string
@@ -138,7 +135,7 @@ jobs:
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           DB_BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
           DB_HOST: ${{ inputs.DB_HOST }}
-          DB_NAME: ${{ inputs.DB_NAME }}
+          DB_NAME: ${{ secrets.DB_NAME }}
 
       # Deploy Redis
       - name: Deploy Redis StatefulSet (${{ inputs.REDIS_DEPLOYMENT_NAME  }})
@@ -153,6 +150,10 @@ jobs:
 
       # To uninstall/delete the my-release release:
       # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
+      - name: Download user count
+        uses: actions/download-artifact@v4
+        with:
+          name: user-count
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         if: success()
         run: bash ./openshift/scripts/deploy-database.sh
@@ -160,7 +161,14 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
-          DB_NAME: ${{ inputs.DB_NAME }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+      - name: Save user count
+        run: echo "USER_COUNT=$(echo "$DB_OUTPUT" | grep -oP '\d+')" >> $GITHUB_ENV
+      - name: Upload user count
+        uses: actions/upload-artifact@v2
+        with:
+          name: user-count
+          path: ${{ env.USER_COUNT }}
 
       - name: Deploy Moodle Template and Run Upgrades
         if: success()

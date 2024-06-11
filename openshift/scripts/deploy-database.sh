@@ -78,21 +78,25 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
 
   # Check if the output contains an error
   if echo "$OUTPUT" | grep -qi "error"; then
-    echo "Database error: $OUTPUT"
+    echo "❌ Database error: $OUTPUT"
     # exit 1
   fi
 
+  PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
+  CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
+
   # Check if the output contains a positive count
-  if echo "$OUTPUT" | grep -qE "[1-9][0-9]*"; then
-    echo "$DB_NAME Database is online and contains data. Users Found: $OUTPUT"
-    break
+  if [[ "$PREVIOUS_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" -ge "$PREVIOUS_USER_COUNT" ]]; then
+    echo "✔️ Current user count ($CURRENT_USER_COUNT) is greater than or equal to previous user count ($PREVIOUS_USER_COUNT)"
+  else
+      echo "⚠️ WARNING: Current user count ($CURRENT_USER_COUNT) is less than previous user count ($PREVIOUS_USER_COUNT), or one of the counts is not a positive integer"
   fi
 
   sleep $WAIT_TIME
 done
 
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-  echo "Timeout waiting for the database to be online. Exiting..."
+  echo "❌ Timeout waiting for the database to be online. Exiting..."
   exit 1
 fi
 
