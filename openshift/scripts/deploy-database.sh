@@ -85,30 +85,36 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   # Extract the user count from the output
   CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
 
-  # Get user-count from previous run, otherwise set it to 0
-  if [ -f "$GITHUB_WORKSPACE/user-count" ]; then
-    PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
-    # Check if PREVIOUS_USER_COUNT is a positive integer
-    if ! [[ $PREVIOUS_USER_COUNT =~ ^[0-9]+$ ]]; then
-      PREVIOUS_USER_COUNT=0
-    fi
+  if [ $CURRENT_USER_COUNT -gt 0 ]; then
+    echo "Database is online."
+    break
   else
-    PREVIOUS_USER_COUNT=0
+    echo "Database is not online. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
+    sleep $WAIT_TIME
   fi
-
-  # Check if the output contains a positive count
-  if [[ "$PREVIOUS_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" -ge "$PREVIOUS_USER_COUNT" ]]; then
-    echo "✔️ Current user count ($CURRENT_USER_COUNT) is greater than or equal to previous user count ($PREVIOUS_USER_COUNT)"
-  else
-      echo "⚠️ WARNING: Current user count ($CURRENT_USER_COUNT) is less than previous user count ($PREVIOUS_USER_COUNT), or one of the counts is not a positive integer"
-  fi
-
-  sleep $WAIT_TIME
 done
 
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   echo "❌ Timeout waiting for the database to be online. Exiting..."
   exit 1
+fi
+
+# Get user-count from previous run, otherwise set it to 0
+if [ -f "$GITHUB_WORKSPACE/user-count" ]; then
+  PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
+  # Check if PREVIOUS_USER_COUNT is a positive integer
+  if ! [[ $PREVIOUS_USER_COUNT =~ ^[0-9]+$ ]]; then
+    PREVIOUS_USER_COUNT=0
+  fi
+else
+  PREVIOUS_USER_COUNT=0
+fi
+
+# Check if the output contains a positive count
+if [[ "$PREVIOUS_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" -ge "$PREVIOUS_USER_COUNT" ]]; then
+  echo "✔️ Current user count ($CURRENT_USER_COUNT) is >= previous user count ($PREVIOUS_USER_COUNT)"
+else
+    echo "⚠️ WARNING: Current user count ($CURRENT_USER_COUNT) is less than previous user count ($PREVIOUS_USER_COUNT), or one of the counts is not a positive integer"
 fi
 
 echo "$DB_NAME Database deployment is complete."
