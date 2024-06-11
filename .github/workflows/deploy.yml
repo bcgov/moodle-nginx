@@ -168,7 +168,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: user-count
-          if-no-file: error # This will not error out if the file does not exist
         continue-on-error: true
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         if: success()

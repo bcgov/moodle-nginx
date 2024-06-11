@@ -82,8 +82,19 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
     # exit 1
   fi
 
-  PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
+  # Extract the user count from the output
   CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
+
+  # Get user-count from previous run, otherwise set it to 0
+  if [ -f "$GITHUB_WORKSPACE/user-count" ]; then
+    PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
+    # Check if PREVIOUS_USER_COUNT is a positive integer
+    if ! [[ $PREVIOUS_USER_COUNT =~ ^[0-9]+$ ]]; then
+      PREVIOUS_USER_COUNT=0
+    fi
+  else
+    PREVIOUS_USER_COUNT=0
+  fi
 
   # Check if the output contains a positive count
   if [[ "$PREVIOUS_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" -ge "$PREVIOUS_USER_COUNT" ]]; then
