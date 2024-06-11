@@ -148,12 +148,28 @@ jobs:
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
-      # To uninstall/delete the my-release release:
-      # helm delete --purge ${{ inputs.DB_DEPLOYMENT_NAME  }}
+      - name: Check if user count artifact exists
+        id: check_artifact
+        run: |
+          response=$(curl \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
+          echo "::set-output name=exists::$(echo $response | jq -r '.artifacts[] | select(.name=="user-count") | .id')"
+        shell: bash
+      - name: Create default user count file if artifact does not exist
+        id: create_default
+        run: |
+          if [[ -z "${{ steps.check_artifact.outputs.exists }}" ]]; then
+            echo '0' > user-count.txt
+          fi
+        shell: bash
       - name: Download user count
         uses: actions/download-artifact@v4
         with:
           name: user-count
+          if-no-file: error # This will not error out if the file does not exist
+        continue-on-error: true
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         if: success()
         run: bash ./openshift/scripts/deploy-database.sh
