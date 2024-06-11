@@ -1,7 +1,7 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB)
 cron,deployment,1,1,0,0,0,0,0,0
-db,sts,3,3,3,2048,50,2000,256,1024
-php,dc,3,6,1,5120,100,1000,15,182
+db,sts,3,3,3,2048,50,1500,256,1024
+php,dc,3,6,1,5120,100,800,15,182
 redis,sts,1,1,1,1024,25,200,15,182
 web,dc,3,6,0,0,25,400,13,33
 migrate-build-files,job,1,1,0,0,0,0,0,0
