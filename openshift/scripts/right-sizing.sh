@@ -38,6 +38,19 @@ do
       $cmd
       # Calculate the difference
       diff=$((MaxPods - PodCount))
+      if [[ $diff -gt 0 ]]; then
+        # If MaxPods > PodCount, add HorizontalPodAutoscaler
+        # First, remove the existing autoscaler if it exists
+        cmd="oc get hpa $Deployment"
+        if $cmd &> /dev/null; then
+            echo "Removing existing HorizontalPodAutoscaler for $Deployment"
+            oc delete hpa/$Deployment
+        fi
+        # Then, create the new autoscaler
+        cmd="oc autoscale dc/$Deployment --min $PodCount --max $MaxPods --cpu-percent=80"
+        echo "Executing: $cmd"
+        $cmd
+      fi
       # Calculate the percentage
       maxSurge=$(( (diff * 100) / PodCount ))
       # Append the percentage sign
