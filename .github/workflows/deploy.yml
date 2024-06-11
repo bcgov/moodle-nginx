@@ -157,6 +157,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
           echo "::set-output name=exists::$(echo $response | jq -r '.artifacts[] | select(.name=="user-count") | .id')"
         shell: bash
+
       - name: Create default user count file if artifact does not exist
         id: create_default
         run: |
@@ -164,11 +165,13 @@ jobs:
             echo '0' > user-count.txt
           fi
         shell: bash
+
       - name: Download user count
         uses: actions/download-artifact@v4
         with:
           name: user-count
         continue-on-error: true
+
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         if: success()
         run: bash ./openshift/scripts/deploy-database.sh
@@ -177,13 +180,15 @@ jobs:
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           DB_NAME: ${{ secrets.DB_NAME }}
+
       - name: Save user count
-        run: echo "USER_COUNT=$(echo "$DB_OUTPUT" | grep -oP '\d+')" >> $GITHUB_ENV
+        run: echo "USER_COUNT=$(echo "$DB_OUTPUT" | grep -oP '\d+')" > user-count.txt
+
       - name: Upload user count
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: user-count
-          path: ${{ env.USER_COUNT }}
+          path: user-count.txt
 
       - name: Deploy Moodle Template and Run Upgrades
         if: success()
