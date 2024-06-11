@@ -56,7 +56,7 @@ do
       # Append the percentage sign
       maxSurge="${maxSurge}%"
       # Patch the deployment
-      cmd="oc patch dc $Deployment -p='{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"33%\"}}}}'"
+      cmd="oc patch dc/$Deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"33%\"}}}}"
       echo "Executing: $cmd"
       $cmd
   fi
