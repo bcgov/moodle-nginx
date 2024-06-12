@@ -148,6 +148,33 @@ jobs:
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
+      - name: Check if bcgov/user-count package exists
+        id: check_package
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
+          npm view @bcgov/user-count version || echo "Package does not exist"
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Create and publish package if it doesn't exist
+        if: steps.check_package.outcome == 'failure'
+        run: |
+          echo "module.exports = { userCount: 0 };" > index.js
+          echo "{
+            \"name\": \"@bcgov/user-count\",
+            \"version\": \"1.0.0\",
+            \"main\": \"index.js\",
+            \"repository\": {
+              \"type\": \"git\",
+              \"url\": \"git+https://github.com/bcgov/your-repository.git\"
+            },
+            \"author\": \"\",
+            \"license\": \"ISC\"
+          }" > package.json
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
       - name: Install user count from GitHub Packages
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
