@@ -152,7 +152,7 @@ jobs:
         id: check_package
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
-          npm view @bcgov/user-count version || echo "Package does not exist"
+          npm view @bcgov/user-count version ; echo "Package does not exist"
         env:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
