@@ -157,7 +157,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
       - name: Create .npmrc file
-        run: echo "registry=https://npm.pkg.github.com/" > .npmrc
+        run: |
+          echo "registry=https://npm.pkg.github.com/" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
 
       - name: Create and publish package if it doesn't exist
         run: |
