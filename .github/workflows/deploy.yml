@@ -151,7 +151,7 @@ jobs:
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         id: deploy_database
         if: success()
-        run: ./openshift/scripts/deploy-database.sh
+        run: bash ./openshift/scripts/deploy-database.sh
         env:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
