@@ -172,14 +172,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload user count
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         if: env.upload == 'true'
         with:
           name: user-count
           path: user-count.txt
 
       - name: Download user count
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v2
         if: env.download == 'true'
         with:
           name: user-count
@@ -204,7 +204,7 @@ jobs:
           echo "${{ env.current_user_count }}" > user-count.txt
 
       - name: Upload user count
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: user-count
           path: user-count.txt
