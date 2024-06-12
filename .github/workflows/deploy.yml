@@ -162,7 +162,9 @@ jobs:
             echo "Uploading user-count.txt as an artifact"
             echo "upload=true" >> $GITHUB_ENV
           else
-            echo "Downloading user-count artifact"
+            echo "Found user-count artifact"
+            echo "Response from GitHub API: $response"
+            echo "Value of exists variable: $exists"
             echo "download=true" >> $GITHUB_ENV
           fi
         shell: bash
