@@ -1,3 +1,6 @@
+#!/bin/bash
+PREVIOUS_USER_COUNT=$1
+
 if [[ `oc describe sts $DB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$DB_DEPLOYMENT_NAME NOT FOUND: Beginning deployment..."
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
@@ -97,17 +100,6 @@ done
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   echo "❌ Timeout waiting for the database to be online. Exiting..."
   exit 1
-fi
-
-# Get user-count from previous run, otherwise set it to 0
-if [ -f "$GITHUB_WORKSPACE/user-count" ]; then
-  PREVIOUS_USER_COUNT=$(cat $GITHUB_WORKSPACE/user-count)
-  # Check if PREVIOUS_USER_COUNT is a positive integer
-  if ! [[ $PREVIOUS_USER_COUNT =~ ^[0-9]+$ ]]; then
-    PREVIOUS_USER_COUNT=0
-  fi
-else
-  PREVIOUS_USER_COUNT=0
 fi
 
 # Check if the output contains a positive count

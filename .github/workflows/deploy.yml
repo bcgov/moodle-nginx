@@ -148,66 +148,38 @@ jobs:
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
-      - name: Handle user count artifact
-        id: handle_artifact
+      - name: Install user count from GitHub Packages
         run: |
-          response=$(curl \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
-          exists=$(echo "$response" | jq -r '.artifacts[] | select(.name=="user-count") | .id' | sort -r | head -n 1)
-          if [[ -z "$exists" ]]; then
-            echo "Creating new user-count.txt file > 0"
-            echo '0' > user-count.txt
-            echo "Uploading user-count.txt as an artifact"
-            echo "upload=true" >> $GITHUB_ENV
-          else
-            echo "Found user-count artifact"
-            echo "Response from GitHub API: $response"
-            echo "Value of exists variable: $exists"
-            echo "download=true" >> $GITHUB_ENV
-          fi
-        shell: bash
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
+          npm install @bcgov/user-count || echo '0' > user-count.txt
+          PREVIOUS_USER_COUNT=$(node -e "console.log(require('@bcgov/user-count').userCount || 0)")
+          echo "SET PREVIOUS_USER_COUNT = $PREVIOUS_USER_COUNT"
+          echo "PREVIOUS_USER_COUNT=$PREVIOUS_USER_COUNT" >> $GITHUB_ENV
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload user count
-        uses: actions/upload-artifact@v2
-        if: env.upload == 'true'
-        with:
-          name: user-count
-          path: user-count.txt
-
-      - name: Download user count
-        uses: actions/download-artifact@v2
-        if: env.download == 'true'
-        with:
-          name: user-count
-        continue-on-error: true
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         id: deploy_database
         if: success()
         run: |
-          output=$(bash ./openshift/scripts/deploy-database.sh)
-          current_user_count=$(echo "$output" | grep -oP 'CURRENT_USER_COUNT=\K\d+')
-          echo "current_user_count=$current_user_count" >> $GITHUB_ENV
+          ./deploy-database.sh ${{ env.previous_user_count }}
+          echo "CURRENT_USER_COUNT=$CURRENT_USER_COUNT" >> $GITHUB_ENV
         env:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           DB_NAME: ${{ secrets.DB_NAME }}
 
-      - name: Save user count
+      - name: Update and publish package
         run: |
-          echo "Saving user-count: ${{ env.current_user_count }}"
-          echo "${{ env.current_user_count }}" > user-count.txt
-
-      - name: Upload user count
-        uses: actions/upload-artifact@v2
-        with:
-          name: user-count
-          path: user-count.txt
+          echo "Update user count to: $CURRENT_USER_COUNT"
+          echo "module.exports = { userCount: $CURRENT_USER_COUNT };" > index.js
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
+          npm version patch -m "Update user count to $CURRENT_USER_COUNT"
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          CURRENT_USER_COUNT: ${{ env.CURRENT_USER_COUNT }}
 
       - name: Deploy Moodle Template and Run Upgrades
         if: success()
