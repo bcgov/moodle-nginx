@@ -156,6 +156,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
+      - name: Create .npmrc file
+        run: echo "registry=https://npm.pkg.github.com/" > .npmrc
+
       - name: Create and publish package if it doesn't exist
         run: |
           PACKAGE_VERSION=$(npm view @bcgov/user-count version || echo "not found")
