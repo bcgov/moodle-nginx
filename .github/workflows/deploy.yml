@@ -155,7 +155,7 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
-          exists=$(echo $response | jq -r '.artifacts[] | select(.name=="user-count") | .id')
+          exists=$(echo "$response" | jq -r '.artifacts[] | select(.name=="user-count") | .id' | sort -r | head -n 1)
           if [[ -z "$exists" ]]; then
             echo "Creating new user-count.txt file > 0"
             echo '0' > user-count.txt
@@ -165,6 +165,16 @@ jobs:
             echo "Found user-count artifact"
             echo "Response from GitHub API: $response"
             echo "Value of exists variable: $exists"
+            echo "Downloading user-count artifact for inspection"
+            download_url=$(echo "$response" | jq -r '.artifacts[] | select(.id==('$exists')) | .archive_download_url')
+            curl \
+              -L \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -o user-count.zip \
+              "$download_url"
+            unzip user-count.zip
+            cat user-count.txt
             echo "download=true" >> $GITHUB_ENV
           fi
         shell: bash
