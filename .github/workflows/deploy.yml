@@ -160,10 +160,10 @@ jobs:
             echo "Creating new user-count.txt file > 0"
             echo '0' > user-count.txt
             echo "Uploading user-count.txt as an artifact"
-            echo "::set-output name=upload::true"
+            echo "upload=true" >> $GITHUB_ENV
           else
             echo "Downloading user-count artifact"
-            echo "::set-output name=download::true"
+            echo "download=true" >> $GITHUB_ENV
           fi
         shell: bash
         env:
@@ -171,14 +171,14 @@ jobs:
 
       - name: Upload user count
         uses: actions/upload-artifact@v2
-        if: steps.handle_artifact.outputs.upload == 'true'
+        if: env.upload == 'true'
         with:
           name: user-count
           path: user-count.txt
 
       - name: Download user count
         uses: actions/download-artifact@v4
-        if: steps.handle_artifact.outputs.download == 'true'
+        if: env.download == 'true'
         with:
           name: user-count
         continue-on-error: true
