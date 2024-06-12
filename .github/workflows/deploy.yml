@@ -148,33 +148,48 @@ jobs:
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
-      - name: Check if user count artifact exists
-        id: check_artifact
+      - name: Handle user count artifact
+        id: handle_artifact
         run: |
           response=$(curl \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
-          echo "::set-output name=exists::$(echo $response | jq -r '.artifacts[] | select(.name=="user-count") | .id')"
-        shell: bash
-
-      - name: Create default user count file if artifact does not exist
-        id: create_default
-        run: |
-          if [[ -z "${{ steps.check_artifact.outputs.exists }}" ]]; then
+          exists=$(echo $response | jq -r '.artifacts[] | select(.name=="user-count") | .id')
+          if [[ -z "$exists" ]]; then
+            echo "Creating new user-count.txt file > 0"
             echo '0' > user-count.txt
+            echo "Uploading user-count.txt as an artifact"
+            echo "::set-output name=upload::true"
+          else
+            echo "Downloading user-count artifact"
+            echo "::set-output name=download::true"
           fi
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload user count
+        uses: actions/upload-artifact@v2
+        if: steps.handle_artifact.outputs.upload == 'true'
+        with:
+          name: user-count
+          path: user-count.txt
 
       - name: Download user count
         uses: actions/download-artifact@v4
+        if: steps.handle_artifact.outputs.download == 'true'
         with:
           name: user-count
         continue-on-error: true
 
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
+        id: deploy_database
         if: success()
-        run: bash ./openshift/scripts/deploy-database.sh
+        run: |
+          output=$(bash ./openshift/scripts/deploy-database.sh)
+          current_user_count=$(echo "$output" | grep -oP 'CURRENT_USER_COUNT=\K\d+')
+          echo "current_user_count=$current_user_count" >> $GITHUB_ENV
         env:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
@@ -182,7 +197,9 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
 
       - name: Save user count
-        run: echo "USER_COUNT=$(echo "$DB_OUTPUT" | grep -oP '\d+')" > user-count.txt
+        run: |
+          echo "Saving user-count: ${{ env.current_user_count }}"
+          echo "${{ env.current_user_count }}" > user-count.txt
 
       - name: Upload user count
         uses: actions/upload-artifact@v4
