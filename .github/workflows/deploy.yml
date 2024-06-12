@@ -148,72 +148,15 @@ jobs:
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REPLICAS: 3
 
-      - name: Check if bcgov/user-count package exists
-        id: check_package
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
-          npm view @bcgov/user-count version || echo "Package does not exist"
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
-      - name: Create .npmrc file
-        run: |
-          echo "registry=https://npm.pkg.github.com/" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
-
-      - name: Create and publish package if it doesn't exist
-        run: |
-          PACKAGE_VERSION=$(npm view @bcgov/user-count version || echo "not found")
-          if [ "$PACKAGE_VERSION" == "not found" ]; then
-            echo "module.exports = { userCount: 0 };" > index.js
-            echo "{
-              \"name\": \"@bcgov/user-count\",
-              \"version\": \"1.0.0\",
-              \"main\": \"index.js\",
-              \"repository\": {
-                \"type\": \"git\",
-                \"url\": \"git+https://github.com/bcgov/your-repository.git\"
-              },
-              \"author\": \"\",
-              \"license\": \"ISC\"
-            }" > package.json
-            npm publish
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
-      - name: Install user count from GitHub Packages
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
-          npm install @bcgov/user-count || echo '0' > user-count.txt
-          PREVIOUS_USER_COUNT=$(node -e "console.log(require('@bcgov/user-count').userCount || 0)")
-          echo "SET PREVIOUS_USER_COUNT = $PREVIOUS_USER_COUNT"
-          echo "PREVIOUS_USER_COUNT=$PREVIOUS_USER_COUNT" >> $GITHUB_ENV
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         id: deploy_database
         if: success()
-        run: |
-          ./deploy-database.sh ${{ env.previous_user_count }}
-          echo "CURRENT_USER_COUNT=$CURRENT_USER_COUNT" >> $GITHUB_ENV
+        run: ./deploy-database.sh
         env:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           DB_NAME: ${{ secrets.DB_NAME }}
-
-      - name: Update and publish package
-        run: |
-          echo "Update user count to: $CURRENT_USER_COUNT"
-          echo "module.exports = { userCount: $CURRENT_USER_COUNT };" > index.js
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
-          npm version patch -m "Update user count to $CURRENT_USER_COUNT"
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          CURRENT_USER_COUNT: ${{ env.CURRENT_USER_COUNT }}
 
       - name: Deploy Moodle Template and Run Upgrades
         if: success()

@@ -1,6 +1,3 @@
-#!/bin/bash
-PREVIOUS_USER_COUNT=$1
-
 if [[ `oc describe sts $DB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$DB_DEPLOYMENT_NAME NOT FOUND: Beginning deployment..."
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
@@ -89,10 +86,10 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
 
   if [ $CURRENT_USER_COUNT -gt 0 ]; then
-    echo "Database is online."
+    echo "Database is online and contains $CURRENT_USER_COUNT users."
     break
   else
-    echo "Database is not online. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
+    echo "Database is offline. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
     sleep $WAIT_TIME
   fi
 done
@@ -100,13 +97,6 @@ done
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   echo "❌ Timeout waiting for the database to be online. Exiting..."
   exit 1
-fi
-
-# Check if the output contains a positive count
-if [[ "$PREVIOUS_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" =~ ^[0-9]+$ ]] && [[ "$CURRENT_USER_COUNT" -ge "$PREVIOUS_USER_COUNT" ]]; then
-  echo "✔️ Current user count ($CURRENT_USER_COUNT) is >= previous user count ($PREVIOUS_USER_COUNT)"
-else
-    echo "⚠️ WARNING: Current user count ($CURRENT_USER_COUNT) is less than previous user count ($PREVIOUS_USER_COUNT), or one of the counts is not a positive integer"
 fi
 
 echo "$DB_NAME Database deployment is complete."
