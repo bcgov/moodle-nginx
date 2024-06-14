@@ -81,7 +81,8 @@ RUN wget --progress=dot:giga -O /usr/local/bin/php-fpm-healthcheck \
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_FILE"
 COPY ./config/php/php.ini "$PHP_INI_DIR/conf.d/moodle-php.ini"
-COPY ./config/php/php-fpm.conf "$ETC_DIR/php-fpm.d/moodle.conf"
+# COPY ./config/php/php-fpm.conf "$ETC_DIR/php-fpm.d/moodle.conf"
+COPY ./config/php/www.conf "$ETC_DIR/php-fpm.d/www.conf"
 
 # Add commands for site maintenance / upgrades
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
