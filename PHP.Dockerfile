@@ -31,7 +31,7 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions \
     apcu \
     gd \
-    xdebug \
+    # xdebug \
     xmlrpc \
     pdo \
     pdo_mysql \
