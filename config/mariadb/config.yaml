@@ -31,7 +31,9 @@ data:
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';
     GRANT REPLICATION REPLICA ON *.* TO 'repluser'@'%';
     GRANT REPLICA MONITOR ON *.* TO 'repluser'@'%';
-    CREATE DATABASE moodle;
+    GRANT SLAVE MONITOR ON *.* TO 'repluser'@'%';
+    CREATE DATABASE IF NOT EXISTS moodle;
+    FLUSH PRIVILEGES;
 
   secondary.sql: |
     # We have to know name of sts (`db`) and
@@ -46,6 +48,7 @@ data:
       # MASTER_LOG_POS=547,
       MASTER_AUTO_POSITION=1;
       MASTER_CONNECT_RETRY=60;
+    FLUSH PRIVILEGES;
 
 # Headless service
 ---
@@ -174,6 +177,8 @@ spec:
         # Create mysql user for healthcheck.sh
         - name: MARIADB_MYSQL_LOCALHOST_USER
           value: "1"
+        - name: MARIADB_HEALTHCHECK_GRANTS
+          value: "REPLICA MONITOR"
         # Give mysql user grants
         - name: MARIADB_MYSQL_LOCALHOST_GRANTS
           value: "REPLICA MONITOR"
