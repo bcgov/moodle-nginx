@@ -9,8 +9,6 @@ ENV MOODLE_APP_DIR /var/www/html
 ENV PHP_INI_DIR /usr/local/etc/php
 ENV PHP_INI_FILE $PHP_INI_DIR/php.ini
 
-# RUN docker-php-ext-install pdo pdo_mysql mysqli gd xmlrpc soap intl zip xsl opcache
-# RUN docker-php-ext-install pdo mysqli gd xmlrpc soap intl zip xsl opcache
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions pdo pdo_mysql mysqli gd soap intl zip xsl opcache ldap
@@ -33,21 +31,6 @@ RUN wget --progress=dot:giga -O "$(which php-fpm-healthcheck)" \
 RUN mv "$PHP_INI_DIR/php.ini-$PHP_INI_ENVIRONMENT" "$PHP_INI_FILE"
 COPY ./config/php/php.ini "$PHP_INI_DIR/moodle-php.ini"
 COPY ./config/php/php-fpm.conf "/usr/local/etc/php-fpm.d"
-
-# Setup and run cron
-# RUN touch /var/log/cron.log \
-#   && chmod 0777 /var/log/cron.log \
-#   && adduser www-data crontab \
-#   && chown www-data:crontab /usr/bin/crontab \
-#   && chmod 4755 /usr/bin/crontab
-#SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-#RUN (crontab -l -u www-data; echo "* * * * * su -c '/usr/local/bin/php /app/public/admin/cli/cron.php >&1'") | crontab
-# COPY ./config/cron/crontab.txt /etc/cron.d/moodle-cron
-# RUN chown www-data:crontab /etc/cron.d/moodle-cron
-# RUN chmod 0644 /etc/cron.d/moodle-cron
-# RUN crontab /etc/cron.d/moodle-cron
-
-# CMD ["sh", "-c", "cron && tail -f /dev/null"]
 
 COPY ./config/cron/cron.sh /usr/local/bin/cron.sh
 CMD ["/bin/bash", "/usr/local/bin/cron.sh"]

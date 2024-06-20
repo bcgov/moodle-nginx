@@ -402,6 +402,11 @@
                     "name": "${APP_NAME}-env",
                     "mountPath": ".env",
                     "subPath": ".env"
+                  },
+                  {
+                    "name": "${CRON_DEPLOYMENT_NAME}-config",
+                    "mountPath": "/var/www/html/config.php",
+                    "subPath": "config.php"
                   }
                 ],
                 "resources": {
