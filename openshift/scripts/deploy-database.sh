@@ -17,10 +17,15 @@ else
     exit 1
   fi
 
-  echo "Recreating $DB_DEPLOYMENT_NAME..."
+  echo "Recreating $DB_DEPLOYMENT_NAME from image: $IMAGE_REPO$DB_IMAGE"
   oc delete sts $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
   oc delete configmap $DB_DEPLOYMENT_NAME-config -n $DEPLOY_NAMESPACE
   oc delete service $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
+  # Export variables from example.versions.env
+  set -a
+  source example.versions.env
+  set +a
+  # Substitute variables in the config.yaml file and create the deployment
   envsubst < ./config/mariadb/config.yaml | oc create -f - -n $DEPLOY_NAMESPACE
 
   sleep 10
