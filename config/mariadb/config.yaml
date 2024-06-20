@@ -85,7 +85,7 @@ spec:
     spec:
       initContainers:
       - name: init-db
-        image: mariadb
+        image: ${IMAGE_REPO}${DB_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}
         imagePullPolicy: Always
         command:
         - bash
@@ -126,7 +126,7 @@ spec:
       restartPolicy: Always
       containers:
       - name: db
-        image: mariadb
+        image: ${IMAGE_REPO}${DB_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}
         ports:
         - containerPort: 3306
           name: db-port
