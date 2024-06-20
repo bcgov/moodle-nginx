@@ -24,6 +24,9 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
+      DB_IMAGE:
+        required: true
+        type: string
       DB_HOST:
         required: true
         type: string
