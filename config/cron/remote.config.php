@@ -5,7 +5,7 @@ $CFG = new stdClass();
 
 $CFG->dbtype    = 'mariadb';
 $CFG->dblibrary = 'native';
-$CFG->dbhost    = 'db-0';
+$CFG->dbhost    = 'db';
 $CFG->dbname    = $_SERVER['DB_NAME'];
 $CFG->dbuser    = $_SERVER['DB_USER'];
 $CFG->dbpass    = $_SERVER['DB_PASSWORD'];

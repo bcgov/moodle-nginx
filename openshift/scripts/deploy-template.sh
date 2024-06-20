@@ -97,11 +97,15 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
+# Only use 1 db replica for deployment / upgrade to avoid conflicts
+echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
+
+# Redirect traffic to maintenance-message
+echo "Redirecting traffic to maintenance-message..."
+oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+
 sleep 60
-
-# Right-sizing cluster, according to environment
-bash ./openshift/scripts/right-sizing.sh
-
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 oc rollout latest dc/$PHP_DEPLOYMENT_NAME
@@ -237,6 +241,9 @@ sleep 10
 echo "Scaling up $DB_DEPLOYMENT_NAME to 3 replicas..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
 
+# Right-sizing cluster, according to environment
+bash ./openshift/scripts/right-sizing.sh
+
 sleep 10
 
 echo "Disabling maintenance mode..."
@@ -244,6 +251,9 @@ oc exec dc/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintena
 
 echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
+
+sleep 30
+
 oc scale dc/maintenance-message --replicas=0
 
 echo "Deployment complete."
