@@ -8,6 +8,7 @@ data:
   primary.cnf: |
     [mariadb]
     skip-ssl
+    disable-ssl-verify-server-cert
     log-bin                         # enable binary logging
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
@@ -19,6 +20,7 @@ data:
   replica.cnf: |
     [mariadb]
     skip-ssl
+    disable-ssl-verify-server-cert
     slave_parallel_mode=optimistic
     slave_parallel_threads=2  # Adjust this value based on your system's capabilities
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
