@@ -1,9 +1,9 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB)
 cron,deployment,1,1,0,0,0,0,0,0
-db,sts,3,3,3,2048,10,100,256,512
-php,dc,3,3,1,5120,20,2000,15,800
+db,sts,3,3,3,2048,10,250,256,512
+php,dc,3,3,1,5120,20,1800,15,800
 redis,sts,1,1,1,1024,25,200,15,182
-web,dc,3,3,0,0,5,100,10,40
+web,dc,3,3,0,0,5,60,10,40
 migrate-build-files,job,1,1,0,0,0,0,0,0
 moodle-upgrade,job,1,1,0,0,0,0,0,0
 moodle-db-backup-storage,deployment,1,1,1,15360,0,0,0,0

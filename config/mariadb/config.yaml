@@ -7,20 +7,26 @@ data:
 
   primary.cnf: |
     [mariadb]
+    server-id=1
     skip-ssl
-    disable-ssl-verify-server-cert
+    # disable-ssl-verify-server-cert
     log-bin                         # enable binary logging
-    log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
+    log-basename=moodle-db          # used to be independent of hostname changes (otherwise is in datadir/mysql)
     max_allowed_packet=1073741824
     innodb_buffer_pool_size=800M
     net_read_timeout=3600
     net_write_timeout=3600
-    innodb_ft_result_cache_limit = 1000000000
+    innodb_ft_result_cache_limit=1000000000
+    # GTID settings
+    gtid_domain_id=1                # Unique domain ID for GTID
+    enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
+    gtid_strict_mode=1              # Prevents issues with non-deterministic statements
+    binlog_format=ROW               # Required for GTID replication
 
   replica.cnf: |
     [mariadb]
     skip-ssl
-    disable-ssl-verify-server-cert
+    # disable-ssl-verify-server-cert
     slave_parallel_mode=optimistic
     slave_parallel_threads=2  # Adjust this value based on your system's capabilities
     log-basename=moodle-db         # used to be independent of hostname changes (otherwise is in datadir/mysql)
@@ -30,6 +36,10 @@ data:
     net_write_timeout=3600
     slave_skip_errors=1062,1396
     innodb_ft_result_cache_limit = 1000000000
+    # GTID settings
+    gtid_domain_id=1                # Must match the primary's domain ID
+    enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
+    gtid_strict_mode=1              # Prevents issues with non-deterministic statements
 
   primary.sql: |
     CREATE USER 'repluser'@'%' IDENTIFIED BY 'replsecret';
@@ -111,25 +121,25 @@ spec:
           # db-config volume (emptyDir) depending on pod number
           if [[ $(echo `hostname` | sed 's/[^0-9]*//g') -eq 0 ]]; then
             # This file holds SQL for connecting to primary
-            cp /mnt/config-map/primary.cnf /etc/mysql/conf.d/server-id.cnf
+            cp /mnt/config-map/primary.cnf /etc/mysql/server-id.cnf
             # Create the users needed for replication on primary on a volume
             # initdb (emptyDir)
             cp /mnt/config-map/primary.sql /docker-entrypoint-initdb.d
           else
             # This file holds SQL for connecting to secondary
-            cp /mnt/config-map/replica.cnf /etc/mysql/conf.d/server-id.cnf
+            cp /mnt/config-map/replica.cnf /etc/mysql/server-id.cnf
             # On replicas use secondary configuration on initdb volume
             cp /mnt/config-map/secondary.sql /docker-entrypoint-initdb.d
           fi
           # Add an offset to avoid reserved server-id=0 value.
-          echo server-id=$((3000 + $(echo `hostname` | sed 's/[^0-9]*//g'))) >> etc/mysql/conf.d/server-id.cnf
-          ls /etc/mysql/conf.d/
-          cat /etc/mysql/conf.d/server-id.cnf
+          echo server-id=$((3000 + $(echo `hostname` | sed 's/[^0-9]*//g'))) >> etc/mysql/server-id.cnf
+          ls /etc/mysql/
+          cat /etc/mysql/server-id.cnf
         volumeMounts:
           - name: db-config-map
             mountPath: /mnt/config-map
           - name: db-config
-            mountPath: /etc/mysql/conf.d/
+            mountPath: /etc/mysql/
           - name: initdb
             mountPath: /docker-entrypoint-initdb.d
       restartPolicy: Always
@@ -198,7 +208,7 @@ spec:
         - name: db-config-map
           mountPath: /mnt/config-map
         - name: db-config
-          mountPath: /etc/mysql/conf.d/
+          mountPath: /etc/mysql/
         - name: initdb
           mountPath: /docker-entrypoint-initdb.d
       volumes:
