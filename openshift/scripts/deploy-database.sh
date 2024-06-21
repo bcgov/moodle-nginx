@@ -17,7 +17,7 @@ else
     exit 1
   fi
 
-  echo "Recreating $DB_DEPLOYMENT_NAME from image: $DB_IMAGE"
+  echo "Recreating $DB_DEPLOYMENT_NAME from image: $IMAGE_REPO$DB_IMAGE"
   oc delete sts $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
   oc delete configmap $DB_DEPLOYMENT_NAME-config -n $DEPLOY_NAMESPACE
   oc delete service $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
