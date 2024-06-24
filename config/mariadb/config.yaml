@@ -37,7 +37,7 @@ data:
     innodb_ft_result_cache_limit = 1000000000
     # GTID settings
     gtid_domain_id=1                # Must match the primary's domain ID
-    enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
+    # enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
     gtid_strict_mode=1              # Prevents issues with non-deterministic statements
 
   primary.sql: |
