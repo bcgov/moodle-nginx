@@ -10,7 +10,7 @@ data:
     skip-ssl
     skip-name-resolve
     # disable-ssl-verify-server-cert
-    log-bin                         # enable binary logging
+    log-bin=db-0-bin
     max_allowed_packet=1073741824
     innodb_buffer_pool_size=800M
     net_read_timeout=3600
@@ -18,7 +18,7 @@ data:
     innodb_ft_result_cache_limit=1000000000
     # GTID settings
     gtid_domain_id=1                # Unique domain ID for GTID
-    enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
+    # enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
     gtid_strict_mode=1              # Prevents issues with non-deterministic statements
     binlog_format=ROW               # Required for GTID replication
 
