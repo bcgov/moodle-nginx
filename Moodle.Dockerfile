@@ -66,7 +66,7 @@ RUN echo $DATAFLOWS_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
     # echo $TRIGGER_DIR > $MOODLE_APP_DIR/plugin-folders.txt && \
     # echo $F2F_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
     echo $HVP_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
-    echo $FORMAT_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
+    # echo $FORMAT_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
     echo $CUSTOMCERT_DIR >> $MOODLE_APP_DIR/plugin-folders.txt
     # echo $CERTIFICATE_DIR >> $MOODLE_APP_DIR/plugin-folders.txt
 
@@ -74,7 +74,7 @@ RUN mkdir -p $HVP_DIR  && \
   # mkdir -p $DATAFLOWS_DIR && \
   # mkdir -p $TRIGGER_DIR && \
   # mkdir -p $F2F_DIR && \
-    mkdir -p $FORMAT_DIR  && \
+  # mkdir -p $FORMAT_DIR  && \
   # mkdir -p $CERTIFICATE  && \
     mkdir -p $CUSTOMCERT_DIR
 
@@ -82,7 +82,7 @@ RUN git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --singl
   # git clone --recurse-submodules --jobs 8 --branch $DATAFLOWS_BRANCH_VERSION --single-branch $DATAFLOWS_URL $DATAFLOWS_DIR && \
   # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $F2F_BRANCH_VERSION --single-branch $F2F_URL $F2F_DIR && \
-    git clone --recurse-submodules --jobs 8 --branch $FORMAT_BRANCH_VERSION --single-branch $FORMAT_URL $FORMAT_DIR && \
+  # git clone --recurse-submodules --jobs 8 --branch $FORMAT_BRANCH_VERSION --single-branch $FORMAT_URL $FORMAT_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR
   # git clone --recurse-submodules --jobs 8 --branch $CERTIFICATE_BRANCH_VERSION --single-branch $CERTIFICATE_URL $CERTIFICATE_DIR
 
