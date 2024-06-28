@@ -44,7 +44,7 @@ services:
         depends_on:
           php:
             condition: service_healthy
-        image: ${WEB_IMAGE:-nginx-unprivileged:1.25.4-alpine-slim}
+        image: ${WEB_IMAGE:-nginxinc/nginx-unprivileged:1.25.4-alpine-slim}
         ports:
             - "8080:8080"
         volumes:
@@ -54,7 +54,7 @@ services:
           - php
     db:
         image: ${DB_IMAGE:-mariadb:10}
-        env_file: .env
+        env_file: example.env
         volumes:
             - mysqldata:/var/lib/mysql:delegated
             - ./temp/db-backups:/tmp/db-backups:delegated
@@ -75,7 +75,7 @@ services:
         tty: true
         restart: "no"
         env_file:
-          - .env
+          - example.env
         environment:
           XDEBUG_MODE: debug
           XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003
@@ -120,7 +120,7 @@ services:
         depends_on:
           db:
             condition: service_healthy
-        env_file: .env
+        env_file: example.env
         build:
             context: .
             dockerfile: CRON.Dockerfile
