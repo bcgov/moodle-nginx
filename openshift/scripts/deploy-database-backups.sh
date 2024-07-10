@@ -40,7 +40,7 @@ else
         storageClassName: netapp-file-standard
 
     backupConfig: |
-      mariadb=$DB_HOST/$DB_NAME
+      mariadb=$DB_HOST:$DB_PORT/$DB_NAME
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
 
@@ -53,7 +53,7 @@ else
       DATABASE_SERVICE_NAME:
         value: \"$DB_HOST\"
       ENVIRONMENT_FRIENDLY_NAME:
-        value: \"DB Backups\"
+        value: \"Moodle Backups\"
     " > config.yaml
   helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --atomic --wait --timeout 30 -f config.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME backup-storage=$DB_BACKUP_IMAGE
