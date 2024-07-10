@@ -69,7 +69,7 @@ PODS=$(oc get pods -l app=$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE -o jsonpat
 
 # Loop through each pod
 for POD_NAME in $PODS; do
-    # Create a service for each pod using the redis-services template
-    sed "s/\${POD_NAME}/$POD_NAME/g" < ./openshift/redis-services.yml | oc apply -f -
-    echo "Service created for pod $POD_NAME"
+  # Create a service for each pod using the redis-services template
+  sed "s/\${POD_NAME}/$POD_NAME/g" < ./openshift/redis-services.yml | oc apply -f -
+  echo "Service created for pod $POD_NAME"
 done

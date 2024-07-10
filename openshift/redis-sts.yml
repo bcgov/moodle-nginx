@@ -38,18 +38,21 @@ spec:
           [ -n "$ordinal" ] || exit 1
           # Copy appropriate conf.d files from config-map to emptyDir.
           echo "Testing ordinal > 0 : $ordinal"
-          case "$ordinal" in
-          0)
-            echo "Copying primary.conf to /etc/redis.conf"
-            cp /mnt/config-map/primary.conf /redis-conf/redis.conf
-            echo "Copied primary.conf to /etc/redis.conf"
-            ;;
-          *)
-            echo "Copying secondary.conf to /etc/redis.conf"
-            cp /mnt/config-map/secondary.conf /redis-conf/redis.conf
-            echo "Copied secondary.conf to /etc/redis.conf"
-            ;;
-          esac
+          # case "$ordinal" in
+          # 0)
+          #   echo "Copying primary.conf to /etc/redis.conf"
+          #   cp /mnt/config-map/primary.conf /redis-conf/redis.conf
+          #   echo "Copied primary.conf to /etc/redis.conf"
+          #   ;;
+          # *)
+          #   echo "Copying secondary.conf to /etc/redis.conf"
+          #   cp /mnt/config-map/secondary.conf /redis-conf/redis.conf
+          #   echo "Copied secondary.conf to /etc/redis.conf"
+          #   ;;
+          # esac
+          echo "Copying primary.conf to /etc/redis.conf"
+          cp /mnt/config-map/primary.conf /redis-conf/redis.conf
+          echo "Copied primary.conf to /etc/redis.conf"
           echo "Script completed successfully"
         volumeMounts:
         - name: ${REDIS_DEPLOYMENT_NAME}-config-map
