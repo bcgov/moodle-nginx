@@ -1,0 +1,20 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ${POD_NAME}
+  labels:
+    name: ${POD_NAME}
+spec:
+  ipFamilies:
+    - IPv4
+  ports:
+    - name: 6379-6379
+      protocol: TCP
+      port: 6379
+      targetPort: 6379
+  internalTrafficPolicy: Cluster
+  type: ClusterIP
+  ipFamilyPolicy: SingleStack
+  sessionAffinity: None
+  selector:
+    statefulset.kubernetes.io/pod-name: ${POD_NAME}
