@@ -18,19 +18,6 @@ else
   echo "DELETED service:  $route_name"
 fi
 
-# Find all services with metadata.labels.name = redis
-SERVICES=$(oc get svc -l name=redis -o jsonpath='{.items[*].metadata.name}')
-
-for route_name in $SERVICES; do
-  if [[ `oc describe svc/$route_name 2>&1` =~ "NotFound" ]]; then
-    echo "Service NOT FOUND: $route_name - Skipping..."
-  else
-    echo "$route_name service FOUND: Cleaning resources..."
-    oc delete svc/$route_name
-    echo "DELETED service:  $route_name"
-  fi
-done
-
 if [[ `oc describe configmap/$REDIS_DEPLOYMENT_NAME-config-map 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME-config-map - Skipping..."
 else
@@ -59,17 +46,3 @@ sed -e "s/\${REDIS_DEPLOYMENT_NAME}/$REDIS_DEPLOYMENT_NAME/g" -e "s/\${REDIS_IMA
 
 # Expose the service
 oc expose svc/$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
-
-sleep 30
-
-# Add services for each redis pod
-echo "Deploy Redis Service for each pod ..."
-# Collect all pods related to the Redis StatefulSet
-PODS=$(oc get pods -l app=$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE -o jsonpath='{.items[*].metadata.name}')
-
-# Loop through each pod
-for POD_NAME in $PODS; do
-  # Create a service for each pod using the redis-services template
-  sed "s/\${POD_NAME}/$POD_NAME/g" < ./openshift/redis-services.yml | oc apply -f -
-  echo "Service created for pod $POD_NAME"
-done

@@ -61,3 +61,28 @@ do
       oc patch dc $Deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"66%\"}}}}"
   fi
 done
+
+# Find and delete all services with metadata.labels.name = redis
+SERVICES=$(oc get svc -l name=redis -o jsonpath='{.items[*].metadata.name}')
+
+for route_name in $SERVICES; do
+  if [[ `oc describe svc/$route_name 2>&1` =~ "NotFound" ]]; then
+    echo "Service NOT FOUND: $route_name - Skipping..."
+  else
+    echo "$route_name service FOUND: Cleaning resources..."
+    oc delete svc/$route_name
+    echo "DELETED service:  $route_name"
+  fi
+done
+
+# Add service for each redis pod
+echo "Deploy Redis Service for each pod ..."
+# Collect all pods related to the Redis StatefulSet
+PODS=$(oc get pods -l app=$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE -o jsonpath='{.items[*].metadata.name}')
+
+# Loop through each pod
+for POD_NAME in $PODS; do
+  # Create a service for each pod using the redis-services template
+  sed "s/\${POD_NAME}/$POD_NAME/g" < ./openshift/redis-services.yml | oc apply -f -
+  echo "Service created for pod $POD_NAME"
+done
