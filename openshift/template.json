@@ -694,7 +694,7 @@
       "displayName": "Moodle Volume Capacity",
       "name": "MOODLE_VOLUME_CAPACITY",
       "required": true,
-      "value": "5Gi"
+      "value": "10Gi"
     },
     {
       "description": "Volume for storing file backups",
