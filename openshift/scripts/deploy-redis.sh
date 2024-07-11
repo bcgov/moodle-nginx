@@ -10,13 +10,19 @@ else
   echo "DELETED route:  $route_name"
 fi
 
-if [[ `oc describe svc/$route_name 2>&1` =~ "NotFound" ]]; then
-  echo "Service NOT FOUND: $route_name - Skipping..."
-else
-  echo "$route_name service FOUND: Cleaning resources..."
-  oc delete svc/$route_name
-  echo "DELETED service:  $route_name"
-fi
+# Find and delete all services with metadata.labels.name = redis
+echo "Delete Redis Services for each pod ..."
+SERVICES=$(oc get svc -l name=$REDIS_DEPLOYMENT_NAME -o jsonpath='{.items[*].metadata.name}')
+
+for service in $SERVICES; do
+  if [[ `oc describe svc/$service 2>&1` =~ "NotFound" ]]; then
+    echo "Service NOT FOUND: $service - Skipping..."
+  else
+    echo "$service service FOUND: Cleaning resources..."
+    oc delete svc/$service
+    echo "DELETED service:  $service"
+  fi
+done
 
 if [[ `oc describe configmap/$REDIS_DEPLOYMENT_NAME-config-map 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME-config-map - Skipping..."

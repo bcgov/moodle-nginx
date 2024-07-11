@@ -62,18 +62,7 @@ do
   fi
 done
 
-# Find and delete all services with metadata.labels.name = redis
-SERVICES=$(oc get svc -l name=redis -o jsonpath='{.items[*].metadata.name}')
-
-for route_name in $SERVICES; do
-  if [[ `oc describe svc/$route_name 2>&1` =~ "NotFound" ]]; then
-    echo "Service NOT FOUND: $route_name - Skipping..."
-  else
-    echo "$route_name service FOUND: Cleaning resources..."
-    oc delete svc/$route_name
-    echo "DELETED service:  $route_name"
-  fi
-done
+sleep 60
 
 # Add service for each redis pod
 echo "Deploy Redis Service for each pod ..."
