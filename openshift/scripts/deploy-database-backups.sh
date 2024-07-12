@@ -9,11 +9,11 @@ if helm list -q | grep -q "^$DB_BACKUP_DEPLOYMENT_NAME$"; then
 
   # Create a temporary values file with the updated backupConfig
   cat <<EOF > temp-values.yaml
-  backupConfig: |
-    mariadb=$DB_HOST:$DB_PORT/$DB_NAME
-    0 1 * * * default ./backup.sh -s
-    0 4 * * * default ./backup.sh -s -v all
-  EOF
+backupConfig: |
+  mariadb=$DB_HOST:$DB_PORT/$DB_NAME
+  0 1 * * * default ./backup.sh -s
+  0 4 * * * default ./backup.sh -s -v all
+EOF
 
   # Upgrade the Helm deployment with the new values
   if [[ `helm upgrade $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --reuse-values -f temp-values.yaml 2>&1` =~ "Error" ]]; then
