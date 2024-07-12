@@ -30,6 +30,9 @@ on:
       DB_HOST:
         required: true
         type: string
+      DB_PORT:
+        required: true
+        type: string
       DB_DEPLOYMENT_NAME:
         required: true
         type: string
