@@ -139,6 +139,7 @@ jobs:
           DB_BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ inputs.DB_PORT }}
 
       # Deploy Redis
       - name: Deploy Redis StatefulSet (${{ inputs.REDIS_DEPLOYMENT_NAME  }})
