@@ -43,7 +43,18 @@ async function runLighthouse(url, options, config = null) {
     throw new Error('MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
   }
 
-  await page.type('#username', username);
+  // Check if the username field exists
+  const usernameField = await page.$('#username');
+  if (!usernameField) {
+    throw new Error('No element found for selector: #username');
+  }
+  await usernameField.type(username);
+
+  // Check if the password field exists
+  const passwordField = await page.$('#password');
+  if (!passwordField) {
+    throw new Error('No element found for selector: #password');
+  }
   await page.type('#password', password);
 
   // console.log('Current working directory:', process.cwd());
