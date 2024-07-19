@@ -39,6 +39,14 @@ else
   echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME-config-map"
 fi
 
+if [[ `oc describe configmap/$REDIS_DEPLOYMENT_NAME-stats 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap NOT FOUND: $REDIS_DEPLOYMENT_NAME-stats - Skipping..."
+else
+  echo "$REDIS_DEPLOYMENT_NAME-stats FOUND: Cleaning resources..."
+  oc delete configmap/$REDIS_DEPLOYMENT_NAME-stats
+  echo "DELETED configmap:  $REDIS_DEPLOYMENT_NAME-stats"
+fi
+
 if [[ `oc describe sts/$REDIS_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$REDIS_DEPLOYMENT_NAME StatefulSet NOT FOUND - Skipping..."
 else
@@ -49,6 +57,9 @@ fi
 
 echo "Creating configMap: $REDIS_DEPLOYMENT_NAME-config"
 sed -e "s/\${REDIS_PASSWORD}/$REDIS_PASSWORD/g" < ./config/redis/redis-config.yml | oc apply -f -
+
+echo "Creating configMap: $REDIS_DEPLOYMENT_NAME-stats"
+oc create configmap $REDIS_DEPLOYMENT_NAME-stats --from-file=./config/redis/redis-stats.php
 
 # Create a headless service to control the domain of the Redis cluster
 oc create service clusterip $REDIS_DEPLOYMENT_NAME --tcp=6379:6379 -n $DEPLOY_NAMESPACE``

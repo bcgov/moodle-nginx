@@ -214,6 +214,11 @@
                     "subPath": "config.php"
                   },
                   {
+                    "name": "redis-stats",
+                    "mountPath": "/var/www/html/redis-stats.php",
+                    "subPath": "redis-stats.php"
+                  },
+                  {
                     "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
                     "name": "${APP_NAME}-data"
                   },
@@ -290,6 +295,19 @@
                     {
                       "key": "config.php",
                       "path": "config.php"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "redis-stats",
+                "configMap": {
+                  "name": "redis-stats",
+                  "defaultMode": 420,
+                  "items": [
+                    {
+                      "key": "redis-stats.php",
+                      "path": "redis-stats.php"
                     }
                   ]
                 }
