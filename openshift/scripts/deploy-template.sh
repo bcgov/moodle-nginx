@@ -53,7 +53,7 @@ fi
 sleep 10
 
 echo "Creating configMap: $APP-config"
-oc create configmap $APP-config --from-file=config.php=./config/moodle/$MOODLE_ENVIRONMENT.config.php
+oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
 
 if [[ ! `oc describe configmap $CRON_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $CRON_DEPLOYMENT_NAME-config"
@@ -63,7 +63,7 @@ fi
 sleep 10
 
 echo "Creating configMap: $CRON_DEPLOYMENT_NAME-config"
-oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$MOODLE_ENVIRONMENT.config.php
+oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
 
 sleep 10
 

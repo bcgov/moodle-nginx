@@ -61,7 +61,7 @@ else
       DATABASE_SERVICE_NAME:
         value: \"$DB_HOST\"
       ENVIRONMENT_FRIENDLY_NAME:
-        value: \"Moodle Backups\"
+        value: \"Backups\"
     " > config.yaml
   helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --atomic --wait --timeout 30 -f config.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME backup-storage=$DB_BACKUP_IMAGE

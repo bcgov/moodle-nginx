@@ -1,4 +1,4 @@
-ARG DOCKER_FROM_IMAGE=php:8.3-fpm
+ARG DOCKER_FROM_IMAGE=php:8.2-fpm
 FROM ${DOCKER_FROM_IMAGE}
 
 ARG PHP_INI_ENVIRONMENT=production
@@ -31,7 +31,6 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions \
     apcu \
     gd \
-    # xdebug \
     xmlrpc \
     pdo \
     pdo_mysql \
@@ -45,31 +44,9 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
     exif \
     mbstring
 
-
-# Only for PHP 8.0+ (remember to remove xmlrpc from list below to use this)
-# RUN pecl update-channels && pecl install channel://pecl.php.net/xmlrpc-1.0.0RC3 xmlrpc
-# RUN docker-php-ext-install -j$(nproc) xmlrpc
-
-# Install remaining PHP extensions
-# RUN docker-php-ext-install \
-#     pdo \
-#     pdo_mysql \
-#     mysqli \
-#     gd \
-#     soap \
-#     intl \
-#     zip \
-#     xsl \
-#     opcache \
-#     ldap \
-#     exif \
-#     mbstring
-
 RUN pecl install -o -f redis \
-  #  xdebug \
   && docker-php-ext-enable redis \
   xmlrpc  \
-  # xdebug \
   && rm -rf /tmp/pear
 
 RUN wget --progress=dot:giga -O /usr/local/bin/php-fpm-healthcheck \
@@ -81,7 +58,6 @@ RUN wget --progress=dot:giga -O /usr/local/bin/php-fpm-healthcheck \
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_FILE"
 COPY ./config/php/php.ini "$PHP_INI_DIR/conf.d/moodle-php.ini"
-# COPY ./config/php/php-fpm.conf "$ETC_DIR/php-fpm.d/moodle.conf"
 COPY ./config/php/www.conf "$ETC_DIR/php-fpm.d/www.conf"
 
 # Add commands for site maintenance / upgrades

@@ -55,7 +55,7 @@ jobs:
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
       BRANCH: ${{ env.BRANCH }}
-      MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
+      DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
       BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -178,7 +178,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
-      MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
+      DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}

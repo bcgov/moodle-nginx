@@ -9,7 +9,7 @@ env:
 on:
   workflow_call:
     inputs:
-      MOODLE_ENVIRONMENT:
+      DEPLOY_ENVIRONMENT:
         required: true
         type: string
       APP:
@@ -171,7 +171,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
-          MOODLE_ENVIRONMENT: ${{ inputs.MOODLE_ENVIRONMENT }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}

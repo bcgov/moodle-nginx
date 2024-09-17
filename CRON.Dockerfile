@@ -1,4 +1,4 @@
-ARG DOCKER_FROM_IMAGE=php:8.3-cli
+ARG DOCKER_FROM_IMAGE=php:8.2-cli
 FROM ${DOCKER_FROM_IMAGE}
 
 # Environment uses ONLY production or development
