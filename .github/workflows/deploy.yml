@@ -39,7 +39,7 @@ on:
       CRON_IMAGE:
         required: true
         type: string
-      CRON_DEPLOYMENT_NAME:
+      CRON_NAME:
         required: true
         type: string
       REDIS_HELM_CHART:
@@ -192,7 +192,7 @@ jobs:
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
-          CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
+          CRON_NAME: ${{ inputs.CRON_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_NAME: ${{ inputs.REDIS_NAME }}
           REDIS_PORT: ${{ inputs.REDIS_PORT }}

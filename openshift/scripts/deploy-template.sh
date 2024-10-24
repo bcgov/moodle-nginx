@@ -21,9 +21,9 @@ sleep 60
 
 echo "Delete cron job if it exists..."
 # Check if cron exists
-if oc get deployment $CRON_DEPLOYMENT_NAME; then
-  echo "$CRON_DEPLOYMENT_NAME Installation FOUND...Deleting..."
-  oc delete deployment $CRON_DEPLOYMENT_NAME
+if oc get deployment $CRON_NAME; then
+  echo "$CRON_NAME Installation FOUND...Deleting..."
+  oc delete deployment $CRON_NAME
 fi
 
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
@@ -55,15 +55,15 @@ sleep 10
 echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
 
-if [[ ! `oc describe configmap $CRON_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $CRON_DEPLOYMENT_NAME-config"
-  oc delete configmap $CRON_DEPLOYMENT_NAME-config
+if [[ ! `oc describe configmap $CRON_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $CRON_NAME-config"
+  oc delete configmap $CRON_NAME-config
 fi
 
 sleep 10
 
-echo "Creating configMap: $CRON_DEPLOYMENT_NAME-config"
-oc create configmap $CRON_DEPLOYMENT_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
+echo "Creating configMap: $CRON_NAME-config"
+oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
 
 sleep 10
 
@@ -91,7 +91,7 @@ oc process -f ./openshift/template.json \
   -p IMAGE_REPO=$IMAGE_REPO \
   -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
   -p WEB_IMAGE=$WEB_IMAGE \
-  -p CRON_DEPLOYMENT_NAME=$CRON_DEPLOYMENT_NAME \
+  -p CRON_NAME=$CRON_NAME \
   -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -

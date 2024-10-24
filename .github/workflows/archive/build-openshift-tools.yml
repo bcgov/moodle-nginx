@@ -145,12 +145,12 @@ jobs:
           SOURCE_REPOSITORY_URL: ${{ env.SOURCE_REPOSITORY_URL }}
 
       # Build the Cron image
-      - name: 🚧 Build ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}
+      - name: 🚧 Build ${{ env.CRON_NAME }}:${{ env.BRANCH }}
         id: build-cron
         if: success() && ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}
         working-directory: "./"
         run: |
-          echo "Building ${{ env.CRON_DEPLOYMENT_NAME }}:${{ env.BRANCH }}"
+          echo "Building ${{ env.CRON_NAME }}:${{ env.BRANCH }}"
           echo "Using ${{ env.CRON_IMAGE }}"
           if ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }}; then
             echo "STARTING BUILD..."
@@ -161,7 +161,7 @@ jobs:
         env:
           DOCKER_FROM_IMAGE: ${{ env.CRON_IMAGE }}
           DOCKER_FILE_PATH: ${{ env.CRON_DOCKER_FILE_PATH }}
-          DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+          DEPLOYMENT_NAME: ${{ env.CRON_NAME }}
           SOURCE_CONTEXT_DIR: ${{ env.CRON_SOURCE_CONTEXT_DIR }}
           BRANCH: ${{ env.BRANCH }}
           BUILD_NAMESPACE: ${{ env.BUILD_NAMESPACE }}
@@ -179,7 +179,7 @@ jobs:
       PHP_IMAGE: ${{ env.PHP_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
+      CRON_NAME: ${{ env.CRON_NAME }}
       REDIS_REPO: ${{ env.REDIS_REPO }}
       REDIS_NAME: ${{ env.REDIS_NAME }}
       REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
@@ -206,7 +206,7 @@ jobs:
       DB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.WEB_DEPLOYMENT_NAME }}
       PHP_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.PHP_DEPLOYMENT_NAME }}
-      CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
+      CRON_NAME: ${{ needs.build-images.outputs.CRON_NAME }}
       REDIS_NAME: ${{ needs.build-images.outputs.REDIS_NAME }}
 
   call-deploy-workflow:
@@ -228,7 +228,7 @@ jobs:
       DB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.DB_DEPLOYMENT_NAME }}
       DB_IMAGE: ${{ needs.build-images.outputs.DB_IMAGE }}
       CRON_IMAGE: ${{ needs.build-images.outputs.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
+      CRON_NAME: ${{ needs.build-images.outputs.CRON_NAME }}
       REDIS_REPO: ${{ needs.build-images.outputs.REDIS_REPO }}
       REDIS_NAME: ${{ needs.build-images.outputs.REDIS_NAME }}
       REDIS_IMAGE: ${{ needs.build-images.outputs.REDIS_IMAGE }}

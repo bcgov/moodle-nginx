@@ -372,14 +372,14 @@
         "annotations": {
           "template.alpha.openshift.io/wait-for-ready": "true"
         },
-        "name": "${CRON_DEPLOYMENT_NAME}",
+        "name": "${CRON_NAME}",
         "namespace": "${DEPLOY_NAMESPACE}"
       },
       "spec": {
         "replicas": 1,
         "selector": {
           "matchLabels": {
-            "app": "${CRON_DEPLOYMENT_NAME}"
+            "app": "${CRON_NAME}"
           }
         },
         "strategy": {
@@ -388,7 +388,7 @@
         "template": {
           "metadata": {
             "labels": {
-              "app": "${CRON_DEPLOYMENT_NAME}"
+              "app": "${CRON_NAME}"
             }
           },
           "spec": {
@@ -399,8 +399,8 @@
             ],
             "containers": [
               {
-                "image": "${IMAGE_REPO}${CRON_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}",
-                "name": "${CRON_DEPLOYMENT_NAME}",
+                "image": "${IMAGE_REPO}${CRON_NAME}:${DEPLOY_NAMESPACE}",
+                "name": "${CRON_NAME}",
                 "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
                 "volumeMounts": [
@@ -422,7 +422,7 @@
                     "subPath": ".env"
                   },
                   {
-                    "name": "${CRON_DEPLOYMENT_NAME}-config",
+                    "name": "${CRON_NAME}-config",
                     "mountPath": "/var/www/html/config.php",
                     "subPath": "config.php"
                   }
@@ -499,9 +499,9 @@
                 }
               },
               {
-                "name": "${CRON_DEPLOYMENT_NAME}-config",
+                "name": "${CRON_NAME}-config",
                 "configMap": {
-                  "name": "${CRON_DEPLOYMENT_NAME}-config",
+                  "name": "${CRON_NAME}-config",
                   "defaultMode": 420
                 }
               },
@@ -705,7 +705,7 @@
       "description": "Cron Deployment Name",
       "displayName": "Cron Deployment",
       "required": true,
-      "name": "CRON_DEPLOYMENT_NAME"
+      "name": "CRON_NAME"
     },
     {
       "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",

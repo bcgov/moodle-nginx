@@ -112,4 +112,4 @@ jobs:
 
       - name: 🛠️ Build CRON Image
         run: |
-          docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ CRON_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f CRON.Dockerfile .
+          docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ CRON_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f CRON.Dockerfile .

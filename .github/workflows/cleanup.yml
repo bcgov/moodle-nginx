@@ -33,7 +33,7 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
-      CRON_DEPLOYMENT_NAME:
+      CRON_NAME:
         required: true
         type: string
       REDIS_NAME:
@@ -226,17 +226,17 @@ jobs:
             oc delete deployment cron
             echo "DELETED deployment: cron"
           fi
-          if [[ `oc describe deployment ${{ inputs.CRON_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.CRON_DEPLOYMENT_NAME }} deployment NOT FOUND: Skipping..."
+          if [[ `oc describe deployment ${{ inputs.CRON_NAME }} 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.CRON_NAME }} deployment NOT FOUND: Skipping..."
           else
-            echo "${{ inputs.CRON_DEPLOYMENT_NAME }} FOUND: Cleaning resources..."
-            oc delete deployment/${{ inputs.CRON_DEPLOYMENT_NAME }}
-            echo "DELETED deployment: ${{ inputs.CRON_DEPLOYMENT_NAME }}"
+            echo "${{ inputs.CRON_NAME }} FOUND: Cleaning resources..."
+            oc delete deployment/${{ inputs.CRON_NAME }}
+            echo "DELETED deployment: ${{ inputs.CRON_NAME }}"
           fi
-          if [[ `oc describe configmap ${{ inputs.CRON_DEPLOYMENT_NAME }}-config 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.CRON_DEPLOYMENT_NAME }}-config NOT FOUND: Skipping..."
+          if [[ `oc describe configmap ${{ inputs.CRON_NAME }}-config 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.CRON_NAME }}-config NOT FOUND: Skipping..."
           else
-            oc delete configmap ${{ inputs.CRON_DEPLOYMENT_NAME }}-config
+            oc delete configmap ${{ inputs.CRON_NAME }}-config
           fi
 
       - name: 🧹️ Clean Redis
