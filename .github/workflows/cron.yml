@@ -25,6 +25,7 @@ jobs:
           sparse-checkout: |
             config/cron
             config/php
+            config/moodle
             example.env
             example.versions.env
             openshift/scripts
