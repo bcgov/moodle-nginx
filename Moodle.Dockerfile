@@ -13,7 +13,7 @@ ARG PHP_INI_ENVIRONMENT=production
 ENV GIT_SSL_NO_VERIFY=1
 
 # Version control for Moodle and plugins
-ARG MOODLE_BRANCH_VERSION=MOODLE_404_STABLE
+ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
@@ -62,7 +62,12 @@ RUN mkdir -p $MOODLE_APP_DIR
 
 RUN echo "Building to directory: $MOODLE_APP_DIR"
 
-RUN git clone --recurse-submodules --jobs 8 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+# RUN git clone --recurse-submodules --jobs 8 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+RUN git config --global http.postBuffer 157286400
+RUN git config --global http.version HTTP/1.1
+RUN git clone --depth 1 --jobs 4 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+RUN cd $MOODLE_APP_DIR
+RUN git fetch --unshallow
 
 COPY ./config/moodle/$DEPLOY_ENVIRONMENT.config.php "$MOODLE_APP_DIR/config.php"
 # Add PHP info (debugging)

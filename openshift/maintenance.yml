@@ -14,7 +14,7 @@ objects:
       - port: 8080
         targetPort: 8080
 
-  - apiVersion: apps.openshift.io/v1
+  - apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: ${BUILD_NAME}
@@ -22,11 +22,12 @@ objects:
       annotations:
         template.alpha.openshift.io/wait-for-ready: "true"
       labels:
-        service: ${BUILD_NAME}
+        template: ${BUILD_NAME}
     spec:
       replicas: 1
       selector:
-        deployment: ${BUILD_NAME}
+        matchLabels:
+          deployment: ${BUILD_NAME}
       template:
         metadata:
           name: ${BUILD_NAME}

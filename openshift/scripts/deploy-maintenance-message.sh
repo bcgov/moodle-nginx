@@ -15,7 +15,7 @@ else
 fi
 
 if [[ `oc describe deployment/$BUILD_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "$BUILD_NAME NOT FOUND: Beginning dc..."
+  echo "$BUILD_NAME NOT FOUND: Beginning deployment..."
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \

@@ -23,13 +23,15 @@ services:
           DB_PASSWORD: ${DB_PASSWORD:-moodle}
           DB_USER: ${DB_USER:-moodle}
           DB_NAME: ${DB_NAME:-moodle}
+        env_file:
+          - example.versions.env
         build:
             context: .
             dockerfile: Moodle.Dockerfile
             args:
               DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-local}
               DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
-              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_404_STABLE}
+              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_405_STABLE}
               # F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
               # HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
               # FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
