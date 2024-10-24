@@ -9,15 +9,12 @@ echo "Deleting shared Moodle files... in 10...9...8..."
 
 sleep 10
 
-# Delete all files - including hidden ones
-echo "Deleting all files in ${dest_dir}..."
 # Use find with -not -name to exclude directories from the file count
 initial_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 echo "Initial file count: $initial_count"
-# Delete all files, including hidden files and directories (permissions errors)
-# rm -rf ${dest_dir}/*
-# Delete all files, including hidden files and directories (permissions errors)
-# find ${dest_dir} -type f -exec rm -f {} \;
+
+# Delete all files - including hidden ones
+echo "Deleting all files in ${dest_dir}..."
 # Delate all files, excluding hidden files and directories
 find ${dest_dir} -mindepth 1 -delete
 
@@ -51,7 +48,7 @@ rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
 
 echo "Setting permissions..."
 # Set permissions for moodle directory
-find $dest_dir -type d -mindepth 1 -exec chmod 755 {} \;
-find $dest_dir -type f -mindepth 1 -exec chmod 644 {} \;
+find $dest_dir -mindepth 1 -type d -exec chmod 755 {} \;
+find $dest_dir -mindepth 1 -type f -exec chmod 644 {} \;
 
 sh /usr/local/bin/test-migration-complete.sh

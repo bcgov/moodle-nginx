@@ -181,7 +181,7 @@ jobs:
       CRON_IMAGE: ${{ env.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       REDIS_REPO: ${{ env.REDIS_REPO }}
-      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ env.REDIS_NAME }}
       REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
       WEB_IMAGE: ${{ env.WEB_IMAGE }}
       DB_IMAGE: ${{ env.DB_IMAGE }}
@@ -207,7 +207,7 @@ jobs:
       WEB_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.WEB_DEPLOYMENT_NAME }}
       PHP_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.PHP_DEPLOYMENT_NAME }}
       CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ needs.build-images.outputs.REDIS_NAME }}
 
   call-deploy-workflow:
     name: 🚀 Deploy to OpenShift
@@ -230,7 +230,7 @@ jobs:
       CRON_IMAGE: ${{ needs.build-images.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.CRON_DEPLOYMENT_NAME }}
       REDIS_REPO: ${{ needs.build-images.outputs.REDIS_REPO }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.build-images.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ needs.build-images.outputs.REDIS_NAME }}
       REDIS_IMAGE: ${{ needs.build-images.outputs.REDIS_IMAGE }}
       APP_HOST_URL: ${{ needs.build-images.outputs.APP_HOST_URL }}
       BUILD_NAMESPACE: ${{ needs.build-images.outputs.BUILD_NAMESPACE }}

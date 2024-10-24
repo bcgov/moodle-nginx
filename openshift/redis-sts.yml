@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: ${REDIS_DEPLOYMENT_NAME}
+  name: ${REDIS_NAME}
 spec:
-  serviceName: ${REDIS_DEPLOYMENT_NAME}
+  serviceName: ${REDIS_NAME}
   replicas: ${REDIS_REPLICAS}
   selector:
     matchLabels:
-      app: ${REDIS_DEPLOYMENT_NAME}
+      app: ${REDIS_NAME}
   template:
     metadata:
       labels:
-        app: ${REDIS_DEPLOYMENT_NAME}
+        app: ${REDIS_NAME}
     spec:
       initContainers:
       - name: init-redis
@@ -55,12 +55,12 @@ spec:
           echo "Copied primary.conf to /etc/redis.conf"
           echo "Script completed successfully"
         volumeMounts:
-        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
+        - name: ${REDIS_NAME}-config-map
           mountPath: /mnt/config-map
-        - name: ${REDIS_DEPLOYMENT_NAME}-config
+        - name: ${REDIS_NAME}-config
           mountPath: /redis-conf
       containers:
-      - name: ${REDIS_DEPLOYMENT_NAME}
+      - name: ${REDIS_NAME}
         image: ${REDIS_IMAGE}
         imagePullPolicy: Always
         command: ["redis-server", "/redis-conf/redis.conf"]
@@ -69,25 +69,25 @@ spec:
           value: "yes"
         ports:
         - containerPort: 6379
-          name: ${REDIS_DEPLOYMENT_NAME}
+          name: ${REDIS_NAME}
         volumeMounts:
-        - name: ${REDIS_DEPLOYMENT_NAME}-data
+        - name: ${REDIS_NAME}-data
           emptyDir: {}
           mountPath: /data
-        - name: ${REDIS_DEPLOYMENT_NAME}-config
+        - name: ${REDIS_NAME}-config
           mountPath: /redis-conf
-        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
+        - name: ${REDIS_NAME}-config-map
           mountPath: /mnt/config-map
           configMap:
-            name: ${REDIS_DEPLOYMENT_NAME}-config-map
+            name: ${REDIS_NAME}-config-map
             defaultMode: 420
 
       volumes:
-        - name: ${REDIS_DEPLOYMENT_NAME}-data
+        - name: ${REDIS_NAME}-data
           emptyDir: {}
-        - name: ${REDIS_DEPLOYMENT_NAME}-config
+        - name: ${REDIS_NAME}-config
           emptyDir: {}
-        - name: ${REDIS_DEPLOYMENT_NAME}-config-map
+        - name: ${REDIS_NAME}-config-map
           configMap:
-            name: ${REDIS_DEPLOYMENT_NAME}-config-map
+            name: ${REDIS_NAME}-config-map
             defaultMode: 420

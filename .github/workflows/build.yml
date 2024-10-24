@@ -70,7 +70,7 @@ jobs:
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
       REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
-      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ env.REDIS_NAME }}
       DB_BACKUP_DEPLOYMENT_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_NAME }}
       DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
       BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
@@ -165,7 +165,7 @@ jobs:
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ needs.checkEnv.outputs.REDIS_NAME }}
 
   call-deploy-workflow:
     name: 🚀 Deploy
@@ -194,7 +194,7 @@ jobs:
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
       REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
+      REDIS_NAME: ${{ needs.checkEnv.outputs.REDIS_NAME }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}

@@ -69,18 +69,18 @@ objects:
               value: "${PHP_INI_ENVIRONMENT}"
             - name: "MOODLE_BRANCH_VERSION"
               value: "${MOODLE_BRANCH_VERSION}"
-            - name: "F2F_BRANCH_VERSION"
-              value: "${F2F_BRANCH_VERSION}"
-            - name: "HVP_BRANCH_VERSION"
-              value: "${HVP_BRANCH_VERSION}"
-            - name: "FORMAT_BRANCH_VERSION"
-              value: "${FORMAT_BRANCH_VERSION}"
-            - name: "CERTIFICATE_BRANCH_VERSION"
-              value: "${CERTIFICATE_BRANCH_VERSION}"
-            - name: "CUSTOMCERT_BRANCH_VERSION"
-              value: "${CUSTOMCERT_BRANCH_VERSION}"
-            - name: "DATAFLOWS_BRANCH_VERSION"
-              value: "${DATAFLOWS_BRANCH_VERSION}"
+            # - name: "F2F_BRANCH_VERSION"
+            #   value: "${F2F_BRANCH_VERSION}"
+            # - name: "HVP_BRANCH_VERSION"
+            #   value: "${HVP_BRANCH_VERSION}"
+            # - name: "FORMAT_BRANCH_VERSION"
+            #   value: "${FORMAT_BRANCH_VERSION}"
+            # - name: "CERTIFICATE_BRANCH_VERSION"
+            #   value: "${CERTIFICATE_BRANCH_VERSION}"
+            # - name: "CUSTOMCERT_BRANCH_VERSION"
+            #   value: "${CUSTOMCERT_BRANCH_VERSION}"
+            # - name: "DATAFLOWS_BRANCH_VERSION"
+            #   value: "${DATAFLOWS_BRANCH_VERSION}"
         type: Docker
 parameters:
   - name: DOCKER_FROM_IMAGE
@@ -113,15 +113,15 @@ parameters:
     value: "production"
   - name: MOODLE_BRANCH_VERSION
     value: MOODLE_311_STABLE
-  - name: F2F_BRANCH_VERSION
-    value: MOODLE_311_STABLE
-  - name: HVP_BRANCH_VERSION
-    value: stable
-  - name: FORMAT_BRANCH_VERSION
-    value: MOODLE_311
-  - name: CERTIFICATE_BRANCH_VERSION
-    value: MOODLE_31_STABLE
-  - name: CUSTOMCERT_BRANCH_VERSION
-    value: MOODLE_311_STABLE
-  - name: DATAFLOWS_BRANCH_VERSION
-    value: MOODLE_35_STABLE
+  # - name: F2F_BRANCH_VERSION
+  #   value: MOODLE_311_STABLE
+  # - name: HVP_BRANCH_VERSION
+  #   value: stable
+  # - name: FORMAT_BRANCH_VERSION
+  #   value: MOODLE_311
+  # - name: CERTIFICATE_BRANCH_VERSION
+  #   value: MOODLE_31_STABLE
+  # - name: CUSTOMCERT_BRANCH_VERSION
+  #   value: MOODLE_311_STABLE
+  # - name: DATAFLOWS_BRANCH_VERSION
+  #   value: MOODLE_35_STABLE

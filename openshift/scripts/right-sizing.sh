@@ -32,8 +32,8 @@ do
       $cmd
   elif [[ "$Type" == "dc" ]]
   then
-      # For DeploymentConfig, set the number of current pods and maximum replicas
-      cmd="oc scale dc $Deployment --replicas=$PodCount"
+      # For Deployment, set the number of current pods and maximum replicas
+      cmd="oc scale deployment/$Deployment --replicas=$PodCount"
       echo "Executing: $cmd"
       $cmd
 
@@ -48,7 +48,7 @@ do
       diff=$((MaxPods - PodCount))
       if [[ $diff -gt 0 ]]; then
         # If MaxPods > PodCount, add HorizontalPodAutoscaler
-        cmd="oc autoscale dc/$Deployment --min $PodCount --max $MaxPods --cpu-percent=80"
+        cmd="oc autoscale deployment/$Deployment --min $PodCount --max $MaxPods --cpu-percent=80"
         echo "Executing: $cmd"
         $cmd
       fi
@@ -57,8 +57,8 @@ do
       # Append the percentage sign
       maxSurge="${maxSurge}%"
       # Patch the deployment
-      echo "Executing: oc patch dc $Deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"66%\"}}}}"
-      oc patch dc $Deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"66%\"}}}}"
+      echo "Executing: oc patch deployment/$Deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"66%\"}}}}"
+      oc patch deployment/$Deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$maxSurge\", \"maxUnavailable\":\"66%\"}}}}"
   fi
 done
 
@@ -67,7 +67,7 @@ sleep 60
 # Add service for each redis pod
 echo "Deploy Redis Service for each pod ..."
 # Collect all pods related to the Redis StatefulSet
-PODS=$(oc get pods -l app=$REDIS_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE -o jsonpath='{.items[*].metadata.name}')
+PODS=$(oc get pods -l app=$REDIS_NAME -n $DEPLOY_NAMESPACE -o jsonpath='{.items[*].metadata.name}')
 
 # Loop through each pod
 for POD_NAME in $PODS; do

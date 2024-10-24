@@ -42,10 +42,16 @@ on:
       CRON_DEPLOYMENT_NAME:
         required: true
         type: string
-      REDIS_IMAGE:
+      REDIS_HELM_CHART:
         required: true
         type: string
-      REDIS_DEPLOYMENT_NAME:
+      REDIS_NAME:
+        required: true
+        type: string
+      REDIS_PORT:
+        required: true
+        type: string
+      REDIS_REPLICAS:
         required: true
         type: string
       APP_HOST_URL:
@@ -144,16 +150,17 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_PORT: ${{ inputs.DB_PORT }}
 
-      # Deploy Redis
-      - name: Deploy Redis StatefulSet (${{ inputs.REDIS_DEPLOYMENT_NAME  }})
+      # Deploy Redis Sentinel
+      - name: Deploy Redis Sentinel Helm Chart (${{ inputs.REDIS_NAME  }})
         if: success()
-        run: bash ./openshift/scripts/deploy-redis.sh
+        run: bash ./openshift/scripts/deploy-redis-sentinel.sh
         env:
-          REDIS_IMAGE: ${{ inputs.REDIS_IMAGE }}
+          REDIS_HELM_CHART: ${{ inputs.REDIS_HELM_CHART }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
-          REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          REPLICAS: 3
+          REDIS_NAME: ${{ inputs.REDIS_NAME }}
+          SECRET_REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          REDIS_REPLICAS: ${{ inputs.REDIS_REPLICAS }}
+          OC_PROJECT: ${{ github.ref_name }}
 
       - name: Deploy Database StatefulSet (${{ inputs.DB_DEPLOYMENT_NAME  }})
         id: deploy_database
@@ -187,7 +194,8 @@ jobs:
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           CRON_DEPLOYMENT_NAME: ${{ inputs.CRON_DEPLOYMENT_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
-          REDIS_DEPLOYMENT_NAME: ${{ inputs.REDIS_DEPLOYMENT_NAME }}
+          REDIS_NAME: ${{ inputs.REDIS_NAME }}
+          REDIS_PORT: ${{ inputs.REDIS_PORT }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 

@@ -17,7 +17,7 @@ $CFG->moodleappdir    = '/var/www/html';
 $CFG->prefix    = '';
 $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
-$CFG->session_redis_host = 'redis';
+$CFG->session_redis_host = $_SERVER['REDIS_HOST'];
 $CFG->session_handler_class = '\core\session\redis';
 $CFG->session_redis_port = 6379; // Optional if TCP. For socket use -1
 $CFG->session_redis_database = 0; // Optional, default is db 0.

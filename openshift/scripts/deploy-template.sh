@@ -31,8 +31,8 @@ echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
-echo "Scale down $REDIS_DEPLOYMENT_NAME to 1 replica..."
-oc scale sts/$REDIS_DEPLOYMENT_NAME --replicas=1
+echo "Scale down $REDIS_NAME to 1 replica..."
+oc scale sts/$REDIS_NAME --replicas=1
 
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
@@ -201,7 +201,7 @@ done
 
 sleep 30
 
-echo "Waiting formoodle-upgrade job to complete..."
+echo "Waiting for moodle-upgrade job to complete..."
 COUNT=0
 while [[ $(oc get jobs moodle-upgrade -o 'jsonpath={..status.active}') == "1" ]]; do
   echo "moodle-upgrade job is still running..."

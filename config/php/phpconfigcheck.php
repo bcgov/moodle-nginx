@@ -378,7 +378,7 @@ function test_all_ini_entries()
     case 'max_execution_time':
       if (intval($v) == 0) {
         [$result, $reason] = [TEST_MEDIUM, "Execution time is not limited."];
-      } elseif (intval($v) >= 300) {
+      } elseif (intval($v) >= 700) {
         [$result, $reason] = [TEST_LOW, "Execution time limit is rather high."];
       }
       break;

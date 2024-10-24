@@ -6,6 +6,8 @@ echo "Starting Moodle upgrade job..."
 # echo "Waiting 10 minutes to run upgrades after file copy completes (migrate-build-files)..."
 # sleep 600
 
+cd /
+
 echo "Purging cache..."
 php /var/www/html/admin/cli/purge_caches.php
 

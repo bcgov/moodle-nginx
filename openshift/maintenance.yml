@@ -9,13 +9,13 @@ objects:
       name: ${BUILD_NAME}
     spec:
       selector:
-        deploymentconfig: ${BUILD_NAME}
+        deployment: ${BUILD_NAME}
       ports:
       - port: 8080
         targetPort: 8080
 
   - apiVersion: apps.openshift.io/v1
-    kind: DeploymentConfig
+    kind: Deployment
     metadata:
       name: ${BUILD_NAME}
       namespace: ${DEPLOY_NAMESPACE}
@@ -26,12 +26,12 @@ objects:
     spec:
       replicas: 1
       selector:
-        deploymentconfig: ${BUILD_NAME}
+        deployment: ${BUILD_NAME}
       template:
         metadata:
           name: ${BUILD_NAME}
           labels:
-            deploymentconfig: ${BUILD_NAME}
+            deployment: ${BUILD_NAME}
         spec:
           imagePullSecrets:
             - name: artifactory-m950-learning

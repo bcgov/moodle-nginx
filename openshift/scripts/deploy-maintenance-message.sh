@@ -14,7 +14,7 @@ else
   oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
 fi
 
-if [[ `oc describe dc $BUILD_NAME 2>&1` =~ "NotFound" ]]; then
+if [[ `oc describe deployment/$BUILD_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$BUILD_NAME NOT FOUND: Beginning dc..."
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
@@ -23,11 +23,11 @@ if [[ `oc describe dc $BUILD_NAME 2>&1` =~ "NotFound" ]]; then
     | oc create -f -
 else
   echo "$BUILD_NAME Installation found...Scaling to 0..."
-  oc scale dc/$BUILD_NAME --replicas=0
+  oc scale deployment/$BUILD_NAME --replicas=0
 
   ATTEMPTS=0
   MAX_ATTEMPTS=60
-  while [[ $(oc get dc/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
+  while [[ $(oc get deployment/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
     echo "Waiting for $BUILD_NAME to scale to 0..."
     sleep 10
     ATTEMPTS=$((ATTEMPTS + 1))
@@ -38,7 +38,7 @@ else
   fi
 
   echo "Recreating $BUILD_NAME..."
-  oc delete dc/$BUILD_NAME -n $DEPLOY_NAMESPACE
+  oc delete deployment/$BUILD_NAME -n $DEPLOY_NAMESPACE
   oc delete svc/$BUILD_NAME -n $DEPLOY_NAMESPACE
 
   sleep 10
@@ -50,10 +50,10 @@ else
     | oc create -f -
 fi
 
-# Wait for the dc to scale to 1
+# Wait for the deployment/to scale to 1
 ATTEMPTS=0
 MAX_ATTEMPTS=60
-while [[ $(oc get dc $BUILD_NAME -o jsonpath='{.status.replicas}') -ne 1 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
+while [[ $(oc get deployment/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 1 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
   echo "Waiting for $BUILD_NAME to scale to 1..."
   sleep 10
   ATTEMPTS=$((ATTEMPTS + 1))
@@ -63,7 +63,7 @@ if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
   exit 1
 fi
 
-echo "$BUILD_NAME dc complete"
+echo "$BUILD_NAME deployment/complete"
 
 sleep 20
 

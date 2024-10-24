@@ -16,7 +16,7 @@ services:
     # Build moodle and plugins from repo, then save to shared volume on startup
     # After build, the moodle files need to be copied to the shared volume,
     # where they can be accessed by the php, cron and web containers.
-    moodle:
+    build:
         tty: true
         restart: "no"
         environment:
@@ -28,14 +28,14 @@ services:
             dockerfile: Moodle.Dockerfile
             args:
               DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-local}
-              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.2-fpm}
-              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
-              F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
-              HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
-              FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
-              CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
-              CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_311_STABLE}
-              DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
+              MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_404_STABLE}
+              # F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
+              # HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
+              # FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
+              # CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              # CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_311_STABLE}
+              # DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
         volumes:
             - ./temp/var/www:/var/www:delegated
         # Keep the container running so we can run the migration scripts and copy the files to the shared volume
@@ -76,6 +76,8 @@ services:
         restart: "no"
         env_file:
           - example.env
+        ports:
+            - 9000:9000
         environment:
           XDEBUG_MODE: debug
           XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003
@@ -86,15 +88,15 @@ services:
             context: .
             dockerfile: PHP.Dockerfile
             args:
-              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.2-fpm}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
               PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
               MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_404_STABLE}
-              F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
-              HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
+              # F2F_BRANCH_VERSION: ${F2F_BRANCH_VERSION:-MOODLE_400_STABLE}
+              # HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
               # FORMAT_BRANCH_VERSION: ${FORMAT_BRANCH_VERSION:-MOODLE_311}
-              CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
-              CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_404_STABLE}
-              DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
+              # CERTIFICATE_BRANCH_VERSION: ${CERTIFICATE_BRANCH_VERSION:-MOODLE_311_STABLE}
+              # CUSTOMCERT_BRANCH_VERSION: ${CUSTOMCERT_BRANCH_VERSION:-MOODLE_404_STABLE}
+              # DATAFLOWS_BRANCH_VERSION: ${DATAFLOWS_BRANCH_VERSION:-MOODLE_35_STABLE}
         volumes:
             - ./temp/var/www:/var/www:delegated
         # Copy files from build directory to www/html to mimic shared PVC copy in OpenShift (allows for multiple container instances)
@@ -125,11 +127,160 @@ services:
             context: .
             dockerfile: CRON.Dockerfile
             args:
-              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.2-cli}
+              DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.3-cli}
               PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
         volumes:
             - ./temp/var/www:/var/www:delegated
-    redis:
-        image: ${REDIS_IMAGE:-redis:latest}
+    # redis:
+    #     image: ${REDIS_IMAGE:-redis:latest}
+
+    redis-primary:
+      image: redis:latest
+      container_name: redis-primary
+      hostname: redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "6379:6379"
+      volumes:
+        - ./data/primary:/data
+      command:
+        [
+          "redis-server",
+          "--appendonly",
+          "yes",
+          "--repl-diskless-load",
+          "on-empty-db",
+          "--replica-announce-ip",
+          "$${REDIS_HOST_IP}",
+          "--replica-announce-port",
+          "6379",
+          "--protected-mode",
+          "no",
+          "--enable-debug-command",
+          "yes"
+        ]
+
+    redis-secondary-1:
+      image: redis:latest
+      container_name: redis-secondary-1
+      hostname: redis-secondary-1
+      depends_on:
+        - redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "6380:6379"
+      volumes:
+        - ./data/secondary1:/data
+      command:
+        [
+          "redis-server",
+          "--appendonly",
+          "yes",
+          "--replicaof",
+          "redis-primary",
+          "6379",
+          "--repl-diskless-load",
+          "on-empty-db",
+          "--replica-announce-ip",
+          "$${REDIS_HOST_IP}",
+          "--replica-announce-port",
+          "6380",
+          "--protected-mode",
+          "no"
+        ]
+
+    redis-secondary-2:
+      image: redis:latest
+      container_name: redis-secondary-2
+      hostname: redis-secondary-2
+      depends_on:
+        - redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "6381:6379"
+      volumes:
+        - ./data/secondary2:/data
+      command:
+        [
+          "redis-server",
+          "--appendonly",
+          "yes",
+          "--replicaof",
+          "redis-primary",
+          "6379",
+          "--repl-diskless-load",
+          "on-empty-db",
+          "--replica-announce-ip",
+          "$${REDIS_HOST_IP}",
+          "--replica-announce-port",
+          "6381",
+          "--protected-mode",
+          "no"
+        ]
+
+    sentinel-1:
+      image: redis:latest
+      container_name: sentinel-1
+      hostname: sentinel-1
+      depends_on:
+        - redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "26379:26379"
+      command: >
+        sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
+              echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
+              echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
+              echo "sentinel down-after-milliseconds mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel failover-timeout mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel parallel-syncs mymaster 1" >> /etc/sentinel.conf &&
+              redis-sentinel /etc/sentinel.conf'
+
+    sentinel-2:
+      image: redis:latest
+      container_name: sentinel-2
+      hostname: sentinel-2
+      depends_on:
+        - redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "26380:26379"
+      command: >
+        sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
+              echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
+              echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
+              echo "sentinel down-after-milliseconds mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel failover-timeout mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel parallel-syncs mymaster 1" >> /etc/sentinel.conf &&
+              redis-sentinel /etc/sentinel.conf'
+
+    sentinel-3:
+      image: redis:latest
+      container_name: sentinel-3
+      hostname: sentinel-3
+      depends_on:
+        - redis-primary
+      env_file:
+          - example.env
+      ports:
+        - "26381:26379"
+      command: >
+        sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
+              echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
+              echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
+              echo "sentinel down-after-milliseconds mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel failover-timeout mymaster 10000" >> /etc/sentinel.conf &&
+              echo "sentinel parallel-syncs mymaster 1" >> /etc/sentinel.conf &&
+              redis-sentinel /etc/sentinel.conf'
+
+    redisinsight:
+      image: redis/redisinsight:latest
+      ports:
+        - "5540:5540"
 volumes:
     mysqldata: {}
