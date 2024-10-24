@@ -69,8 +69,10 @@ jobs:
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
       CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
-      REDIS_IMAGE: ${{ env.REDIS_IMAGE }}
+      REDIS_HELM_CHART: ${{ env.REDIS_HELM_CHART }}
       REDIS_NAME: ${{ env.REDIS_NAME }}
+      REDIS_PORT: ${{ env.REDIS_PORT }}
+      REDIS_REPLICAS: ${{ env.REDIS_REPLICAS }}
       DB_BACKUP_DEPLOYMENT_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_NAME }}
       DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
       BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
@@ -193,8 +195,10 @@ jobs:
       BACKUP_HELM_CHART: ${{ needs.checkEnv.outputs.BACKUP_HELM_CHART }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_IMAGE: ${{ needs.checkEnv.outputs.REDIS_IMAGE }}
+      REDIS_HELM_CHART: ${{ needs.checkEnv.outputs.REDIS_HELM_CHART }}
       REDIS_NAME: ${{ needs.checkEnv.outputs.REDIS_NAME }}
+      REDIS_PORT: ${{ needs.checkEnv.outputs.REDIS_PORT }}
+      REDIS_REPLICAS: ${{ needs.checkEnv.outputs.REDIS_REPLICAS }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
