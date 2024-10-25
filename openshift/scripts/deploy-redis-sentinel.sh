@@ -14,7 +14,7 @@ else
   echo "DELETED ConfigMap: $REDIS_STATS_NAME"
 fi
 echo "Creating ConfigMap: $REDIS_STATS_NAME"
-oc create configmap $REDIS_STATS_NAME --from-file=./openshift/config/redis/redis-stats.php
+oc create configmap $REDIS_STATS_NAME --from-file=./config/redis/redis-stats.php
 
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
