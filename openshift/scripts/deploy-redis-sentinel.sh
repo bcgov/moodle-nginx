@@ -39,7 +39,7 @@ EOF
 if helm list -q | grep -q "^$REDIS_NAME$"; then
   echo "Helm deployment found. Updating..."
 
-  helm_upgrade_response=$(`helm upgrade $REDIS_NAME $REDIS_HELM_CHART --debug --reuse-values -f values.yaml 2>&1`)
+  helm_upgrade_response=$(helm upgrade $REDIS_NAME $REDIS_HELM_CHART --debug --reuse-values -f values.yaml 2>&1)
 
   # Upgrade the Helm deployment with the new values
   if [[ $helm_upgrade_response =~ "Error" ]]; then
