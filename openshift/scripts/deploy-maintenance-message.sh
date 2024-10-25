@@ -19,6 +19,7 @@ if [[ `oc describe deployment/$BUILD_NAME 2>&1` =~ "NotFound" ]]; then
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+    -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
     | oc create -f -
 else
@@ -46,6 +47,7 @@ else
   oc process -f ./openshift/maintenance.yml \
     -p IMAGE_REPO=$IMAGE_REPO \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+    -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
     | oc create -f -
 fi

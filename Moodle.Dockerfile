@@ -89,7 +89,7 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
   # mkdir -p $F2F_DIR && \
   # mkdir -p $FORMAT_DIR  && \
   # mkdir -p $CERTIFICATE  && \
-    # mkdir -p $CUSTOMCERT_DIR
+  # mkdir -p $CUSTOMCERT_DIR
 
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN git clone --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR
@@ -98,7 +98,7 @@ RUN git clone --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION 
   # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $F2F_BRANCH_VERSION --single-branch $F2F_URL $F2F_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $FORMAT_BRANCH_VERSION --single-branch $FORMAT_URL $FORMAT_DIR && \
-    # git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR
+  # git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR
   # git clone --recurse-submodules --jobs 8 --branch $CERTIFICATE_BRANCH_VERSION --single-branch $CERTIFICATE_URL $CERTIFICATE_DIR
 # Add commands for site upgrades / migrations
 COPY ./config/moodle/moodle_index_during_maintenance.php /tmp/moodle_index_during_maintenance.php

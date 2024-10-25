@@ -18,13 +18,14 @@ services:
     # where they can be accessed by the php, cron and web containers.
     build:
         tty: true
-        restart: "no"
+        restart: no
         environment:
           DB_PASSWORD: ${DB_PASSWORD:-moodle}
           DB_USER: ${DB_USER:-moodle}
           DB_NAME: ${DB_NAME:-moodle}
         env_file:
           - example.versions.env
+          - example.env
         build:
             context: .
             dockerfile: Moodle.Dockerfile
@@ -47,6 +48,7 @@ services:
           php:
             condition: service_healthy
         image: ${WEB_IMAGE:-nginxinc/nginx-unprivileged:1.25.4-alpine-slim}
+        restart: no
         ports:
             - "8080:8080"
         volumes:
@@ -56,6 +58,7 @@ services:
           - php
     db:
         image: ${DB_IMAGE:-mariadb:10}
+        restart: no
         env_file: example.env
         volumes:
             - mysqldata:/var/lib/mysql:delegated
@@ -75,7 +78,7 @@ services:
           db:
             condition: service_healthy
         tty: true
-        restart: "no"
+        restart: no
         env_file:
           - example.env
         ports:
@@ -124,6 +127,7 @@ services:
         depends_on:
           db:
             condition: service_healthy
+        restart: no
         env_file: example.env
         build:
             context: .
@@ -133,6 +137,7 @@ services:
               PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
         volumes:
             - ./temp/var/www:/var/www:delegated
+
     # redis:
     #     image: ${REDIS_IMAGE:-redis:latest}
 
@@ -140,6 +145,7 @@ services:
       image: redis:latest
       container_name: redis-primary
       hostname: redis-primary
+      restart: no
       env_file:
           - example.env
       ports:
@@ -167,6 +173,7 @@ services:
       image: redis:latest
       container_name: redis-secondary-1
       hostname: redis-secondary-1
+      restart: no
       depends_on:
         - redis-primary
       env_file:
@@ -197,6 +204,7 @@ services:
       image: redis:latest
       container_name: redis-secondary-2
       hostname: redis-secondary-2
+      restart: no
       depends_on:
         - redis-primary
       env_file:
@@ -227,6 +235,7 @@ services:
       image: redis:latest
       container_name: sentinel-1
       hostname: sentinel-1
+      restart: no
       depends_on:
         - redis-primary
       env_file:
@@ -246,6 +255,7 @@ services:
       image: redis:latest
       container_name: sentinel-2
       hostname: sentinel-2
+      restart: no
       depends_on:
         - redis-primary
       env_file:
@@ -265,6 +275,7 @@ services:
       image: redis:latest
       container_name: sentinel-3
       hostname: sentinel-3
+      restart: no
       depends_on:
         - redis-primary
       env_file:
@@ -282,7 +293,21 @@ services:
 
     redisinsight:
       image: redis/redisinsight:latest
+      restart: no
       ports:
         - "5540:5540"
+
+    phpmyadmin:
+      depends_on:
+        - db
+      image: phpmyadmin
+      restart: no
+      ports:
+        - "8090:80"
+      environment:
+        PMA_HOST: db
+        MYSQL_ROOT_PASSWORD:
+      env_file: example.env
+
 volumes:
     mysqldata: {}
