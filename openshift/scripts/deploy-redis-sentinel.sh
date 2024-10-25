@@ -40,7 +40,7 @@ if helm list -q | grep -q "^$REDIS_NAME$"; then
   echo "Helm deployment found. Updating..."
 
   # Upgrade the Helm deployment with the new values
-  if [[ `helm upgrade $REDIS_NAME $REDIS_HELM_CHART --reuse-values -f values.yaml 2>&1` =~ "Error" ]]; then
+  if [[ `helm upgrade $REDIS_NAME $REDIS_HELM_CHART --debug --reuse-values -f values.yaml 2>&1` =~ "Error" ]]; then
     echo "❌ Helm upgrade FAILED."
     exit 1
   fi
@@ -50,8 +50,7 @@ if helm list -q | grep -q "^$REDIS_NAME$"; then
     exit 1
   fi
 else
-  echo "StatefulSet ($REDIS_STS_NAME) NOT FOUND. Beginning deployment..."
-
+  echo "Helm deployment ($REDIS_NAME) NOT FOUND. Beginning deployment..."
   helm install $REDIS_NAME $REDIS_HELM_CHART --set auth.password="$SECRET_REDIS_PASSWORD" --values values.yaml
 fi
 
