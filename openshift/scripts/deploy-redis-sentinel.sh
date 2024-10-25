@@ -45,12 +45,12 @@ if helm list -q | grep -q "^$REDIS_NAME$"; then
     exit 1
   fi
 
-  if [[ `oc describe deployment $REDIS_NAME 2>&1` =~ "NotFound" ]]; then
-    echo "Helm deployment ($REDIS_NAME) exists, but NOT FOUND."
+  if [[ `oc describe sts/$REDIS_STS_NAME 2>&1` =~ "NotFound" ]]; then
+    echo "Helm chart ($REDIS_NAME) exists, but StatefulSet ($REDIS_STS_NAME) was NOT FOUND."
     exit 1
   fi
 else
-  echo "Helm $REDIS_NAME NOT FOUND. Beginning deployment..."
+  echo "StatefulSet ($REDIS_STS_NAME) NOT FOUND. Beginning deployment..."
 
   helm install $REDIS_NAME $REDIS_HELM_CHART --set auth.password="$SECRET_REDIS_PASSWORD" --values values.yaml
 fi
