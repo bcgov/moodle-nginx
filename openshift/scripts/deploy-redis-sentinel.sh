@@ -41,10 +41,20 @@ if helm list -q | grep -q "^$REDIS_NAME$"; then
 
   helm_upgrade_response=$(helm upgrade $REDIS_NAME $REDIS_HELM_CHART --debug --reuse-values -f values.yaml 2>&1)
 
+  # Output the response for debugging purposes
+  echo "1. $helm_upgrade_response"
+
+  # Check if the helm upgrade command failed
+  if [[ $? -ne 0 ]]; then
+    echo "Helm upgrade failed with the following output:"
+    echo "2. $helm_upgrade_response"
+    exit 1
+  fi
+
   # Upgrade the Helm deployment with the new values
   if [[ $helm_upgrade_response =~ "Error" ]]; then
     echo "❌ Helm upgrade FAILED."
-    echo "$helm_upgrade_response"
+    echo "3. $helm_upgrade_response"
     exit 1
   fi
 
