@@ -1,0 +1,72 @@
+# Redis Insight service with name 'redisinsight-service'
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-insight       # name should not be 'redisinsight'
+                                   # since the service creates
+                                   # environment variables that
+                                   # conflicts with redisinsight
+                                   # application's environment
+                                   # variables `RI_APP_HOST` and
+                                   # `RI_APP_PORT`
+spec:
+  # type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 5540
+  selector:
+    app: redisinsight
+
+---
+# Redis Insight deployment with name 'redisinsight'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redisinsight #deployment name
+  labels:
+    app: redisinsight #deployment label
+spec:
+  replicas: 1 #a single replica pod
+  selector:
+    matchLabels:
+      app: redisinsight #which pods is the deployment managing, as defined by the pod template
+  template: #pod template
+    metadata:
+      labels:
+        app: redisinsight #label for pod/s
+    spec:
+      volumes:
+        - name: redisinsight
+          emptyDir: {} # node-ephemeral volume https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
+      containers:
+        - name:  redisinsight #Container name (DNS_LABEL, unique)
+          image: redis/redisinsight:latest #repo/image
+          imagePullPolicy: IfNotPresent #Installs the latest Redis Insight version
+          volumeMounts:
+            - name: redisinsight #Pod volumes to mount into the container's filesystem. Cannot be updated.
+              mountPath: /data
+          ports:
+            - containerPort: 5540 #exposed container port and protocol
+              protocol: TCP
+          resources:
+            limits:
+              memory: '0'
+              cpu: '0'
+            requests:
+              memory: '0'
+              cpu: '0'
+
+---
+# Redis Insight Route
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: redisinsight
+spec:
+  path: /
+  to:
+    kind: Service
+    name: redis-insight
+    weight: 100
+  port:
+    targetPort: 5540
