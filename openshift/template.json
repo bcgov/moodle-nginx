@@ -43,7 +43,7 @@
         ],
         "resources": {
           "requests": {
-            "storage": "${MOODLE_VOLUME_CAPACITY}"
+            "storage": "10Gi"
           }
         }
       }
@@ -60,7 +60,7 @@
         ],
         "resources": {
           "requests": {
-            "storage": "${MOODLE_VOLUME_CAPACITY}"
+            "storage": "2Gi"
           }
         }
       }
@@ -706,13 +706,6 @@
       "displayName": "Cron Deployment",
       "required": true,
       "name": "CRON_NAME"
-    },
-    {
-      "description": "Volume space available for Moodle application, e.g. 512Mi, 2Gi.",
-      "displayName": "Moodle Volume Capacity",
-      "name": "MOODLE_VOLUME_CAPACITY",
-      "required": true,
-      "value": "10Gi"
     },
     {
       "description": "Volume for storing file backups",
