@@ -65,9 +65,7 @@ RUN echo "Building to directory: $MOODLE_APP_DIR"
 # RUN git clone --recurse-submodules --jobs 8 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
-RUN git clone --depth 1 --jobs 4 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
-RUN cd $MOODLE_APP_DIR
-RUN git fetch --unshallow
+RUN git clone --jobs 12 --branch $MOODLE_BRANCH_VERSION --recurse-submodules --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
 
 COPY ./config/moodle/$DEPLOY_ENVIRONMENT.config.php "$MOODLE_APP_DIR/config.php"
 # Add PHP info (debugging)
