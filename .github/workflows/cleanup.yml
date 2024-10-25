@@ -98,23 +98,33 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      - name: 🧹️ Clean ${{ inputs.REDIS_NAME }}-redis-cluster
+      - name: 🧹️ Clean ${{ inputs.REDIS_NAME }}
         run: |
-          if [[ `oc describe sts ${{ inputs.REDIS_NAME }} 2>&1` =~ "NotFound" ]]; then
+          if [[ `oc describe sts/${{ inputs.REDIS_NAME }}-node 2>&1` =~ "NotFound" ]]; then
             echo "${{ inputs.REDIS_NAME }} NOT FOUND: Skipping..."
           else
-            echo "${{ inputs.REDIS_NAME }} FOUND: Cleaning..."
-            helm uninstall ${{ inputs.REDIS_NAME }}
+            echo "${{ inputs.REDIS_NAME }}-node FOUND: Cleaning..."
+            oc delete sts/${{ inputs.REDIS_NAME }}-node
           fi
-          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-redis-cluster-default 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.REDIS_NAME }}-redis-cluster-default NOT FOUND: Skipping..."
+          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-configuration 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_NAME }}-configuration NOT FOUND: Skipping..."
           else
-            oc delete configmap ${{ inputs.REDIS_NAME }}-redis-cluster-default
+            oc delete configmap ${{ inputs.REDIS_NAME }}-configuration
           fi
-          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-redis-cluster-scripts 2>&1` =~ "NotFound" ]]; then
-            echo "${{ inputs.REDIS_NAME }}-redis-cluster-scripts NOT FOUND: Skipping..."
+          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-config 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_NAME }}-config NOT FOUND: Skipping..."
           else
-            oc delete configmap ${{ inputs.REDIS_NAME }}-redis-cluster-scripts
+            oc delete configmap ${{ inputs.REDIS_NAME }}-config
+          fi
+          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-scripts 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_NAME }}-scripts NOT FOUND: Skipping..."
+          else
+            oc delete configmap ${{ inputs.REDIS_NAME }}-scripts
+          fi
+          if [[ `oc describe configmap ${{ inputs.REDIS_NAME }}-health 2>&1` =~ "NotFound" ]]; then
+            echo "${{ inputs.REDIS_NAME }}-health NOT FOUND: Skipping..."
+          else
+            oc delete configmap ${{ inputs.REDIS_NAME }}-health
           fi
 
       - name: 🧹️ Clean ${{ inputs.DB_DEPLOYMENT_NAME }}
