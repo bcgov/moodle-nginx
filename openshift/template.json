@@ -838,7 +838,7 @@
       "description": "Redis Port Number",
       "displayName": "Redis Port",
       "name": "REDIS_PORT",
-      "value": 6379
+      "value": "6379"
     },
     {
       "description": "Redis Password",
