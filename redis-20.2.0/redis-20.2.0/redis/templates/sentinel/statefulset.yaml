@@ -366,7 +366,7 @@ spec:
             {{- end }}
             {{- else }}
             - name: ALLOW_EMPTY_PASSWORD
-              value: "yes"
+              value: "no"
             {{- end }}
             - name: REDIS_SENTINEL_TLS_ENABLED
               value: {{ ternary "yes" "no" .Values.tls.enabled | quote }}

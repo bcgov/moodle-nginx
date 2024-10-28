@@ -170,11 +170,11 @@ spec:
         env:
         # Using Secrets
         - name: MARIADB_ALLOW_EMPTY_ROOT_PASSWORD
-          value: "yes"
+          value: "no"
         - name: MARIADB_AUTO_UPGRADE
           value: "yes"
         - name: ALLOW_EMPTY_PASSWORD
-          value: "yes"
+          value: "no"
         - name: MYSQL_USER
           valueFrom:
             secretKeyRef:

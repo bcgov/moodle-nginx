@@ -66,7 +66,7 @@ spec:
         command: ["redis-server", "/redis-conf/redis.conf"]
         env:
         - name: ALLOW_EMPTY_PASSWORD
-          value: "yes"
+          value: "no"
         ports:
         - containerPort: 6379
           name: ${REDIS_NAME}
