@@ -843,7 +843,7 @@
     {
       "description": "Redis Password",
       "displayName": "Redis Password",
-      "name": "REDIS_PASSWORD",
+      "name": "SECRET_REDIS_PASSWORD",
       "value": ""
     }
   ]
