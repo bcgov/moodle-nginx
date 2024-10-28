@@ -294,7 +294,7 @@
                   },
                   {
                     "name": "REDIS_PASSWORD",
-                    "value": "${REDIS_PASSWORD}"
+                    "value": "${SECRET_REDIS_PASSWORD}"
                   }
                 ]
               }
@@ -497,7 +497,7 @@
                   },
                   {
                     "name": "REDIS_PASSWORD",
-                    "value": "${REDIS_PASSWORD}"
+                    "value": "${SECRET_REDIS_PASSWORD}"
                   }
                 ]
               }
@@ -832,19 +832,19 @@
       "description": "Redis Host Name.",
       "displayName": "Redis Host",
       "name": "REDIS_HOST",
-      "value": "${REDIS_HOST}"
+      "value": "redis"
     },
     {
       "description": "Redis Port Number",
       "displayName": "Redis Port",
       "name": "REDIS_PORT",
-      "value": "${REDIS_PORT}"
+      "value": 6379
     },
     {
       "description": "Redis Password",
       "displayName": "Redis Password",
       "name": "REDIS_PASSWORD",
-      "value": "${SECRET_REDIS_PASSWORD}"
+      "value": ""
     }
   ]
 }
