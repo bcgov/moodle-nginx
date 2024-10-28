@@ -172,7 +172,9 @@
       "spec": {
         "replicas": 3,
         "selector": {
-          "deployment": "${PHP_DEPLOYMENT_NAME}"
+          "matchLabels": {
+            "app": "${PHP_DEPLOYMENT_NAME}"
+          }
         },
         "strategy": {
           "type": "Rolling",
@@ -543,7 +545,9 @@
       "spec": {
         "replicas": 3,
         "selector": {
-          "deployment": "${WEB_DEPLOYMENT_NAME}"
+          "matchLabels": {
+            "app": "${WEB_DEPLOYMENT_NAME}"
+          }
         },
         "strategy": {
           "type": "Recreate"
