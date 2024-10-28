@@ -93,6 +93,9 @@ oc process -f ./openshift/template.json \
   -p WEB_IMAGE=$WEB_IMAGE \
   -p CRON_NAME=$CRON_NAME \
   -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
+  -p REDIS_HOST=$REDIS_HOST \
+  -p REDIS_PORT=$REDIS_PORT \
+  -p SECRET_REDIS_PASSWORD=$SECRET_REDIS_PASSWORD \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
@@ -115,7 +118,11 @@ WAIT_TIME=30
 ROLLOUT_STATUS_CMD="oc rollout status deployment/$PHP_DEPLOYMENT_NAME"
 until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
   $ROLLOUT_STATUS_CMD
-  ATTEMPTS=$((attempts + 1))
+  ATTEMPTS=$((ATTEMPTS + 1))
+  if [ $ATTEMPTS -eq 10 ]; then
+    echo "Deployment/$PHP_DEPLOYMENT_NAME rollout failed. Exiting..."
+    exit 1
+  fi
   echo "Waiting for deployment/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done

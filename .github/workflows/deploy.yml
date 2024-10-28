@@ -54,6 +54,9 @@ on:
       REDIS_REPLICAS:
         required: true
         type: string
+      REDIS_HOST:
+        required: true
+        type: string
       APP_HOST_URL:
         required: true
         type: string
@@ -195,7 +198,9 @@ jobs:
           CRON_NAME: ${{ inputs.CRON_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_NAME: ${{ inputs.REDIS_NAME }}
+          REDIS_HOST: ${{ inputs.REDIS_HOST }}
           REDIS_PORT: ${{ inputs.REDIS_PORT }}
+          SECRET_REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 

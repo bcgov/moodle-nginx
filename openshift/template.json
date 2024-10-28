@@ -283,6 +283,18 @@
                         "key": "database-name"
                       }
                     }
+                  },
+                  {
+                    "name": "REDIS_HOST",
+                    "value": "${REDIS_HOST}"
+                  },
+                  {
+                    "name": "REDIS_PORT",
+                    "value": "${REDIS_PORT}"
+                  },
+                  {
+                    "name": "REDIS_PASSWORD",
+                    "value": "${REDIS_PASSWORD}"
                   }
                 ]
               }
@@ -474,6 +486,18 @@
                         "key": "database-name"
                       }
                     }
+                  },
+                  {
+                    "name": "REDIS_HOST",
+                    "value": "${REDIS_HOST}"
+                  },
+                  {
+                    "name": "REDIS_PORT",
+                    "value": "${REDIS_PORT}"
+                  },
+                  {
+                    "name": "REDIS_PASSWORD",
+                    "value": "${REDIS_PASSWORD}"
                   }
                 ]
               }
@@ -803,6 +827,24 @@
       "displayName": "DB Name",
       "name": "DB_NAME",
       "value": "moodle"
+    },
+    {
+      "description": "Redis Host Name.",
+      "displayName": "Redis Host",
+      "name": "REDIS_HOST",
+      "value": "${REDIS_HOST}"
+    },
+    {
+      "description": "Redis Port Number",
+      "displayName": "Redis Port",
+      "name": "REDIS_PORT",
+      "value": "${REDIS_PORT}"
+    },
+    {
+      "description": "Redis Password",
+      "displayName": "Redis Password",
+      "name": "REDIS_PASSWORD",
+      "value": "${SECRET_REDIS_PASSWORD}"
     }
   ]
 }
