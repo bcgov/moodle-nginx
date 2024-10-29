@@ -55,6 +55,11 @@ objects:
                    secretKeyRef:
                      name: moodle-secrets
                      key: database-password
+               - name: REDIS_PASSWORD
+                 valueFrom:
+                   secretKeyRef:
+                     name: redis
+                     key: redis-password
              volumeMounts:
                - name: moodle-app-data
                  mountPath: /var/www/html
