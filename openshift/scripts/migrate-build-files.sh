@@ -44,7 +44,8 @@ cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
 echo "Copying files..."
 # Copy all files, including hidden ones, preserving directory structure
-rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
+# rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
+rsync -a --no-perms --no-owner --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ${src_dir}/ ${dest_dir}/
 
 echo "Setting permissions..."
 # Set permissions for moodle directory

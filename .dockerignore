@@ -1,1 +1,4 @@
-./app
+app
+data
+temp
+!config/redis

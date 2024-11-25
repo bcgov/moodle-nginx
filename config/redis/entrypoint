@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+
+if [[ -n "$CONFIG" ]]
+then
+  echo "Getting the config from the environment"
+  echo "$CONFIG" > /etc/sentinel_tunnel/config.json
+fi
+
+exec "$@"

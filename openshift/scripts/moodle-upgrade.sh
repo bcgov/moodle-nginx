@@ -13,6 +13,7 @@ php /var/www/html/admin/cli/purge_caches.php
 
 echo "Check for missing plugins..."
 php /var/www/html/admin/cli/uninstall_plugins.php --show-missing --show-contrib
+# php /var/www/html/admin/cli/uninstall_plugins.php --plugins=format_topcoll --run
 echo "Purging missing plugins..."
 php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run
 

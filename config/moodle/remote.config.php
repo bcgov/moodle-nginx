@@ -9,7 +9,7 @@ $CFG = new stdClass();
 
 $CFG->dbtype    = 'mariadb';
 $CFG->dblibrary = 'native';
-$CFG->dbhost    = 'db';
+$CFG->dbhost    = $_SERVER['DB_HOST'];
 $CFG->dbname    = $_SERVER['DB_NAME'];
 $CFG->dbuser    = $_SERVER['DB_USER'];
 $CFG->dbpass    = $_SERVER['DB_PASSWORD'];
@@ -22,7 +22,7 @@ $CFG->session_redis_host = $_SERVER['REDIS_HOST'];
 $CFG->session_redis_auth = $_SERVER['REDIS_PASSWORD'];
 // $CFG->session_handler_class = '\core\session\redis';
 $CFG->session_handler_class = '\core\session\file';
-$CFG->session_redis_port = 6379; // Optional if TCP. For socket use -1
+$CFG->session_redis_port = 26379; // Optional if TCP. For socket use -1
 $CFG->session_redis_database = 0; // Optional, default is db 0.
 $CFG->session_redis_acquire_lock_timeout = 120;
 $CFG->session_redis_lock_expire = 7200;
@@ -42,6 +42,11 @@ $CFG->dboptions =  array (
   'dbport' => '3306',
   'dbsocket' => '',
   'dbcollation' => 'utf8mb4_unicode_ci',
+);
+
+$CFG->xsendfile = 'X-Accel-Redirect';
+$CFG->xsendfilealiases = array(
+    '/dataroot/' => $CFG->dataroot
 );
 
 if (php_sapi_name() == "cli") {

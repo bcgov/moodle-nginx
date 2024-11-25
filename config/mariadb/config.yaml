@@ -21,6 +21,7 @@ data:
     # enforce_gtid_consistency=1      # Ensure transactions are GTID-consistent
     gtid_strict_mode=1              # Prevents issues with non-deterministic statements
     binlog_format=ROW               # Required for GTID replication
+    sync_binlog=1
 
   replica.cnf: |
     [mariadb]

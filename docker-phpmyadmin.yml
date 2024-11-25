@@ -1,0 +1,18 @@
+services:
+  phpmyadmin:
+    depends_on:
+      - db
+    image: phpmyadmin
+    restart: no
+    ports:
+      - "8090:80"
+    environment:
+      PMA_HOSTS: db-0, db-1, db-2
+      PMA_PORTS: 3306, 3306, 3306
+      MYSQL_ROOT_PASSWORD:
+      UPLOAD_LIMIT: 600M
+    env_file: example.env
+    links:
+      - db-0
+      - db-1
+      - db-2

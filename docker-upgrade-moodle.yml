@@ -1,0 +1,193 @@
+# Description: Docker Compose file for upgrading Moodle
+# This creates a multi-container environment for upgrading Moodle
+# Includes 3 independant Moodle instances (the initial docker-compose + 2 in this file)
+# Each instance has a separate database, PHP and web server
+# Allows to upgrade from current version to a new version when requiring an intermediate version
+# For example:
+# MOODLE_311_STABLE (PHP:8.0) > MOODLE_401_STABLE (PHP:8.0) > MOODLE_405_STABLE (PHP:8.3)
+services:
+  build-1:
+    extends:
+      file: docker-common.yml
+      service: build
+    container_name: build-1
+    deploy:
+      replicas: ${DOCKER_MOODLE_1_REPLICAS:-0}
+    environment:
+      PHP_IMAGE: php:8.1-fpm
+      MOODLE_BRANCH_VERSION: MOODLE_401_STABLE
+    build:
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
+        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
+    volumes:
+      - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
+
+  build-2:
+    extends:
+      file: docker-common.yml
+      service: build
+    container_name: build-2
+    deploy:
+      replicas: ${DOCKER_MOODLE_2_REPLICAS:-1}
+    environment:
+      PHP_IMAGE: php:8.3-fpm
+      MOODLE_BRANCH_VERSION: MOODLE_405_STABLE
+    build:
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
+        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_405_STABLE}
+    volumes:
+      - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
+
+  db-1:
+    extends:
+      service: db
+      file: docker-common.yml
+    container_name: db-1
+    deploy:
+      replicas: ${DOCKER_MOODLE_1_REPLICAS:-0}
+    volumes:
+      - mysqldata-1:/var/lib/mysql:delegated
+      - ./temp/db-backups:/tmp/db-backups:delegated
+
+  db-2:
+    extends:
+      service: db
+      file: docker-common.yml
+    container_name: db-2
+    deploy:
+      replicas: ${DOCKER_MOODLE_2_REPLICAS:-1}
+    volumes:
+      - mysqldata-2:/var/lib/mysql:delegated
+      - ./temp/db-backups:/tmp/db-backups:delegated
+
+  php-1:
+    extends:
+      service: php
+      file: docker-common.yml
+    container_name: php-1
+    deploy:
+      replicas: ${DOCKER_MOODLE_1_REPLICAS:-0}
+    depends_on:
+      db-1:
+        condition: service_healthy
+    environment:
+      PHP_IMAGE: php:8.0-fpm
+      DB_HOST: db-1
+    build:
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+    volumes:
+      - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
+      - ./temp/docker/moodledata-1:/var/www/moodledata:delegated
+    links:
+      - db-1
+      - redis-primary
+
+  php-2:
+    extends:
+      service: php
+      file: docker-common.yml
+    container_name: php-2
+    deploy:
+      replicas: ${DOCKER_MOODLE_2_REPLICAS:-1}
+    depends_on:
+      db-2:
+        condition: service_healthy
+    environment:
+      PHP_IMAGE: php:8.3-fpm
+      DB_HOST: db-2
+    build:
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
+    volumes:
+      - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
+      - ./temp/docker/moodledata-2:/var/www/moodledata:delegated
+    networks:
+      static-network:
+        ipv4_address: 172.19.0.6
+
+  cron-1:
+    extends:
+      service: cron
+      file: docker-common.yml
+    container_name: cron-1
+    environment:
+      DB_DEPLOYMENT_NAME: db-1
+      DB_HOST: db-1
+    deploy:
+      replicas: ${DOCKER_MOODLE_1_REPLICAS:-0}
+    depends_on:
+      db-1:
+        condition: service_healthy
+    build:
+      context: .
+      dockerfile: CRON.Dockerfile
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
+        PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
+    volumes:
+      - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
+      - ./temp/docker/moodledata-1:/var/www/moodledata:delegated
+    links:
+      - db-1
+
+  cron-2:
+    extends:
+      service: cron
+      file: docker-common.yml
+    container_name: cron-2
+    environment:
+      DB_DEPLOYMENT_NAME: db-2
+      DB_HOST: db-2
+    deploy:
+      replicas: ${DOCKER_MOODLE_2_REPLICAS:-1}
+    depends_on:
+      db-2:
+        condition: service_healthy
+    build:
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.3-cli}
+    volumes:
+      - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
+      - ./temp/docker/moodledata-2:/var/www/moodledata:delegated
+    links:
+      - db-2
+
+  web-1:
+    extends:
+      service: web
+      file: docker-common.yml
+    container_name: web-1
+    deploy:
+      replicas: ${DOCKER_MOODLE_1_REPLICAS:-0}
+    ports:
+        - "${DOCKER_MOODLE_1_PORT:-8082}:${DOCKER_MOODLE_1_PORT:-8082}"
+    volumes:
+        - ./config/nginx/default_moodle_41.conf:/etc/nginx/conf.d/default.conf:delegated
+        - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
+        - ./temp/docker/moodledata-1:/var/www/moodledata:delegated
+    links:
+      - php-1
+
+  web-2:
+    extends:
+      service: web
+      file: docker-common.yml
+    container_name: web-2
+    deploy:
+      replicas: ${DOCKER_MOODLE_2_REPLICAS:-1}
+    ports:
+        - "${DOCKER_MOODLE_2_PORT:-8083}:${DOCKER_MOODLE_2_PORT:-8083}"
+    volumes:
+        - ./config/nginx/default_moodle_45.conf:/etc/nginx/conf.d/default.conf:delegated
+        - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
+        - ./temp/docker/moodledata-2:/var/www/moodledata:delegated
+    networks:
+      static-network:
+        ipv4_address: 172.19.0.5
+
+volumes:
+    mysqldata-1: {}
+    mysqldata-2: {}

@@ -258,6 +258,10 @@
                     "value": "https://${SITE_URL}"
                   },
                   {
+                    "name": "DB_HOST",
+                    "value": "${DB_HOST}"
+                  },
+                  {
                     "name": "DB_USER",
                     "valueFrom": {
                       "secretKeyRef": {
@@ -294,7 +298,12 @@
                   },
                   {
                     "name": "REDIS_PASSWORD",
-                    "value": "${SECRET_REDIS_PASSWORD}"
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "redis",
+                        "key": "redis-password"
+                      }
+                    }
                   }
                 ]
               }
@@ -821,6 +830,12 @@
       "displayName": "DB User",
       "name": "DB_USER",
       "value": "moodle"
+    },
+    {
+      "description": "Database host.",
+      "displayName": "DB Host",
+      "name": "DB_HOST",
+      "value": "db"
     },
     {
       "description": "Database name.",

@@ -1,0 +1,13 @@
+{
+	"Sentinels_addresses_list":[
+		"172.19.0.9:26379",
+		"172.19.0.7:26380",
+		"172.19.0.12:26381"
+	],
+	"Databases":[
+		{
+			"Name": "mymaster",
+			"Local_port": "6450"
+		}
+	]
+}

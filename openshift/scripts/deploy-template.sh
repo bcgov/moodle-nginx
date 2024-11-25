@@ -82,6 +82,7 @@ sleep 30
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
   -p APP_NAME=$APP \
+  -p DB_HOST=$DB_HOST \
   -p DB_USER=$DB_USER \
   -p DB_NAME=$DB_NAME \
   -p DB_PASSWORD=$DB_PASSWORD \
@@ -95,7 +96,6 @@ oc process -f ./openshift/template.json \
   -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
   -p REDIS_HOST=$REDIS_HOST \
   -p REDIS_PORT=$REDIS_PORT \
-  -p SECRET_REDIS_PASSWORD=$SECRET_REDIS_PASSWORD \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 

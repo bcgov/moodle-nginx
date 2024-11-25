@@ -18,6 +18,8 @@ ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
+ENV REDIS_SENTINEL_URL="https://github.com/catalyst/moodle-cachestore_redissentinel"
+ENV REDIS_SENTINEL_DIR=$MOODLE_APP_DIR/cache/stores/redis/sentinel
 
 # ARG F2F_BRANCH_VERSION=MOODLE_400_STABLE
 # ARG HVP_BRANCH_VERSION=stable
@@ -65,7 +67,12 @@ RUN echo "Building to directory: $MOODLE_APP_DIR"
 # RUN git clone --recurse-submodules --jobs 8 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
-RUN git clone --jobs 12 --branch $MOODLE_BRANCH_VERSION --recurse-submodules --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+RUN git config --global core.compression 0
+RUN git clone --depth=1 --jobs 12 --branch $MOODLE_BRANCH_VERSION --recurse-submodules --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+
+WORKDIR $MOODLE_APP_DIR
+RUN git fetch --unshallow
+RUN git pull --all
 
 COPY ./config/moodle/$DEPLOY_ENVIRONMENT.config.php "$MOODLE_APP_DIR/config.php"
 # Add PHP info (debugging)
@@ -92,7 +99,8 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
   # mkdir -p $CUSTOMCERT_DIR
 
 RUN mkdir -p $PSAELMSYNC_DIR
-RUN git clone --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR
+RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR
+RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch master --single-branch $REDIS_SENTINEL_URL $REDIS_SENTINEL_DIR
 # RUN git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $DATAFLOWS_BRANCH_VERSION --single-branch $DATAFLOWS_URL $DATAFLOWS_DIR && \
   # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \
@@ -101,6 +109,8 @@ RUN git clone --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION 
   # git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR
   # git clone --recurse-submodules --jobs 8 --branch $CERTIFICATE_BRANCH_VERSION --single-branch $CERTIFICATE_URL $CERTIFICATE_DIR
 # Add commands for site upgrades / migrations
+COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
+RUN dos2unix /usr/local/bin/enable-maintenance.sh
 COPY ./config/moodle/moodle_index_during_maintenance.php /tmp/moodle_index_during_maintenance.php
 COPY ./openshift/scripts/migrate-build-files.sh /usr/local/bin/migrate-build-files.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh

@@ -1,0 +1,89 @@
+services:
+  build:
+    deploy:
+      replicas: 0
+    tty: true
+    restart: no
+    environment:
+      PHP_IMAGE: php:8.0-fpm
+      MOODLE_BRANCH_VERSION: MOODLE_311_STABLE
+      DEPLOY_ENVIRONMENT: local
+    env_file:
+      - example.env
+    build:
+      context: .
+      dockerfile: Moodle.Dockerfile
+      args:
+        DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-local}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
+    volumes:
+      - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
+    command:  tail -F anything
+
+  php:
+    container_name: php
+    deploy:
+      replicas: 0
+    tty: true
+    restart: no
+    env_file:
+      - example.env
+      - example.secrets
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:-moodle}
+      DB_USER: ${DB_USER:-moodle}
+      DB_NAME: ${DB_NAME:-moodle}
+      PHP_IMAGE: php:8.0-fpm
+    build:
+      context: .
+      dockerfile: PHP.Dockerfile
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+        PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
+    command: php-fpm
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "php-fpm-healthcheck"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    container_name: web
+    image: ${WEB_IMAGE:-nginxinc/nginx-unprivileged:1.25.4-alpine-slim}
+    restart: no
+    deploy:
+      replicas: 0
+
+  db:
+    image: ${DB_IMAGE:-mariadb:10}
+    restart: no
+    deploy:
+      replicas: 0
+    env_file: example.env
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "healthcheck.sh --innodb_initialized --connect"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cron:
+    container_name: cron
+    deploy:
+      replicas: 0
+    restart: no
+    env_file: example.env
+    build:
+      context: .
+      dockerfile: CRON.Dockerfile
+      args:
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
+        PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
+    volumes:
+      - ./temp/docker/build-0/var/www/html:/var/www/html:delegated

@@ -186,6 +186,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
+          DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
@@ -204,7 +205,6 @@ jobs:
           REDIS_HOST: ${{ inputs.REDIS_HOST }}
           REDIS_URL: ${{ inputs.REDIS_URL }}
           REDIS_PORT: ${{ inputs.REDIS_PORT }}
-          SECRET_REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
