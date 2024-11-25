@@ -40,6 +40,8 @@ objects:
            - name: moodle-upgrade-job
              image: ${IMAGE_REPO}${BUILD_NAME}:${DEPLOY_NAMESPACE}
              env:
+               - name: DB_HOST
+                 value: 'db'
                - name: DB_USER
                  valueFrom:
                    secretKeyRef:

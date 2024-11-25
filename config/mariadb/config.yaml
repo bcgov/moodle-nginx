@@ -48,6 +48,7 @@ data:
     GRANT SLAVE MONITOR ON *.* TO 'repluser'@'%';
     CREATE DATABASE IF NOT EXISTS moodle;
     FLUSH PRIVILEGES;
+    RESET MASTER;
 
   secondary.sql: |
     # We have to know name of sts (`db`) and

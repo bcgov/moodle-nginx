@@ -88,6 +88,9 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
 
   if [ $CURRENT_USER_COUNT -gt 0 ]; then
     echo "Database is online and contains $CURRENT_USER_COUNT users."
+    echo "Resetting master to avoid repolication issues..."
+    RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u root -e 'RESET MASTER;'" 2>&1)
+    echo "Result: $RESET"
     break
   else
     echo "Database is offline. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
