@@ -55,7 +55,7 @@ data:
     # service `db` in advance as an FQDN.
     # No need to use master_port
     CHANGE MASTER TO
-      MASTER_HOST='db-0.db',
+      MASTER_HOST='db-0',
       MASTER_USER='repluser',
       MASTER_PASSWORD='replsecret',
       MASTER_CONNECT_RETRY=10;
