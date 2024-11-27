@@ -18,6 +18,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     echo "Timeout waiting for $DB_DEPLOYMENT_NAME to scale to 0"
     exit 1
   fi
+  helm uninstall $DB_DEPLOYMENT_NAME
   echo "Recreating $DB_DEPLOYMENT_NAME..."
 else
   echo "Helm deployment $DB_HOST NOT FOUND. Beginning deployment..."
