@@ -21,10 +21,10 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   helm uninstall $DB_DEPLOYMENT_NAME
   echo "Recreating $DB_DEPLOYMENT_NAME..."
 else
-  echo "Helm deployment $DB_HOST NOT FOUND. Beginning deployment..."
+  echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
 fi
 
-helm install $DB_HOST \
+helm install $DB_DEPLOYMENT_NAME \
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
