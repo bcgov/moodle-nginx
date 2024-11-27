@@ -470,6 +470,10 @@
                     "value": "https://${SITE_URL}"
                   },
                   {
+                    "name": "DB_HOST",
+                    "value": "${DB_HOST}"
+                  },
+                  {
                     "name": "DB_USER",
                     "valueFrom": {
                       "secretKeyRef": {

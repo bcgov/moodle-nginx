@@ -305,6 +305,13 @@ jobs:
             oc delete secret ${{ inputs.APP }}-secrets
             echo "DELETED secret ${{ inputs.APP }}-secrets"
           fi
+          if [[ `oc describe secret mariadb 2>&1` =~ "NotFound" ]]; then
+            echo "Secret: mariadb NOT FOUND: Skipping..."
+          else
+            echo "Secret: mariadb FOUND: Cleaning resources..."
+            oc delete secret mariadb
+            echo "DELETED secret mariadb"
+          fi
 
       - name: 🧹️ Clean Backups
         id: clean-backups

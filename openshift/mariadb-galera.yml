@@ -1,0 +1,11 @@
+global:
+  compatibility:
+    openshift:
+      adaptSecurityContext: force
+fullnameOverride: mariadb-galera
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+podManagementPolicy: OrderedReady
+replicaCount: 3
