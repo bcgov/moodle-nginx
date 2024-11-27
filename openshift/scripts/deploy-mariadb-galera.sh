@@ -32,4 +32,7 @@ helm install $DB_HOST \
     --set resources.requests.memory=256Mi \
     --set resources.limit.cpu=400m \
     --set resources.requests.memory=1024Mi \
-    oci://registry-1.docker.io/bitnamicharts/mariadb-galera --atomic --wait --timeout 30 -f config.yaml
+    --atomic \
+    --wait \
+    --timeout 30 \
+    oci://registry-1.docker.io/bitnamicharts/mariadb-galera
