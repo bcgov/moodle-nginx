@@ -1060,4 +1060,4 @@ metrics:
     ##      service: mariadb-galera
     ##    for: 5m
     ##
-    rules: {}
+    ## rules: {}
