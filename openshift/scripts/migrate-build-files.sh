@@ -18,6 +18,9 @@ echo "Deleting all files in ${dest_dir}..."
 # Delate all files, excluding hidden files and directories
 find ${dest_dir} -mindepth 1 -delete
 
+echo "Clearing config caches..."
+rm /var/www/moodledata/muc/config.php
+
 sleep 10
 
 # Count the number of files in the destination directory, excluding hidden files and directories
