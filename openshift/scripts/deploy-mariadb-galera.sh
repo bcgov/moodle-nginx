@@ -22,11 +22,11 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
 
   helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set rootUser.password=$DB_PASSWORD
+    --set rootUser.password=$DB_PASSWORD \
+    --set galera.mariabackup.password=$DB_PASSWORD \
+    --set db.password=$DB_PASSWORD
     # --set db.user=$DB_USER \
-    # --set db.password=$DB_PASSWORD \
     # --set db.name=$DB_NAME \
-    # --set galera.mariabackup.password=$DB_PASSWORD \
     # --set galera.mariabackup.forcePassword=true
 
 else
