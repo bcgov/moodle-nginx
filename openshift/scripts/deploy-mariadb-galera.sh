@@ -91,44 +91,56 @@ else
     --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
     --atomic \
     --wait \
+    --timeout 10m \
     -f ./config/mariadb/galera-values.yaml
 fi
 
-# Handle graceful shutdown, and introduce some testing parameters
-oc create configmap $DB_DEPLOYMENT_NAME-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh
+# Create or update the ConfigMap from the prestop.sh script
+if oc get configmap ${DB_DEPLOYMENT_NAME}-prestop-script &> /dev/null; then
+  echo "ConfigMap ${DB_DEPLOYMENT_NAME}-prestop-script already exists. Updating..."
+  oc create configmap ${DB_DEPLOYMENT_NAME}-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh -o yaml --dry-run=client | oc apply -f -
+else
+  echo "Creating ConfigMap ${DB_DEPLOYMENT_NAME}-prestop-script..."
+  oc create configmap ${DB_DEPLOYMENT_NAME}-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh
+fi
 
 # Add the ConfigMap as a volume and mount it to each container.
 # Also, add the preStop hook to use the script
 # oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[{"op": "add", "path": "/spec/template/spec/volumes", "value": [{"name": "prestop-script", "configMap": {"name": "$DB_DEPLOYMENT_NAME-prestop-script"}}]}, {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts", "value": [{"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh"}]}, {"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {"preStop": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}}]'
 
 # Patch the StatefulSet to add the preStop hook to every container
-oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/volumes/-",
-    "value": {
-      "name": "prestop-script",
-      "configMap": {
-        "name": "'"$DB_DEPLOYMENT_NAME"'-prestop-script"
+if oc get statefulset $DB_DEPLOYMENT_NAME &> /dev/null; then
+  oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/volumes/-",
+      "value": {
+        "name": "prestop-script",
+        "configMap": {
+          "name": "'"$DB_DEPLOYMENT_NAME"'-prestop-script"
+        }
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/volumeMounts/-",
+      "value": {
+        "name": "prestop-script",
+        "mountPath": "/usr/local/bin/prestop.sh",
+        "subPath": "mariadb-prestop.sh"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/lifecycle/preStop",
+      "value": {
+        "exec": {
+          "command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]
+        }
       }
     }
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/volumeMounts/-",
-    "value": {
-      "name": "prestop-script",
-      "mountPath": "/usr/local/bin/prestop.sh",
-      "subPath": "mariadb-prestop.sh"
-    }
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/lifecycle/preStop",
-    "value": {
-      "exec": {
-        "command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]
-      }
-    }
-  }
-]'
+  ]'
+else
+  echo "StatefulSet $DB_DEPLOYMENT_NAME not found. Exiting..."
+  exit 1
+fi
