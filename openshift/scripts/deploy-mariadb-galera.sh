@@ -17,13 +17,28 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     echo "Timeout waiting for $DB_DEPLOYMENT_NAME to scale to 0"
     exit 1
   fi
+
   # helm uninstall $DB_DEPLOYMENT_NAME
   echo "Upgrading $DB_DEPLOYMENT_NAME..."
 
-  helm upgrade $DB_DEPLOYMENT_NAME \
-    oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set rootUser.password=$DB_PASSWORD \
-    --set galera.mariabackup.password=$DB_PASSWORD
+  # Capture the output of the helm upgrade command into a variable
+  helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME oci://registry-1.docker.io/bitnamicharts/mariadb-galera --reuse-values -f ./config/mariadb/galera-values.yaml 2>&1)
+
+   # Output the response for debugging purposes
+  echo "$helm_upgrade_response"
+
+  # Check if the helm upgrade command failed
+  if [[ $? -ne 0 ]]; then
+    echo "Helm upgrade failed with the following output:"
+    echo "$helm_upgrade_response"
+    exit 1
+  fi
+
+  # helm upgrade $DB_DEPLOYMENT_NAME \
+  #   oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+  #   --set rootUser.password=$DB_PASSWORD \
+  #   --set galera.mariabackup.password=$DB_PASSWORD
+  #   -f ./config/mariadb/galera-values.yaml
     # --set db.password=$DB_PASSWORD \
     # --set db.user=$DB_USER \
     # --set db.name=$DB_NAME \
@@ -58,3 +73,10 @@ else
     --wait \
     -f ./config/mariadb/galera-values.yaml
 fi
+
+# Handle graceful shutdown, and introduce some testing parameters
+oc create configmap $DB_DEPLOYMENT_NAME-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh
+
+# Add the ConfigMap as a volume and mount it to each container.
+# Also, add the preStop hook to use the script
+oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[{"op": "add", "path": "/spec/template/spec/volumes", "value": [{"name": "prestop-script", "configMap": {"name": "$DB_DEPLOYMENT_NAME-prestop-script"}}]}, {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts", "value": [{"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh"}]}, {"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {"preStop": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}}]'

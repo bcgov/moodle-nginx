@@ -448,6 +448,11 @@
                     "name": "${CRON_NAME}-config",
                     "mountPath": "/var/www/html/config.php",
                     "subPath": "config.php"
+                  },
+                  {
+                    "name": "${CRON_NAME}-php-config",
+                    "mountPath": "/usr/local/etc/php/conf.d/moodle-php.ini",
+                    "subPath": "moodle-php.ini"
                   }
                 ],
                 "resources": {
@@ -541,6 +546,13 @@
                 "name": "${CRON_NAME}-config",
                 "configMap": {
                   "name": "${CRON_NAME}-config",
+                  "defaultMode": 420
+                }
+              },
+              {
+                "name": "${CRON_NAME}-php-config",
+                "configMap": {
+                  "name": "${CRON_NAME}-php-config",
                   "defaultMode": 420
                 }
               },
