@@ -75,7 +75,7 @@ else
     --set resources.limits.memory=1024Mi \
     --set metrics.enabled=true \
     --set metrics.serviceMonitor.enabled=true \
-    --set metrics.prometheusRules.enabled=true \
+    --set metrics.prometheusRules.enabled=false \
     --set readinessProbe.enabled=false \
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \
