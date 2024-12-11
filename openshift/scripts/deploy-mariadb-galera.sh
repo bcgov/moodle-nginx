@@ -22,7 +22,18 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "Upgrading $DB_DEPLOYMENT_NAME..."
 
   # Capture the output of the helm upgrade command into a variable
-  helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME oci://registry-1.docker.io/bitnamicharts/mariadb-galera --reuse-values -f ./config/mariadb/galera-values.yaml 2>&1)
+  helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
+    oci://registry-1.docker.io/bitnamicharts/mariadb-galera --reuse-values \
+    --set rootUser.password=$DB_PASSWORD \
+    --set galera.mariabackup.password=$DB_PASSWORD \
+    --set extraVolumeMounts[0].name=prestop-script \
+    --set extraVolumeMounts[0].mountPath=/usr/local/bin/prestop.sh \
+    --set extraVolumeMounts[0].subPath=mariadb-prestop.sh \
+    --set extraVolumeMounts[0].readOnly=true \
+    --set lifecycle.preStop.exec.command[0]="/bin/sh" \
+    --set lifecycle.preStop.exec.command[1]="-c" \
+    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
+    -f ./config/mariadb/galera-values.yaml 2>&1)
 
    # Output the response for debugging purposes
   echo "$helm_upgrade_response"
@@ -69,6 +80,15 @@ else
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \
     --set galera.mariabackup.forcePassword=true \
+    --set extraVolumes[0].name=prestop-script \
+    --set extraVolumes[0].configMap.name=${DB_DEPLOYMENT_NAME}-prestop-script \
+    --set extraVolumeMounts[0].name=prestop-script \
+    --set extraVolumeMounts[0].mountPath=/usr/local/bin/prestop.sh \
+    --set extraVolumeMounts[0].subPath=mariadb-prestop.sh \
+    --set extraVolumeMounts[0].readOnly=true \
+    --set lifecycle.preStop.exec.command[0]="/bin/sh" \
+    --set lifecycle.preStop.exec.command[1]="-c" \
+    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
     --atomic \
     --wait \
     -f ./config/mariadb/galera-values.yaml
@@ -79,4 +99,36 @@ oc create configmap $DB_DEPLOYMENT_NAME-prestop-script --from-file=./openshift/s
 
 # Add the ConfigMap as a volume and mount it to each container.
 # Also, add the preStop hook to use the script
-oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[{"op": "add", "path": "/spec/template/spec/volumes", "value": [{"name": "prestop-script", "configMap": {"name": "$DB_DEPLOYMENT_NAME-prestop-script"}}]}, {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts", "value": [{"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh"}]}, {"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {"preStop": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}}]'
+# oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[{"op": "add", "path": "/spec/template/spec/volumes", "value": [{"name": "prestop-script", "configMap": {"name": "$DB_DEPLOYMENT_NAME-prestop-script"}}]}, {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts", "value": [{"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh"}]}, {"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {"preStop": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}}]'
+
+# Patch the StatefulSet to add the preStop hook to every container
+oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/volumes/-",
+    "value": {
+      "name": "prestop-script",
+      "configMap": {
+        "name": "'"$DB_DEPLOYMENT_NAME"'-prestop-script"
+      }
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/volumeMounts/-",
+    "value": {
+      "name": "prestop-script",
+      "mountPath": "/usr/local/bin/prestop.sh",
+      "subPath": "mariadb-prestop.sh"
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/lifecycle/preStop",
+    "value": {
+      "exec": {
+        "command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]
+      }
+    }
+  }
+]'
