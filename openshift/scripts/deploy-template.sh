@@ -155,6 +155,12 @@ pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.it
 
 # Wait until the pod is in the "Running" state
 while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
+  if [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
+    echo "migrate-build-files job Failed. Retrieving logs..."
+    oc logs $pod_name
+    echo "Exiting..."
+    exit 1
+  fi
   echo "Waiting for pod $pod_name to be running."
   sleep 30
 done
@@ -202,6 +208,12 @@ pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0
 
 # Wait until the pod is in the "Running" state
 while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
+  if [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
+    echo "moodle-upgrade job Failed. Retrieving logs..."
+    oc logs $pod_name
+    echo "Exiting..."
+    exit 1
+  fi
   echo "Waiting for pod $pod_name to be running."
   sleep 10
 done
