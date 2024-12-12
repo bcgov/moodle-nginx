@@ -2,6 +2,8 @@
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
+PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
+
 # Check if the Helm deployment exists
 if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "$DB_DEPLOYMENT_NAME Installation found...Skipping..."
@@ -66,7 +68,7 @@ else
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
-    --set replicaCount=4 \
+    --set replicaCount=3 \
     --set persistence.size=12Gi \
     --set primary.persistence.accessModes={ReadWriteMany} \
     --set resources.requests.cpu=50m \
@@ -104,43 +106,47 @@ else
   oc create configmap ${DB_DEPLOYMENT_NAME}-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh
 fi
 
-# Add the ConfigMap as a volume and mount it to each container.
-# Also, add the preStop hook to use the script
-# oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[{"op": "add", "path": "/spec/template/spec/volumes", "value": [{"name": "prestop-script", "configMap": {"name": "$DB_DEPLOYMENT_NAME-prestop-script"}}]}, {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts", "value": [{"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh"}]}, {"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {"preStop": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}}]'
+# Function to check if a JSON path exists in the StatefulSet
+json_path_exists() {
+  local path=$1
+  oc get statefulset $DB_DEPLOYMENT_NAME -o jsonpath="$path" &> /dev/null
+}
+
+# Define the patches to add preStop hook to the StatefulSet
+patches=(
+  '{"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "prestop-script", "configMap": {"name": "mariadb-galera-prestop-script"}}}'
+  '{"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh", "readOnly": true}}'
+  '{"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {}}'
+  '{"op": "add", "path": "/spec/template/spec/containers/0/lifecycle/preStop", "value": {"exec": {"command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]}}}'
+)
+
+# Define the JSON paths to check if the patches have been applied
+paths=(
+  '{.spec.template.spec.volumes[?(@.name=="prestop-script")]}'
+  '{.spec.template.spec.containers[0].volumeMounts[?(@.name=="prestop-script")]}'
+  '{.spec.template.spec.containers[0].lifecycle}'
+  '{.spec.template.spec.containers[0].lifecycle.preStop}'
+)
 
 # Patch the StatefulSet to add the preStop hook to every container
 if oc get statefulset $DB_DEPLOYMENT_NAME &> /dev/null; then
-  oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p '[
-    {
-      "op": "add",
-      "path": "/spec/template/spec/volumes/-",
-      "value": {
-        "name": "prestop-script",
-        "configMap": {
-          "name": "'"$DB_DEPLOYMENT_NAME"'-prestop-script"
-        }
-      }
-    },
-    {
-      "op": "add",
-      "path": "/spec/template/spec/containers/0/volumeMounts/-",
-      "value": {
-        "name": "prestop-script",
-        "mountPath": "/usr/local/bin/prestop.sh",
-        "subPath": "mariadb-prestop.sh"
-      }
-    },
-    {
-      "op": "add",
-      "path": "/spec/template/spec/containers/0/lifecycle/preStop",
-      "value": {
-        "exec": {
-          "command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]
-        }
-      }
-    }
-  ]'
+  echo "Applying JSON patch from $PATCH_FILE"
+  cat $PATCH_FILE
+
+  # Collect patches to apply
+  patches_to_apply=()
+  for i in "${!paths[@]}"; do
+    if ! json_path_exists "${paths[$i]}"; then
+      patches_to_apply+=("${patches[$i]}")
+    fi
+  done
+
+  # Apply patches if there are any to apply
+  if [ ${#patches_to_apply[@]} -gt 0 ]; then
+    oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p "[${patches_to_apply[*]}]"
+  else
+    echo "All patches already applied. No changes needed."
+  fi
 else
-  echo "StatefulSet $DB_DEPLOYMENT_NAME not found. Exiting..."
-  exit 1
+  echo "StatefulSet $DB_DEPLOYMENT_NAME not found. Skipping patch."
 fi

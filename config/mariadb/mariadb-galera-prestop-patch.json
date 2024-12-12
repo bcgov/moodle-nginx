@@ -1,0 +1,36 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/volumes/-",
+    "value": {
+      "name": "prestop-script",
+      "configMap": {
+        "name": "mariadb-galera-prestop-script"
+      }
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/volumeMounts/-",
+    "value": {
+      "name": "prestop-script",
+      "mountPath": "/usr/local/bin/prestop.sh",
+      "subPath": "mariadb-prestop.sh",
+      "readOnly": true
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/lifecycle",
+    "value": {}
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/lifecycle/preStop",
+    "value": {
+      "exec": {
+        "command": ["/bin/sh", "-c", "/usr/local/bin/prestop.sh"]
+      }
+    }
+  }
+]
