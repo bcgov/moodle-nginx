@@ -189,6 +189,7 @@ done
 echo "Database pod name: $DB_POD_NAME has been found and is running."
 
 ATTEMPTS=0
+CURRENT_USER_COUNT=0
 
 until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
@@ -196,7 +197,8 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
 
   # Capture the output of the mariadb command
   DB_QUERY="USE $DB_NAME; SELECT COUNT(*) FROM user;"
-  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u '$DB_USER' -p'$DB_PASSWORD' -e '$DB_QUERY'" 2>&1)
+  # OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u'$DB_USER' -p'$DB_PASSWORD' -e '$DB_QUERY'" 2>&1)
+  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u root -p'$DB_PASSWORD' -e 'USE $DB_NAME; SELECT COUNT(*) FROM user;'" 2>&1)
 
   # Check if the output contains an error
   if echo "$OUTPUT" | grep -qi "error"; then
@@ -205,7 +207,9 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   fi
 
   # Extract the user count from the output
-  CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
+  if echo "$OUTPUT" | grep -qi "COUNT"; then
+    CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
+  fi
 
   if [ $CURRENT_USER_COUNT -gt 0 ]; then
     echo "Database is online and contains $CURRENT_USER_COUNT users."
