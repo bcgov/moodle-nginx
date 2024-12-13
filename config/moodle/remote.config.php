@@ -44,6 +44,10 @@ $CFG->dboptions =  array (
   'dbcollation' => 'utf8mb4_unicode_ci',
 );
 
+$CFG->dataroot  = '/var/www/moodledata';
+$CFG->admin     = 'admin';
+// $CFG->alternateloginurl  = (isset($_SERVER['ALTERNATE_LOGIN_URL'])) ? $_SERVER['ALTERNATE_LOGIN_URL'] : '';
+
 $CFG->xsendfile = 'X-Accel-Redirect';
 $CFG->xsendfilealiases = array(
     '/dataroot/' => $CFG->dataroot
@@ -56,10 +60,6 @@ if (php_sapi_name() == "cli") {
     $moodle_dir = stripos($_SERVER['REQUEST_URI'], '/moodle') === 0 ? '/moodle' : ''; // for local dev in /moodle folder
     $CFG->wwwroot = $protocol.$_SERVER['HTTP_HOST'].$moodle_dir;
 }
-
-$CFG->dataroot  = '/var/www/moodledata';
-$CFG->admin     = 'admin';
-// $CFG->alternateloginurl  = (isset($_SERVER['ALTERNATE_LOGIN_URL'])) ? $_SERVER['ALTERNATE_LOGIN_URL'] : '';
 
 $CFG->directorypermissions = 0777;
 

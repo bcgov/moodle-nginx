@@ -41,7 +41,7 @@ objects:
              image: ${IMAGE_REPO}${BUILD_NAME}:${DEPLOY_NAMESPACE}
              env:
                - name: DB_HOST
-                 value: 'db-0.db.e66ac2-dev.svc'
+                 value: ${DB_HOST_SERVICE}
                - name: DB_USER
                  valueFrom:
                    secretKeyRef:
@@ -85,6 +85,9 @@ parameters:
   - name: IMAGE_REPO
     required: true
     value: "image-registry.openshift-image-registry.svc:5000/"
+  - name: DB_HOST_SERVICE
+    required: true
+    value: "mariadb-galera.e66ac2-dev.svc"
   - name: DEPLOY_NAMESPACE
     required: true
     value: "e66ac2-dev"
