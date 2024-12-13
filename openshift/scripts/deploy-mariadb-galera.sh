@@ -26,7 +26,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera
-    # --reuse-values \
+    --reuse-values 2>&1)
     # --set rootUser.password=$DB_PASSWORD \
     # --set galera.mariabackup.password=$DB_PASSWORD \
     # -f ./config/mariadb/galera-values.yaml 2>&1)
