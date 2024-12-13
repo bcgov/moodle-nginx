@@ -25,11 +25,11 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
 
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
-    oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --reuse-values \
-    --set rootUser.password=$DB_PASSWORD \
-    --set galera.mariabackup.password=$DB_PASSWORD \
-    -f ./config/mariadb/galera-values.yaml 2>&1)
+    oci://registry-1.docker.io/bitnamicharts/mariadb-galera
+    # --reuse-values \
+    # --set rootUser.password=$DB_PASSWORD \
+    # --set galera.mariabackup.password=$DB_PASSWORD \
+    # -f ./config/mariadb/galera-values.yaml 2>&1)
 
    # Output the response for debugging purposes
   echo "$helm_upgrade_response"
@@ -173,7 +173,7 @@ MAX_ATTEMPTS=30 # wait up to 5 minutes
 DB_POD_NAME=""
 until [ -n "$DB_POD_NAME" ]; do
   ATTEMPTS=$(( $ATTEMPTS + 1 ))
-  DB_POD_NAME=$(oc get pods -l app=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
+  DB_POD_NAME=$(oc get pods -l app.kubernetes.io/name=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}')
 
   if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
     echo "Timeout waiting for the pod to have status.phase:Running. Exiting..."
