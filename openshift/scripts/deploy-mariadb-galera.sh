@@ -195,7 +195,8 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   echo "Waiting for database to come online... $(($ATTEMPTS * $WAIT_TIME)) seconds..."
 
   # Capture the output of the mariadb command
-  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u'$DB_USER' -p'$DB_PASSWORD' -e \"USE $DB_NAME; SELECT COUNT(*) FROM user;\"" 2>&1)
+  DB_QUERY="USE $DB_NAME; SELECT COUNT(*) FROM user;"
+  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u '$DB_USER' -p'$DB_PASSWORD' -e '$DB_QUERY'" 2>&1)
 
   # Check if the output contains an error
   if echo "$OUTPUT" | grep -qi "error"; then
