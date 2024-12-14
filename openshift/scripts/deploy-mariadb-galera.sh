@@ -197,8 +197,9 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
 
   # Capture the output of the mariadb command
   DB_QUERY="USE $DB_NAME; SELECT COUNT(*) FROM user;"
+  echo "Connecting to database (as $DB_USER) with query: $DB_QUERY"
   # OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u'$DB_USER' -p'$DB_PASSWORD' -e '$DB_QUERY'" 2>&1)
-  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u '$DB_USER' -p'$DB_PASSWORD' -e 'USE $DB_NAME; SELECT COUNT(*) FROM user;'" 2>&1)
+  OUTPUT=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u'$DB_USER' -p'$DB_PASSWORD' -e 'USE $DB_NAME; SELECT COUNT(*) FROM user;'" 2>&1)
 
   # Check if the output contains an error
   if echo "$OUTPUT" | grep -qi "error"; then
