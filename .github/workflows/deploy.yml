@@ -92,7 +92,7 @@ jobs:
   # Deploy to Openshift
   deploy:
     name: OpenShift (${{ github.ref_name }})
-    runs-on: openshift/origin-cli
+    runs-on: ubuntu-22.04
     if: |
       always()
       && (
