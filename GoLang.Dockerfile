@@ -17,7 +17,7 @@ RUN mkdir /etc/sentinel_tunnel && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY ./config/redis/sentinel_tunnel.$DEPLOY_ENVIRONMENT.config.json /etc/sentinel_tunnel/config.json
+COPY ./config/redis/sentinel_tunnel.${DEPLOY_ENVIRONMENT}.config.json /etc/sentinel_tunnel/config.json
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["/usr/local/bin/sentinel_tunnel", "/etc/sentinel_tunnel/config.json", "/dev/stdout"]
