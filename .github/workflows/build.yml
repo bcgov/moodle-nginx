@@ -163,7 +163,7 @@ jobs:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web]
+    needs: [checkEnv, db, php, cron, moodle, web, redis-proxy]
     # if: success()
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:

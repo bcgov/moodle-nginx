@@ -1,7 +1,7 @@
 name: Redis
 
 concurrency:
-  group: cron-${{ github.workflow }}-${{ github.ref }}
+  group: redis-proxy-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -63,4 +63,4 @@ jobs:
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
           docker tag ${{ env.UBUNTU_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
-          docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ./GoLang.Dockerfile .
+          docker buildx build --build-arg DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }} --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ./GoLang.Dockerfile .
