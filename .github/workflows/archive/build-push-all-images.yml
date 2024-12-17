@@ -31,7 +31,7 @@ jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
     name: 📋 Environment Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Check Env Vars
         run: |
@@ -42,7 +42,7 @@ jobs:
   build-images:
     name: '🔨 Build all Moodle images (web, cron, dp, php, moodle)'
     needs: [checkEnv]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ needs.checkEnv.SKIP_BUILDS != 'YES' }} && (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
@@ -101,15 +101,30 @@ jobs:
           docker tag ${{ env.PHP_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
 
+      - name: 🛠️ Pull REDIS Proxy Build Images
+        run: |
+          docker pull ${{ env.GOLANG_IMAGE }}
+          docker tag ${{ env.GOLANG_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
+          docker pull ${{ env.UBUNTU_IMAGE }}
+          docker tag ${{ env.UBUNTU_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
+
       # Build / push images to Artifactory
+      - name: 🛠️ Build Redis Proxy
+        run: |
+          cd ./config/redis
+          docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ./GoLang.Dockerfile .
+
       - name: 🛠️ Build Moodle Image
         run: |
-          docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f Moodle.Dockerfile .
+          cd /
+          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f Moodle.Dockerfile .
 
       - name: 🛠️ Build PHP Image
         run: |
-          docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f PHP.Dockerfile .
+          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ PHP_DEPLOYMENT_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f PHP.Dockerfile .
 
       - name: 🛠️ Build CRON Image
         run: |
-          docker buildx build --tag ${{ secrets.ARTIFACTORY_URL }}/${{ CRON_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f CRON.Dockerfile .
+          docker buildx build --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ CRON_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f CRON.Dockerfile .

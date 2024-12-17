@@ -1,0 +1,13 @@
+{
+	"Sentinels_addresses_list":[
+		"redis-node-0:26379",
+		"redis-node-1:26379",
+		"redis-node-2:26379"
+	],
+	"Databases":[
+		{
+			"Name": "mymaster",
+			"Local_port": "6379"
+		}
+	]
+}

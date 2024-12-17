@@ -150,6 +150,13 @@ oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
 sleep 10
 
+echo "Deploy redis-proxy..."
+oc process -f ./openshift/redis-proxy.yml \
+  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
+  | oc create -f -
+
+sleep 10
+
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
 

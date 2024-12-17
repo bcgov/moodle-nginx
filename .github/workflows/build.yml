@@ -51,7 +51,7 @@ jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
     name: 📋 Environment Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
       BRANCH: ${{ env.BRANCH }}
@@ -182,6 +182,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
+      OPENSHIFT_DEPLOY_PROJECT: ${{ needs.checkEnv.outputs.OPENSHIFT_DEPLOY_PROJECT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
@@ -210,7 +211,7 @@ jobs:
 
   lighthouse-check:
     name: 🚦 Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [checkEnv, call-deploy-workflow]
     outputs:
       LHRESULT: ${{ steps.lighthouse.outputs.LHRESULT }}
@@ -265,7 +266,7 @@ jobs:
         lighthouse-check
       ]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts

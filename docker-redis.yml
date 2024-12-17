@@ -26,6 +26,8 @@ services:
         ipv4_address: 172.19.0.3
     env_file:
       - example.env
+    environment:
+      - DEPLOY_ENVIRONMENT=local
     build:
       context: ./config/redis
       dockerfile: GoLang.Dockerfile

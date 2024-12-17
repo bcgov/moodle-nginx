@@ -11,7 +11,7 @@ on:
 jobs:
   notify-failure:
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Workflow Failure
         uses: muinmomin/webhook-action@v1.0.0
@@ -39,7 +39,7 @@ jobs:
 
   notify-success:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Workflow Success
         uses: muinmomin/webhook-action@v1.0.0

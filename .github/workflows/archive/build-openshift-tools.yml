@@ -61,7 +61,7 @@ jobs:
   build-images:
     name: 🔨 Build Application Images (${{ github.ref_name }})
     needs: [checkEnv]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
@@ -242,7 +242,7 @@ jobs:
     name: 📫 Send Notifications (via Rocket.Chat)
     needs: [build-images, call-deploy-workflow]
     if: success() || failure()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: ⚠️ Failure
         if: failure()
