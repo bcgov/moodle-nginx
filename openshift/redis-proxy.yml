@@ -1,59 +1,46 @@
-# Redis Insight service with name 'redisinsight-service'
-apiVersion: v1
-kind: Service
+apiVersion: template.openshift.io/v1
+kind: Template
 metadata:
   name: redis-proxy
-spec:
-  ports:
-    - port: 6379
-      targetPort: 6379
-  selector:
-    app: redis-proxy
-
----
-# Redis Insight deployment with name 'redis-proxy'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: redis-proxy #deployment name
-  labels:
-    app: redis-proxy #deployment label
-spec:
-  replicas: 3 #a single replica pod
-  selector:
-    matchLabels:
-      app: redis-proxy #which pods is the deployment managing, as defined by the pod template
-  template: #pod template
-    metadata:
-      labels:
-        app: redis-proxy #label for pod/s
-    spec:
-      containers:
-        - name:  redis-proxy
-          image: ${DEPLOY_IMAGE}
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 6379
-              protocol: TCP
-          resources:
-            requests:
-              memory: '0'
-              cpu: '0'
-
----
-# Redis Insight Route
-kind: Route
-apiVersion: route.openshift.io/v1
-metadata:
-  name: redis-proxy
-spec:
-  path: /
-  to:
+objects:
+  - apiVersion: v1
     kind: Service
-    name: redis-insight
-    weight: 100
-  port:
-    targetPort: 6379
+    metadata:
+      name: redis-proxy
+    spec:
+      ports:
+        - port: 6379
+          targetPort: 6379
+      selector:
+        app: redis-proxy
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: redis-proxy #deployment name
+      labels:
+        app: redis-proxy #deployment label
+    spec:
+      replicas: 3 #a single replica pod
+      selector:
+        matchLabels:
+          app: redis-proxy #which pods is the deployment managing, as defined by the pod template
+      template: #pod template
+        metadata:
+          labels:
+            app: redis-proxy #label for pod/s
+        spec:
+          containers:
+            - name:  redis-proxy
+              image: ${DEPLOY_IMAGE}
+              imagePullPolicy: IfNotPresent
+              ports:
+                - containerPort: 6379
+                  protocol: TCP
+              resources:
+                requests:
+                  memory: '0'
+                  cpu: '0'
 
 parameters:
   - name: DEPLOY_IMAGE
