@@ -114,7 +114,7 @@ jobs:
       - name: 🛠️ Build Redis Proxy
         run: |
           cd ./config/redis
-          docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ./GoLang.Dockerfile .
+          docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }} --output=type=image,push=true --push -f ./GoLang.Dockerfile .
 
       - name: 🛠️ Build Moodle Image
         run: |
