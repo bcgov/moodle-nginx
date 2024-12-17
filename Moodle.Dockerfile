@@ -3,7 +3,7 @@ FROM ${DOCKER_FROM_IMAGE}
 
 # Moodle Configs
 ENV MOODLE_APP_DIR /app/public
-ARG DEPLOY_ENVIRONMENT="local"
+ARG DEPLOY_ENVIRONMENT="remote"
 
 # PHP Configs
 ENV ETC_DIR=/usr/local/etc

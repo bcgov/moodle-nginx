@@ -186,6 +186,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
