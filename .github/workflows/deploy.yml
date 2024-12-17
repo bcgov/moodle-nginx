@@ -186,7 +186,6 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
-          DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           APP: ${{ inputs.APP }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
@@ -199,7 +198,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
-          REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.OPENSHIFT_DEPLOY_PROJECT }}-${{ github.ref_name }}
+          REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.BUILD_TAG }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           CRON_NAME: ${{ inputs.CRON_NAME }}
