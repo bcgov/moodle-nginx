@@ -7,9 +7,14 @@ concurrency:
 env:
   APP: moodle
   USER: ${{ github.actor }}
+  DEPLOY_ENVIRONMENT: ${{ github.ref_name }}
 
 on:
   workflow_call:
+    inputs:
+      DEPLOY_ENVIRONMENT:
+        required: true
+        type: string
 
 jobs:
   build-images:
