@@ -153,7 +153,6 @@ sleep 10
 echo "Deploy redis-proxy..."
 oc process -f ./openshift/redis-proxy.yml \
   -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
-  -p DEPLOY_ENVIRONMENT=$DEPLOY_ENVIRONMENT \
   | oc create -f -
 
 sleep 10

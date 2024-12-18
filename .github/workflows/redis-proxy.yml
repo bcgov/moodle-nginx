@@ -1,7 +1,7 @@
 name: Redis
 
 concurrency:
-  group: redis-proxy-${{ github.workflow }}-${{ github.ref }}
+  group: redis-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
