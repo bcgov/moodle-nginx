@@ -158,8 +158,6 @@ jobs:
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/redis-proxy.yml
     secrets: inherit
-    with:
-      DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
 
   call-cleanup-workflow:
     name: 🧹️ Clean-up
