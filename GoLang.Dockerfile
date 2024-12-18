@@ -1,12 +1,11 @@
 ARG GOLANG_FROM_IMAGE=golang:1.12
 ARG UBUNTU_FROM_IMAGE=ubuntu:24.04
-ARG DEPLOY_ENVIRONMENT="remote"
-
 FROM ${GOLANG_FROM_IMAGE} AS builder
-
 RUN go get github.com/RedisLabs/sentinel_tunnel
 
 FROM ${UBUNTU_FROM_IMAGE}
+ARG DEPLOY_ENVIRONMENT="remote"
+
 COPY --from=builder /go/bin/sentinel_tunnel /usr/local/bin/
 COPY ./config/redis/entrypoint /usr/local/bin
 RUN mkdir /etc/sentinel_tunnel && \
