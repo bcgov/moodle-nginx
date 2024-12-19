@@ -71,6 +71,7 @@ jobs:
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
       REDIS_HELM_CHART: ${{ env.REDIS_HELM_CHART }}
       REDIS_NAME: ${{ env.REDIS_NAME }}
+      REDIS_PROXY_NAME: ${{ env.REDIS_PROXY_NAME }}
       REDIS_HOST: ${{ env.REDIS_HOST }}
       REDIS_URL: ${{ env.REDIS_URL }}
       REDIS_PORT: ${{ env.REDIS_PORT }}
@@ -206,6 +207,7 @@ jobs:
       CRON_NAME: ${{ needs.checkEnv.outputs.CRON_NAME }}
       REDIS_HELM_CHART: ${{ needs.checkEnv.outputs.REDIS_HELM_CHART }}
       REDIS_NAME: ${{ needs.checkEnv.outputs.REDIS_NAME }}
+      REDIS_PROXY_NAME: ${{ needs.checkEnv.outputs.REDIS_PROXY_NAME }}
       REDIS_PORT: ${{ needs.checkEnv.outputs.REDIS_PORT }}
       REDIS_HOST: ${{ needs.checkEnv.outputs.REDIS_HOST }}
       REDIS_URL: ${{ needs.checkEnv.outputs.REDIS_URL }}

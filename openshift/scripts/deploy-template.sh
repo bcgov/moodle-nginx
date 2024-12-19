@@ -150,7 +150,7 @@ oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
 sleep 10
 
-echo "Deploy redis-proxy..."
+echo "Deploy redis-proxy image: $REDIS_PROXY_IMAGE ..."
 oc process -f ./openshift/redis-proxy.yml \
   -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
   | oc create -f -
