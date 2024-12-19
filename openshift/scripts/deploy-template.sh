@@ -75,7 +75,7 @@ fi
 sleep 10
 
 echo "Creating configMap: $REDIS_PROXY_NAME-config"
-oc create configmap $REDIS_PROXY_NAME-config --from-file=/etc/sentinel_tunnel/config.json=./config/redis/sentinel_tunnel.remote.config.json
+oc create configmap $REDIS_PROXY_NAME-config --from-file=config.json=./config/redis/sentinel_tunnel.remote.config.json
 
 sleep 10
 
@@ -171,7 +171,7 @@ else
   oc delete deployment/$REDIS_PROXY_NAME
 fi
 oc process -f ./openshift/redis-proxy.yml \
-  -p DEPLOY_IMAGE=$REDIS_PROXY_NAME \
+  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
   -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
   | oc create -f -
 
