@@ -30,7 +30,9 @@ services:
       - DEPLOY_ENVIRONMENT=local
     build:
       context: ./config/redis
-      dockerfile: GoLang.Dockerfile
+      dockerfile: Redis.Proxy.Dockerfile
+    volumes:
+      - ./config/redis/sentinel_tunnel.local.config.json:/etc/sentinel_tunnel/config.json
 
   redis:
     image: redis:latest

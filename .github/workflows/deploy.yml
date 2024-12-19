@@ -202,6 +202,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
+          REDIS_PROXY_NAME: ${{ inputs.REDIS_PROXY_NAME }}
           REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.DEPLOY_NAMESPACE }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}

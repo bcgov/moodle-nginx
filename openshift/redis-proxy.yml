@@ -1,47 +1,63 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
-  name: redis-proxy
+  name: ${REDIS_PROXY_NAME}
 objects:
   - apiVersion: v1
     kind: Service
     metadata:
-      name: redis-proxy
+      name: ${REDIS_PROXY_NAME}
     spec:
       ports:
         - port: 6379
           targetPort: 6379
       selector:
-        app: redis-proxy
+        app: ${REDIS_PROXY_NAME}
 
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
-      name: redis-proxy #deployment name
+      name: ${REDIS_PROXY_NAME}
       labels:
-        app: redis-proxy #deployment label
+        app: ${REDIS_PROXY_NAME}
     spec:
-      replicas: 3 #a single replica pod
+      replicas: 3
       selector:
         matchLabels:
-          app: redis-proxy #which pods is the deployment managing, as defined by the pod template
-      template: #pod template
+          app: ${REDIS_PROXY_NAME}
+      template:
         metadata:
           labels:
-            app: redis-proxy #label for pod/s
+            app: ${REDIS_PROXY_NAME}
         spec:
+          imagePullSecrets:
+            - name: artifactory-m950-learning
+          volumes:
+            - name: ${REDIS_PROXY_NAME}-config
+              configMap:
+                name: ${REDIS_PROXY_NAME}-config
+                defaultMode: 420
+                items:
+                  - key: config.json
+                    path: config.json
           containers:
-            - name:  redis-proxy
+            - name:  ${REDIS_PROXY_NAME}
               image: ${DEPLOY_IMAGE}
               imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: ${REDIS_PROXY_NAME}-config
+                  mountPath: /etc/sentinel_tunnel/config.json
+                  subPath: config.json
               ports:
                 - containerPort: 6379
                   protocol: TCP
               resources:
                 requests:
-                  memory: '0'
-                  cpu: '0'
+                  memory: 58Mi
+                  cpu: 25m
 
 parameters:
   - name: DEPLOY_IMAGE
+    required: true
+  - name: REDIS_PROXY_NAME
     required: true

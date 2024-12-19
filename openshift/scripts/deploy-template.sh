@@ -67,6 +67,18 @@ oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPL
 
 sleep 10
 
+if [[ ! `oc describe configmap $CRON_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $CRON_NAME-config"
+  oc delete configmap $CRON_NAME-config
+fi
+
+sleep 10
+
+echo "Creating configMap: $REDIS_PROXY_NAME-config"
+oc create configmap $REDIS_PROXY_NAME-config --from-file=/etc/sentinel_tunnel/config.json=./config/redis/sentinel_tunnel.remote.config.json
+
+sleep 10
+
 echo "Checking for: deployment/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
 
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
@@ -150,9 +162,17 @@ oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
 sleep 10
 
-echo "Deploy redis-proxy image: $REDIS_PROXY_IMAGE ..."
+echo "Deploying $REDIS_PROXY_NAME..."
+# Check if the proxy exists, if so, delete it
+if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "deployment/$REDIS_PROXY_NAME job NOT FOUND..."
+else
+  echo "deployment/$REDIS_PROXY_NAME job found... deleting..."
+  oc delete deployment/$REDIS_PROXY_NAME
+fi
 oc process -f ./openshift/redis-proxy.yml \
-  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
+  -p DEPLOY_IMAGE=$REDIS_PROXY_NAME \
+  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
   | oc create -f -
 
 sleep 10
