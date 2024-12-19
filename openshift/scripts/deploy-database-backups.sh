@@ -13,6 +13,8 @@ backupConfig: |
   mariadb=$DB_HOST:$DB_PORT/$DB_NAME
   0 1 * * * default ./backup.sh -s
   0 4 * * * default ./backup.sh -s -v all
+networkPolicy:
+  enabled: true
 EOF
 
   # Upgrade the Helm deployment with the new values
@@ -51,6 +53,9 @@ else
       mariadb=$DB_HOST:$DB_PORT/$DB_NAME
       0 1 * * * default ./backup.sh -s
       0 4 * * * default ./backup.sh -s -v all
+
+    networkPolicy:
+      enabled: true
 
     db:
       secretName: moodle-secrets
