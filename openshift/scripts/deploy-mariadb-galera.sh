@@ -67,8 +67,8 @@ else
     --set primary.persistence.accessModes={ReadWriteMany} \
     --set resources.requests.cpu=10m \
     --set resources.requests.memory=256Mi \
-    --set resources.limits.cpu=null \
-    --set resources.limits.memory=null \
+    --set resources.limits.cpu=0 \
+    --set resources.limits.memory=0 \
     --set metrics.enabled=true \
     --set metrics.serviceMonitor.enabled=true \
     --set metrics.prometheusRules.enabled=false \

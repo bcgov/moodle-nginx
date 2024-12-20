@@ -1,7 +1,7 @@
 name: Redis
 
 concurrency:
-  group: redis-${{ github.workflow }}-${{ github.ref }}
+  group: moodle-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
