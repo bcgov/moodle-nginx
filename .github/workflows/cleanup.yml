@@ -129,13 +129,14 @@ jobs:
 
       - name: 🧹️ Clean ${{ inputs.DB_DEPLOYMENT_NAME }}
         run: |
-          configmap_name="${{ inputs.DB_DEPLOYMENT_NAME }}-config"
+          configmap_name="${{ inputs.DB_DEPLOYMENT_NAME }}-configuration"
           if [[ `oc describe sts ${{ inputs.DB_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
             echo "${{ inputs.DB_DEPLOYMENT_NAME }} NOT FOUND: Skipping..."
           else
             echo "${{ inputs.DB_DEPLOYMENT_NAME }} FOUND: Cleaning..."
             oc scale sts/${{ inputs.DB_DEPLOYMENT_NAME }} --replicas=0
-            oc delete sts/${{ inputs.DB_DEPLOYMENT_NAME }}
+            helm delete ${{ inputs.DB_DEPLOYMENT_NAME }}
+            # Delate PVCs - usually not something we want to do:
             # for i in 0 1 2; do
             #   if ! [[ `oc describe pvc datadir-${{ inputs.DB_DEPLOYMENT_NAME }}-$i 2>&1` =~ "NotFound" ]]; then
             #     kubectl delete pvc datadir-${{ inputs.DB_DEPLOYMENT_NAME }}-$i;
@@ -144,12 +145,12 @@ jobs:
             #   fi
             # done
           fi
-          if ! [[ `oc describe configmap $configmap_name 2>&1` =~ "NotFound" ]]; then
-            oc delete configmap $configmap_name
-          fi
-          if ! [[ `oc describe service ${{ inputs.DB_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
-            oc delete service ${{ inputs.DB_DEPLOYMENT_NAME }}
-          fi
+          # if ! [[ `oc describe configmap $configmap_name 2>&1` =~ "not found" ]]; then
+          #   oc delete configmap $configmap_name
+          # fi
+          # if ! [[ `oc describe service ${{ inputs.DB_DEPLOYMENT_NAME }} 2>&1` =~ "NotFound" ]]; then
+          #   oc delete service ${{ inputs.DB_DEPLOYMENT_NAME }}
+          # fi
 
       - name: 🧹️ Clean ${{ inputs.WEB_DEPLOYMENT_NAME }}
         id: clean-web
