@@ -67,9 +67,9 @@ oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPL
 
 sleep 10
 
-if [[ ! `oc describe configmap $CRON_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $CRON_NAME-config"
-  oc delete configmap $CRON_NAME-config
+if [[ ! `oc describe configmap $REDIS_PROXY_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $REDIS_PROXY_NAME-config"
+  oc delete configmap $REDIS_PROXY_NAME-config
 fi
 
 sleep 10
@@ -287,7 +287,7 @@ echo "Scaling up $DB_DEPLOYMENT_NAME to 3 replicas..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
 
 # Right-sizing cluster, according to environment
-bash ./openshift/scripts/right-sizing.sh
+# bash ./openshift/scripts/right-sizing.sh
 
 sleep 10
 

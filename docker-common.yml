@@ -6,7 +6,7 @@ services:
     restart: no
     environment:
       PHP_IMAGE: php:8.0-fpm
-      MOODLE_BRANCH_VERSION: MOODLE_311_STABLE
+      MOODLE_BRANCH_VERSION: MOODLE_401_STABLE
       DEPLOY_ENVIRONMENT: local
     env_file:
       - example.env
@@ -16,7 +16,7 @@ services:
       args:
         DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-local}
         DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
-        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
+        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
     command:  tail -F anything

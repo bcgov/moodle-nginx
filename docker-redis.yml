@@ -21,15 +21,17 @@ services:
     restart: no
     ports:
       - "6450:6450"
+    expose:
+      - "6450"
     networks:
       static-network:
-        ipv4_address: 172.19.0.3
+        ipv4_address: 172.19.5.3
     env_file:
       - example.env
     environment:
       - DEPLOY_ENVIRONMENT=local
     build:
-      context: ./config/redis
+      context: ./
       dockerfile: Redis.Proxy.Dockerfile
     volumes:
       - ./config/redis/sentinel_tunnel.local.config.json:/etc/sentinel_tunnel/config.json
@@ -54,7 +56,7 @@ services:
       - "6379"
     networks:
       static-network:
-        ipv4_address: 172.19.0.10
+        ipv4_address: 172.19.5.10
     command:
       [
         "redis-server",
@@ -63,7 +65,7 @@ services:
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.0.10",
+        "172.19.5.10",
         # "--requirepass ",
         # "local-example",
         "--replica-announce-port",
@@ -85,7 +87,7 @@ services:
       - "6380"
     networks:
       static-network:
-        ipv4_address: 172.19.0.14
+        ipv4_address: 172.19.5.14
     volumes:
       - ./temp/data/secondary1:/data
     command:
@@ -94,12 +96,12 @@ services:
         "--appendonly",
         "yes",
         "--replicaof",
-        "172.19.0.10",
+        "172.19.5.10",
         "6379",
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.0.14",
+        "172.19.5.14",
         "--replica-announce-port",
         "6380",
         "--protected-mode",
@@ -118,7 +120,7 @@ services:
       - "6381"
     networks:
       static-network:
-        ipv4_address: 172.19.0.15
+        ipv4_address: 172.19.5.15
     volumes:
       - ./data/secondary2:/data
     command:
@@ -127,12 +129,12 @@ services:
         "--appendonly",
         "yes",
         "--replicaof",
-        "172.19.0.10",
+        "172.19.5.10",
         "6379",
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.0.15",
+        "172.19.5.15",
         "--replica-announce-port",
         "6381",
         "--protected-mode",
@@ -150,14 +152,14 @@ services:
       - "26379"
     networks:
       static-network:
-        ipv4_address: 172.19.0.9
+        ipv4_address: 172.19.5.9
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
     command: >
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.0.9" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.19.5.9" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26379" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
@@ -174,7 +176,7 @@ services:
       - "26380:26382"
     networks:
       static-network:
-        ipv4_address: 172.19.0.7
+        ipv4_address: 172.19.5.7
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
@@ -182,7 +184,7 @@ services:
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.0.7" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.19.5.7" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26380" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
         echo "sentinel failover-timeout mymaster 5000" >> /etc/sentinel.conf &&
@@ -198,7 +200,7 @@ services:
       - "26381:26379"
     networks:
       static-network:
-        ipv4_address: 172.19.0.12
+        ipv4_address: 172.19.5.12
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
@@ -206,7 +208,7 @@ services:
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.0.12" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.19.5.12" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26381" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
         echo "sentinel failover-timeout mymaster 5000" >> /etc/sentinel.conf &&
@@ -220,4 +222,4 @@ services:
       - "5540:5540"
     networks:
       static-network:
-        ipv4_address: 172.19.0.11
+        ipv4_address: 172.19.5.11

@@ -3,7 +3,7 @@ include:
   - docker-redis.yml
   - docker-phpmyadmin.yml
   # Comment the line below to disable the Moodle intermediate upgrade service (3x moodle instances)
-  - docker-upgrade-moodle.yml
+  # - docker-upgrade-moodle.yml
 
 services:
   build-0:
@@ -15,13 +15,13 @@ services:
       replicas: 1
     environment:
       PHP_IMAGE: php:8.1-fpm
-      MOODLE_BRANCH_VERSION: MOODLE_311_STABLE
+      MOODLE_BRANCH_VERSION: MOODLE_401_STABLE
     build:
       args:
         DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
-        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_311_STABLE}
+        MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
     volumes:
-      - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
+      - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
 
   db-0:
     extends:
@@ -33,6 +33,9 @@ services:
     volumes:
       - mysqldata-0:/var/lib/mysql:delegated
       - ./temp/db-backups:/tmp/db-backups:delegated
+    networks:
+      static-network:
+        ipv4_address: 172.19.5.18
 
   php-0:
     extends:
@@ -56,6 +59,10 @@ services:
     links:
       - db-0
       - redis-primary
+      - redis-proxy
+    networks:
+      static-network:
+        ipv4_address: 172.19.5.16
 
   cron-0:
     extends:
@@ -82,6 +89,9 @@ services:
     links:
       - db-0
       - redis
+    networks:
+      static-network:
+        ipv4_address: 172.19.5.17
 
   web-0:
     extends:
@@ -96,11 +106,14 @@ services:
     ports:
         - "${DOCKER_MOODLE_0_PORT:-8081}:${DOCKER_MOODLE_0_PORT:-8081}"
     volumes:
-        - ./config/nginx/default_moodle_31.conf:/etc/nginx/conf.d/default.conf:delegated
+        - ./config/nginx/default_moodle_41.conf:/etc/nginx/conf.d/default.conf:delegated
         - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
         - ./temp/docker/moodledata-0:/var/www/moodledata:delegated
     links:
       - php-0
+    networks:
+      static-network:
+        ipv4_address: 172.19.5.13
 
 volumes:
     mysqldata-0: {}
@@ -108,5 +121,8 @@ volumes:
 networks:
   static-network:
     ipam:
+      driver: default
       config:
         - subnet: 172.19.0.0/16
+          ip_range: 172.19.5.0/24
+

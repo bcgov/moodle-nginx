@@ -239,10 +239,6 @@
                   }
                 ],
                 "resources": {
-                  "limits": {
-                    "memory": "${PHP_MEMORY_LIMIT}",
-                    "cpu": "${PHP_CPU_LIMIT}"
-                  },
                   "requests": {
                     "memory": "${PHP_MEMORY_REQUEST}",
                     "cpu": "${PHP_CPU_REQUEST}"
@@ -645,10 +641,6 @@
                   }
                 ],
                 "resources": {
-                  "limits": {
-                    "memory": "${WEB_MEMORY_LIMIT}",
-                    "cpu": "${CRON_CPU_LIMIT}"
-                  },
                   "requests": {
                     "memory": "${CRON_MEMORY_REQUEST}",
                     "cpu": "${WEB_CPU_REQUEST}"
@@ -794,22 +786,10 @@
       "value": "70Mi"
     },
     {
-      "description": "Maximum amount of memory the PHP container can use.",
-      "displayName": "PHP Memory Limit",
-      "name": "PHP_MEMORY_LIMIT",
-      "value": "256Mi"
-    },
-    {
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Request CPU",
       "name": "PHP_CPU_REQUEST",
       "value": "50m"
-    },
-    {
-      "description": "Maximum CPU the PHP container can use.",
-      "displayName": "PHP CPU Limit",
-      "name": "PHP_CPU_LIMIT",
-      "value": "150m"
     },
     {
       "description": "Requested amount of memory for the CRON container.",

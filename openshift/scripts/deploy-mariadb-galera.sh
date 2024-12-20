@@ -63,12 +63,12 @@ else
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=3 \
-    --set persistence.size=12Gi \
+    --set persistence.size=5Gi \
     --set primary.persistence.accessModes={ReadWriteMany} \
-    --set resources.requests.cpu=50m \
+    --set resources.requests.cpu=10m \
     --set resources.requests.memory=256Mi \
-    --set resources.limits.cpu=400m \
-    --set resources.limits.memory=1024Mi \
+    --set resources.limits.cpu=null \
+    --set resources.limits.memory=null \
     --set metrics.enabled=true \
     --set metrics.serviceMonitor.enabled=true \
     --set metrics.prometheusRules.enabled=false \
@@ -215,7 +215,7 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   if [ $CURRENT_USER_COUNT -gt 0 ]; then
     echo "Database is online and contains $CURRENT_USER_COUNT users."
     echo "Resetting master to avoid repolication issues..."
-    RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u'$DB_USER' -p'$DB_PASSWORD' -e 'RESET MASTER;'" 2>&1)
+    RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -uroot -p'$DB_PASSWORD' -e 'RESET MASTER;'" 2>&1)
     echo "Result: $RESET"
     break
   else

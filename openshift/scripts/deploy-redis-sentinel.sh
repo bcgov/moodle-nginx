@@ -27,12 +27,12 @@ replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: true
-    size: 500Mi
+    size: 50Mi
 sentinel:
   enabled: true
   persistence:
     enabled: true
-    size: 100Mi
+    size: 10Mi
 EOF
 
 # Check if the Helm deployment exists
