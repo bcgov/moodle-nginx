@@ -1,4 +1,4 @@
-# Redis Insight service with name 'redisinsight-service'
+# Redis Insight service with name 'redis-insight-service'
 apiVersion: v1
 kind: Service
 metadata:
@@ -15,35 +15,35 @@ spec:
     - port: 80
       targetPort: 5540
   selector:
-    app: redisinsight
+    app: redis-insight
 
 ---
-# Redis Insight deployment with name 'redisinsight'
+# Redis Insight deployment with name 'redis-insight'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redisinsight #deployment name
+  name: redis-insight #deployment name
   labels:
-    app: redisinsight #deployment label
+    app: redis-insight #deployment label
 spec:
   replicas: 1 #a single replica pod
   selector:
     matchLabels:
-      app: redisinsight #which pods is the deployment managing, as defined by the pod template
+      app: redis-insight #which pods is the deployment managing, as defined by the pod template
   template: #pod template
     metadata:
       labels:
-        app: redisinsight #label for pod/s
+        app: redis-insight #label for pod/s
     spec:
       volumes:
-        - name: redisinsight
+        - name: redis-insight
           emptyDir: {} # node-ephemeral volume https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
       containers:
-        - name:  redisinsight #Container name (DNS_LABEL, unique)
+        - name:  redis-insight #Container name (DNS_LABEL, unique)
           image: redis/redisinsight:latest #repo/image
           imagePullPolicy: IfNotPresent #Installs the latest Redis Insight version
           volumeMounts:
-            - name: redisinsight #Pod volumes to mount into the container's filesystem. Cannot be updated.
+            - name: redis-insight #Pod volumes to mount into the container's filesystem. Cannot be updated.
               mountPath: /data
           ports:
             - containerPort: 5540 #exposed container port and protocol
@@ -61,7 +61,7 @@ spec:
 kind: Route
 apiVersion: route.openshift.io/v1
 metadata:
-  name: redisinsight
+  name: redis-insight
 spec:
   path: /
   to:
