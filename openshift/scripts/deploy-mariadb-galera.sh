@@ -87,7 +87,7 @@ else
     --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
     --atomic \
     --wait \
-    --timeout 20m \
+    --timeout 20m0s \
     -f ./config/mariadb/galera-values.yaml
 fi
 
