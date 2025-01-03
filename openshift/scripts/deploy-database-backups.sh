@@ -68,6 +68,6 @@ else
       ENVIRONMENT_FRIENDLY_NAME:
         value: \"Backups\"
     " > config.yaml
-  helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --atomic --wait --timeout 20m0s -f config.yaml
+  helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --wait --timeout 20m0s -f config.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_NAME backup-storage=$DB_BACKUP_IMAGE
 fi
