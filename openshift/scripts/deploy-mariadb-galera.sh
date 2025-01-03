@@ -54,7 +54,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
 else
   echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
 
-  helm install $DB_DEPLOYMENT_NAME \
+  helm upgrade -i $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.debug=true \
     --set image.tag=10.4 \
