@@ -26,9 +26,9 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera
-    --reuse-values \
     --set rootUser.password=$DB_PASSWORD \
-    --set galera.mariabackup.password=$DB_PASSWORD 2>&1)
+    --set galera.mariabackup.password=$DB_PASSWORD \
+    --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
    # Output the response for debugging purposes
@@ -46,10 +46,10 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   #   --set rootUser.password=$DB_PASSWORD \
   #   --set galera.mariabackup.password=$DB_PASSWORD
   #   -f ./config/mariadb/galera-values.yaml
-    # --set db.password=$DB_PASSWORD \
-    # --set db.user=$DB_USER \
-    # --set db.name=$DB_NAME \
-    # --set galera.mariabackup.forcePassword=true
+  # --set db.password=$DB_PASSWORD \
+  # --set db.user=$DB_USER \
+  # --set db.name=$DB_NAME \
+  # --set galera.mariabackup.forcePassword=true
 
 else
   echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
@@ -64,7 +64,7 @@ else
   # --set metrics.enabled=true \
   # --set metrics.serviceMonitor.enabled=true \
   # --set metrics.prometheusRules.enabled=false \
-  helm upgrade -i $DB_DEPLOYMENT_NAME \
+  helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.debug=true \
     --set rootUser.password=$DB_PASSWORD \
