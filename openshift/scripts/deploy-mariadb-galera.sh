@@ -54,24 +54,25 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
 else
   echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
 
+  # Removed:
+  # --set image.tag=10.4 \
+  # --set primary.persistence.accessModes={ReadWriteMany} \
+  # --set resources.requests.cpu=10m \
+  # --set resources.requests.memory=256Mi \
+  # --set resources.limits.cpu=100m \
+  # --set resources.limits.memory=512Mi \
+  # --set metrics.enabled=true \
+  # --set metrics.serviceMonitor.enabled=true \
+  # --set metrics.prometheusRules.enabled=false \
   helm upgrade -i $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.debug=true \
-    --set image.tag=10.4 \
     --set rootUser.password=$DB_PASSWORD \
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=3 \
     --set persistence.size=5Gi \
-    --set primary.persistence.accessModes={ReadWriteMany} \
-    --set resources.requests.cpu=10m \
-    --set resources.requests.memory=256Mi \
-    --set resources.limits.cpu=100m \
-    --set resources.limits.memory=512Mi \
-    --set metrics.enabled=true \
-    --set metrics.serviceMonitor.enabled=true \
-    --set metrics.prometheusRules.enabled=false \
     --set readinessProbe.enabled=false \
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \
