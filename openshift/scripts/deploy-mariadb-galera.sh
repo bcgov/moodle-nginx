@@ -55,24 +55,28 @@ else
   echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
 
   # Removed:
-  # --set image.tag=10.4 \
-  # --set primary.persistence.accessModes={ReadWriteMany} \
-  # --set resources.requests.cpu=10m \
-  # --set resources.requests.memory=256Mi \
-  # --set resources.limits.cpu=100m \
-  # --set resources.limits.memory=512Mi \
   # --set metrics.enabled=true \
   # --set metrics.serviceMonitor.enabled=true \
   # --set metrics.prometheusRules.enabled=false \
+  # --set primary.persistence.accessModes={ReadWriteMany} \
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set image.debug=true \
+    --set image.tag=10.6 \
+    --set podManagementPolicy=Parallel \
+    --set galera.bootstrap.forceSafeToBootstrap=true \
+    --set galera.bootstrap.forceBootstrap=true \
+    --set galera.bootstrap.bootstrapFromNode=0 \
+    --set image.debug=false \
     --set rootUser.password=$DB_PASSWORD \
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=3 \
     --set persistence.size=5Gi \
+    --set resources.requests.cpu=10m \
+    --set resources.requests.memory=256Mi \
+    --set resources.limits.cpu=500m \
+    --set resources.limits.memory=2500Mi \
     --set readinessProbe.enabled=false \
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \
@@ -88,8 +92,8 @@ else
     --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
     --atomic \
     --wait \
-    --timeout 20m0s \
-    -f ./config/mariadb/galera-values.yaml
+    --timeout 20m0s
+    #-f ./config/mariadb/galera-values.yaml
 fi
 
 # Create or update the ConfigMap from the prestop.sh script
