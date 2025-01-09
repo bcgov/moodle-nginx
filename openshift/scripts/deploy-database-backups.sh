@@ -68,6 +68,8 @@ else
       ENVIRONMENT_FRIENDLY_NAME:
         value: \"Backups\"
     " > config.yaml
-  helm install $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --timeout 20m0s -f config.yaml
+  helm upgrade -i $DB_BACKUP_DEPLOYMENT_NAME $BACKUP_HELM_CHART --timeout 20m0s -f config.yaml
+  # helm upgrade -i moodle-db bcgov/backup-storage --timeout 20m0s -f ./config/mariadb/db-backups.yaml
   oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME backup-storage=$DB_BACKUP_IMAGE
+  # oc set image deployment/moodle-db-backup-storage backup-storage=bcgovimages/backup-container-mariadb:latest
 fi

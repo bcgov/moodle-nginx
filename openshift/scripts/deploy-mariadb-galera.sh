@@ -152,14 +152,14 @@ fi
 
 sleep 10
 
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
 
 sleep 15
 
 # Wait for the deployment to scale to 1
 ATTEMPTS=0
 MAX_ATTEMPTS=60
-while [[ $(oc get sts $DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne 1 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
+while [[ $(oc get sts $DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne 3 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
   echo "Waiting for $DB_DEPLOYMENT_NAME to scale to 1..."
   sleep 10
   ATTEMPTS=$((ATTEMPTS + 1))

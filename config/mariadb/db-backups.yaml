@@ -1,0 +1,30 @@
+image:
+  repository: 'bcgov/backup-storage'
+  pullPolicy: Always
+  tag: dev
+
+persistence:
+  backup:
+    accessModes: [ReadWriteMany]
+    storageClassName: netapp-file-standard
+  verification:
+    storageClassName: netapp-file-standard
+
+backupConfig: |
+  mariadb=mariadb-galera:3306/moodle
+  0 1 * * * default ./backup.sh -s
+  0 4 * * * default ./backup.sh -s -v all
+
+networkPolicy:
+  enabled: true
+
+db:
+  secretName: moodle-secrets
+  usernameKey: database-user
+  passwordKey: database-password
+
+env:
+  DATABASE_SERVICE_NAME:
+    value: mariadb-galera
+  ENVIRONMENT_FRIENDLY_NAME:
+    value: Backups
