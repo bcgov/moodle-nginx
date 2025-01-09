@@ -27,8 +27,8 @@ if oc get deployment $CRON_NAME; then
 fi
 
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
-echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
+# echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
+# oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
 echo "Scale down $REDIS_NAME to 1 replica..."
@@ -112,8 +112,8 @@ oc process -f ./openshift/template.json \
 oc apply -f -
 
 # Only use 1 db replica for deployment / upgrade to avoid conflicts
-echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
+# echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
+# oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."

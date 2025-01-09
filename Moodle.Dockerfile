@@ -18,19 +18,23 @@ ARG MOODLE_BRANCH_VERSION=MOODLE_401_STABLE
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
-ENV THEME_BRANCH_VERSION main
+ENV THEME_BRANCH_VERSION=main
 ENV THEME_URL="https://github.com/bcgov/bcgovpsa-moodle"
 ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
 ARG CUSTOMCERT_BRANCH_VERSION=MOODLE_404_STABLE
 ENV CUSTOMCERT_URL="https://github.com/mdjnelson/moodle-mod_customcert"
 ENV CUSTOMCERT_DIR=$MOODLE_APP_DIR/mod/customcert
 
+ENV CHILDTHEME_BRANCH_VERSION=main
+ENV CHILDTHEME_URL=https://github.com/bcgov/bcgovpsa-moodle
+ENV CHILDTHEME_DIR=/vendor/moodle/moodle/theme/bcgovpsa
+
 # ENV REDIS_SENTINEL_URL="https://github.com/catalyst/moodle-cachestore_redissentinel"
 # ENV REDIS_SENTINEL_DIR=$MOODLE_APP_DIR/cache/stores/redis/sentinel
 # ARG F2F_BRANCH_VERSION=MOODLE_400_STABLE
-# ARG HVP_BRANCH_VERSION=stable
-# ENV HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
-# ENV HVP_DIR=$MOODLE_APP_DIR/mod/hvp
+ARG HVP_BRANCH_VERSION=stable
+ENV HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
+ENV HVP_DIR=$MOODLE_APP_DIR/mod/hvp
 # ARG FORMAT_BRANCH_VERSION=MOODLE_403
 # ENV FORMAT_URL="https://github.com/gjb2048/moodle-format_topcoll"
 # ENV FORMAT_DIR=$MOODLE_APP_DIR/course/format/topcoll
@@ -104,8 +108,9 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR && \
-    git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR
-# RUN git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $CHILDTHEME_BRANCH_VERSION --single-branch $CHILDTHEME_URL $CHILDTHEME_DIR
   # git clone --recurse-submodules --jobs 8 --branch $DATAFLOWS_BRANCH_VERSION --single-branch $DATAFLOWS_URL $DATAFLOWS_DIR && \
   # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $F2F_BRANCH_VERSION --single-branch $F2F_URL $F2F_DIR && \
