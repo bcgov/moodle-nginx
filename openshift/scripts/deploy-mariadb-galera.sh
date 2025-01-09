@@ -9,7 +9,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "$DB_DEPLOYMENT_NAME Installation found...Skipping..."
   oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
   ATTEMPTS=0
-  MAX_ATTEMPTS=60
+  MAX_ATTEMPTS=120
   while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
     echo "Waiting for $DB_DEPLOYMENT_NAME to scale to 0..."
     sleep 10
@@ -217,16 +217,16 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
     CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
   fi
 
-  # if [ $CURRENT_USER_COUNT -gt 0 ]; then
-  #   echo "Database is online and contains $CURRENT_USER_COUNT users."
-  #   echo "Resetting master to avoid repolication issues..."
-  #   RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -uroot -p'$DB_PASSWORD' -e 'RESET MASTER;'" 2>&1)
-  #   echo "Result: $RESET"
-  #   break
-  # else
-  #   echo "Database is offline. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
-  #   sleep $WAIT_TIME
-  # fi
+  if [ $CURRENT_USER_COUNT -gt 0 ]; then
+    echo "Database is online and contains $CURRENT_USER_COUNT users."
+    # echo "Resetting master to avoid repolication issues..."
+    # RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -uroot -p'$DB_PASSWORD' -e 'RESET MASTER;'" 2>&1)
+    # echo "Result: $RESET"
+    break
+  else
+    echo "Database is offline. Attempt $ATTEMPTS out of $MAX_ATTEMPTS."
+    sleep $WAIT_TIME
+  fi
 done
 
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then

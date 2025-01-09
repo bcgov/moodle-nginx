@@ -132,6 +132,13 @@ jobs:
     uses: ./.github/workflows/php.yml
     secrets: inherit
 
+  redis-proxy:
+    name: 🔨 Redis Proxy
+    needs: [checkEnv]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    uses: ./.github/workflows/redis-proxy.yml
+    secrets: inherit
+
   cron:
     name: 🔨 Cron
     needs: [checkEnv]
@@ -151,13 +158,6 @@ jobs:
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
-    secrets: inherit
-
-  redis-proxy:
-    name: 🔨 Redis Proxy
-    needs: [checkEnv]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/redis-proxy.yml
     secrets: inherit
 
   call-cleanup-workflow:
