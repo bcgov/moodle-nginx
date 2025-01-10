@@ -1,0 +1,13 @@
+global:
+  redis:
+    password: ""
+replica:
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 50Mi
+sentinel:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 20Mi
