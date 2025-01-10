@@ -23,7 +23,7 @@ cat <<EOF > values.yaml
 global:
   redis:
     password: "$SECRET_REDIS_PASSWORD"
-    requirepass "$SECRET_REDIS_PASSWORD"
+    requirepass: "$SECRET_REDIS_PASSWORD"
 replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
