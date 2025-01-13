@@ -20,6 +20,10 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 
 # Create a temporary values file
 cat <<EOF > values.yaml
+global:
+  redis:
+    password: ""
+    requirepass: ""
 replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
