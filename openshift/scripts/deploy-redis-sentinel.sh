@@ -24,6 +24,7 @@ global:
   redis:
     password: ""
     requirepass: ""
+    protected-mode: "no"
 replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
