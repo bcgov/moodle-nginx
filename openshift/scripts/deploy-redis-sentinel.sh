@@ -23,18 +23,21 @@ cat <<EOF > values.yaml
 global:
   redis:
     password: ""
-    requirepass: ""
-    protected-mode: "no"
 replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: true
-    size: 50Mi
+    size: 500Mi
 sentinel:
   enabled: true
   persistence:
     enabled: true
-    size: 10Mi
+    size: 20Mi
+auth:
+  enabled: false
+  sentinel: false
+  password: ""
+  usePasswordFileFromSecret: false
 EOF
 
 # Check if the Helm deployment exists
