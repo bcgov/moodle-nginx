@@ -24,7 +24,7 @@ rm /var/www/moodledata/muc/config.php
 sleep 10
 
 # Count the number of files in the destination directory, excluding hidden files and directories
-final_count=$(find ${dest_dir} -not -name '.*' | wc -l)
+final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
 echo "Final file count: $final_count"
 
 # Calculate the number of files deleted
