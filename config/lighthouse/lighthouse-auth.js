@@ -76,6 +76,7 @@ async function runLighthouse(url, options, config = null) {
   } catch (error) {
     console.error('Error: Login button not found or not clickable within 10 seconds.');
     console.error(error);
+    console.error('Content: ', content);
     process.exit(1); // Fail the test
   }
 
