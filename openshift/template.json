@@ -291,15 +291,6 @@
                   {
                     "name": "REDIS_PORT",
                     "value": "${REDIS_PORT}"
-                  },
-                  {
-                    "name": "REDIS_PASSWORD",
-                    "valueFrom": {
-                      "secretKeyRef": {
-                        "name": "redis",
-                        "key": "redis-password"
-                      }
-                    }
                   }
                 ]
               }
