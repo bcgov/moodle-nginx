@@ -64,11 +64,20 @@ async function runLighthouse(url, options, config = null) {
   const content = await page.content();
   await fsp.writeFile('before_login.html', content);
 
-  // Wait for both the click and navigation
-  await Promise.all([
-    page.click('#loginbtn'),
-    page.waitForNavigation({timeout: 60000}),
-  ]);
+  try {
+    // Wait for the login button to be available
+    await page.waitForSelector('#loginbtn', { timeout: 10000 });
+
+    // Wait for both the click and navigation
+    await Promise.all([
+      page.click('#loginbtn'),
+      page.waitForNavigation({ timeout: 60000 }),
+    ]);
+  } catch (error) {
+    console.error('Error: Login button not found or not clickable within 10 seconds.');
+    console.error(error);
+    process.exit(1); // Fail the test
+  }
 
   const cookies = await page.cookies();
   // console.log('cookies: ', JSON.stringify(cookies));
