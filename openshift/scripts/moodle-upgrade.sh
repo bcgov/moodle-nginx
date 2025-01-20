@@ -1,10 +1,19 @@
+timestamp_file='/var/www/html/last_migration_timestamp'
+rerun_block_seconds=3600 # Block rerun if last_run < 1 hour
+
+# Check if the script has been run within the past hour
+if [ -f "$timestamp_file" ]; then
+  last_run=$(stat -c %Y "$timestamp_file")
+  current_time=$(date +%s)
+  time_diff=$((current_time - last_run))
+
+  if [ $time_diff -lt rerun_block_seconds ]; then
+    echo "The script has been run within the past hour. Skipping upgrade processes."
+    exit 0
+  fi
+fi
+
 echo "Starting Moodle upgrade job..."
-
-# echo "Enabling maintenance mode..."
-# php /var/www/html/admin/cli/maintenance.php --enable
-
-# echo "Waiting 10 minutes to run upgrades after file copy completes (migrate-build-files)..."
-# sleep 600
 
 cd /
 

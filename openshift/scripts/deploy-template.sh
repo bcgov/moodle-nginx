@@ -86,7 +86,7 @@ if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
 else
   echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
   oc annotate --overwrite  deployment/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
-  oc rollout latest deployment/$WEB_DEPLOYMENT_NAME
+  # oc rollout latest deployment/$WEB_DEPLOYMENT_NAME
 fi
 
 sleep 30
@@ -122,19 +122,27 @@ oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/n
 sleep 60
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
-oc rollout latest deployment/$PHP_DEPLOYMENT_NAME
+# oc rollout latest deployment/$PHP_DEPLOYMENT_NAME
 
 # Check PHP deployment rollout status until complete.
 ATTEMPTS=0
+MAX_ATTEMPTS=6
 WAIT_TIME=30
 ROLLOUT_STATUS_CMD="oc rollout status deployment/$PHP_DEPLOYMENT_NAME"
-until $ROLLOUT_STATUS_CMD || [ $ATTEMPTS -eq 6 ]; do
-  $ROLLOUT_STATUS_CMD
-  ATTEMPTS=$((ATTEMPTS + 1))
-  if [ $ATTEMPTS -eq 10 ]; then
-    echo "Deployment/$PHP_DEPLOYMENT_NAME rollout failed. Exiting..."
+
+until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
+  OUTPUT=$($ROLLOUT_STATUS_CMD 2>&1)
+  echo "$OUTPUT"
+
+  if echo "$OUTPUT" | grep -q "success"; then
+    echo "Deployment/$PHP_DEPLOYMENT_NAME successfully rolled out."
+    break
+  elif echo "$OUTPUT" | grep -q "error"; then
+    echo "Error: Deployment/$PHP_DEPLOYMENT_NAME rollout failed."
     exit 1
   fi
+
+  ATTEMPTS=$((ATTEMPTS + 1))
   echo "Waiting for deployment/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
   sleep $WAIT_TIME
 done
