@@ -75,7 +75,6 @@ objects:
                 echo "Upgrading Moodle..."
                 sh /usr/local/bin/moodle-upgrade.sh
              imagePullPolicy: Always
-         restartPolicy: Never
 parameters:
   - name: IMAGE_REPO
     required: true

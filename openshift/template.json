@@ -202,7 +202,6 @@
               {
                 "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}",
                 "name": "${PHP_DEPLOYMENT_NAME}",
-                "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
                 "ports": [
                   {
@@ -411,7 +410,6 @@
               {
                 "image": "${IMAGE_REPO}${CRON_NAME}:${DEPLOY_NAMESPACE}",
                 "name": "${CRON_NAME}",
-                "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
                 "volumeMounts": [
                   {
@@ -604,7 +602,6 @@
               {
                 "image": "${WEB_IMAGE}",
                 "name": "${WEB_DEPLOYMENT_NAME}",
-                "restartPolicy": "Always",
                 "imagePullPolicy": "Always",
                 "ports": [
                   {

@@ -143,7 +143,6 @@ spec:
             mountPath: /etc/mysql/
           - name: initdb
             mountPath: /docker-entrypoint-initdb.d
-      restartPolicy: Always
       containers:
       - name: db
         image: ${IMAGE_REPO}${DB_IMAGE}

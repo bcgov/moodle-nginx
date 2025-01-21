@@ -17,9 +17,6 @@ if [ -f "$timestamp_file" ]; then
   fi
 fi
 
-# Update the timestamp file
-touch "$timestamp_file"
-
 echo "Replacing Moodle index with maintenance page..."
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 
@@ -68,6 +65,9 @@ echo "Copying files..."
 # Copy all files, including hidden ones, preserving directory structure
 # rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
 rsync -a --no-perms --no-owner --omit-dir-times --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ${src_dir}/ ${dest_dir}/
+
+# Update the timestamp file
+touch "$timestamp_file"
 
 echo "Setting permissions..."
 # Set permissions for moodle directory

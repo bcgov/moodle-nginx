@@ -81,7 +81,6 @@ objects:
                requests:
                  memory: '0'
                  cpu: '0'
-         restartPolicy: OnFailure
 parameters:
   - name: IMAGE_REPO
     required: true

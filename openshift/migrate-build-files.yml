@@ -67,7 +67,6 @@ objects:
                 echo "Migrating build files from /app/public to /var/www/html..."
                 sh /usr/local/bin/migrate-build-files.sh
              imagePullPolicy: Always
-         restartPolicy: Never
 parameters:
   - name: IMAGE_REPO
     required: true
