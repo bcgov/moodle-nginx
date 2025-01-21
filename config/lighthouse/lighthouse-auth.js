@@ -66,11 +66,24 @@ async function runLighthouse(url, options, config = null) {
 
   try {
     // Wait for the login button to be available
-    await page.waitForSelector('#loginbtn', { timeout: 10000 });
+    await page.waitForSelector('.loginform', { timeout: 10000 });
+
+    // Click the link to open the form
+    await page.click('.loginform details summary');
+
+    // Wait for the login button to be available and visible
+    await page.waitForSelector('#loginbtn', { visible: true, timeout: 10000 });
+
+    // Ensure the login button is visible and scroll it into view
+    await page.evaluate(() => {
+      const loginButton = document.querySelector('#loginbtn');
+      if (loginButton) {
+        loginButton.scrollIntoView();
+      }
+    });
 
     // Wait for both the click and navigation
     await Promise.all([
-      page.click('.loginform details summary'),
       page.click('#loginbtn'),
       page.waitForNavigation({ timeout: 60000 }),
     ]);
