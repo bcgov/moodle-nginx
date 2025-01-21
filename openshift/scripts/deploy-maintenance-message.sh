@@ -44,7 +44,6 @@ else
   sleep 10
 
   oc process -f ./openshift/maintenance.yml \
-    -p IMAGE_REPO=$IMAGE_REPO \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
     -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
