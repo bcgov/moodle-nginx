@@ -70,6 +70,7 @@ async function runLighthouse(url, options, config = null) {
 
     // Wait for both the click and navigation
     await Promise.all([
+      page.click('.loginform details summary'),
       page.click('#loginbtn'),
       page.waitForNavigation({ timeout: 60000 }),
     ]);

@@ -12,6 +12,8 @@ if [ -f "$timestamp_file" ]; then
   if [ $time_diff -lt rerun_block_seconds ]; then
     echo "The script has been run within the past hour. Skipping file maintenance andfd migration processes."
     exit 0
+  else
+    echo "The script has not been run within the past hour. Continuing with file maintenance and migration processes."
   fi
 fi
 
