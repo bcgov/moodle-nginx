@@ -133,7 +133,6 @@ jobs:
         env:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
-          IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
 
       - name: Create ConfigMap (moodle-env)
