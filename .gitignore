@@ -9,3 +9,5 @@ README.Moodle.DevOps.md
 var/*
 *.secrets
 !example.secrets
+node_modules
+package*.json

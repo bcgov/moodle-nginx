@@ -1,21 +1,22 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
 const options = {
-  chromeFlags: ['--headless'],
+  // chromeFlags: ['--headless'],
   output: 'json'
 };
-const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
+const site_url = 'moodle-e66ac2-dev.apps.silver.devops.gov.bc.ca'
+const testURL = 'https://' + site_url + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
   const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
   let errors = new Array();
   let warnings = new Array();
-  const { launch } = await import('chrome-launcher');
+  // const { launch } = await import('chrome-launcher');
 
   // Launch a new Chrome instance
-  const chrome = await launch({chromeFlags: ['--headless']});
-  options.port = chrome.port;
+  // const chrome = await launch({chromeFlags: ['--headless']});
+  // options.port = chrome.port;
 
   const sanitizeInput = (str) => {
     return str.replace(/[\n\r\t]/g, "");
@@ -28,12 +29,13 @@ async function runLighthouse(url, options, config = null) {
   // Use Puppeteer to launch a browser and perform the login
   const browser = await puppeteer.launch({
     executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', // Update this path if necessary
-    headless: true,
-    browserURL: `http://127.0.0.1:${chrome.port}`
+    headless: false,
+    browserURL: `http://127.0.0.1`
   });
   const page = await browser.newPage();
-  const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
-  const password = sanitizeInput(process.env.PASSWORD); // Use the MOODLE_TESTER_PASSWORD environment variable
+
+  const username = 'tool_generator_000001'; // Use the MOODLE_TESTER_USERNAME environment variable
+  const password = 'moodle-gen-PWd'; // Use the MOODLE_TESTER_PASSWORD environment variable
 
   // Import Lighthouse
   const lighthouse = (await import('lighthouse')).default;
@@ -42,7 +44,21 @@ async function runLighthouse(url, options, config = null) {
 
   await page.goto(url, { waitUntil: 'networkidle0' }); // Use the APP_HOST_URL environment variable
 
-  // Check that the username and password are set and are strings
+  // console.log('Current working directory:', process.cwd());
+  // Resule: /home/runner/work/moodle-nginx/moodle-nginx
+
+  await page.screenshot({path: 'before_login_1_open.png'}); // Take a screenshot before clicking the login button
+  const content = await page.content();
+  await fsp.writeFile('before_login.html', content);
+
+  try {
+    // Wait for the login button to be available
+    await page.waitForSelector('.loginform', { timeout: 10000 });
+
+    // Click the link to open the form
+    await page.click('.loginform>details summary');
+
+    // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
     throw new Error('MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
   }
@@ -61,20 +77,6 @@ async function runLighthouse(url, options, config = null) {
   }
   await page.type('#password', password);
 
-  // console.log('Current working directory:', process.cwd());
-  // Resule: /home/runner/work/moodle-nginx/moodle-nginx
-
-  await page.screenshot({path: 'before_login_1_open.png'}); // Take a screenshot before clicking the login button
-  const content = await page.content();
-  await fsp.writeFile('before_login.html', content);
-
-  try {
-    // Wait for the login button to be available
-    await page.waitForSelector('.loginform', { timeout: 10000 });
-
-    // Click the link to open the form
-    await page.click('.loginform>details summary');
-
     await page.screenshot({path: 'before_login_2_click.png'}); // Take a screenshot before clicking the login button
 
     // Wait for the login button to be available and visible
@@ -91,7 +93,7 @@ async function runLighthouse(url, options, config = null) {
     // Wait for both the click and navigation
     await Promise.all([
       page.click('#loginbtn'),
-      page.waitForNavigation({ timeout: 60000 }),
+      page.waitForNavigation({ timeout: 6000 }),
     ]);
   } catch (error) {
     console.error('Error: Login button not found or not clickable within 10 seconds.');
@@ -129,7 +131,7 @@ async function runLighthouse(url, options, config = null) {
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
 
-    const url = 'https://' + process.env.APP_HOST_URL + path;
+    const url = 'https://' + site_url + path;
     await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
     await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
@@ -180,7 +182,7 @@ async function runLighthouse(url, options, config = null) {
   }
 
   await browser.close();
-  await chrome.kill();
+  // await chrome.kill();
 
   // Write the results to a JSON file:
   fs.writeFileSync('lighthouse-results.json', JSON.stringify(results));
