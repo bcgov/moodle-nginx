@@ -27,7 +27,6 @@ async function runLighthouse(url, options, config = null) {
 
   // Use Puppeteer to launch a browser and perform the login
   const browser = await puppeteer.launch({
-    executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', // Update this path if necessary
     headless: true,
     browserURL: `http://127.0.0.1:${chrome.port}`
   });
