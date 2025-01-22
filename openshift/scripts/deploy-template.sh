@@ -177,6 +177,7 @@ if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
 else
   echo "deployment/$REDIS_PROXY_NAME job found... deleting..."
   oc delete deployment/$REDIS_PROXY_NAME
+  sleep 20
 fi
 oc process -f ./openshift/redis-proxy.yml \
   -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
