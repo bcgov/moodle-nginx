@@ -1,5 +1,13 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
+// Define the paths you want to navigate
+const paths = [
+  '/course/view.php?id=62',
+  '/mod/assign/view.php?id=3218',
+  '/mod/page/view.php?id=3224',
+  '/mod/forum/view.php?id=3215',
+  '/mod/forum/discuss.php?d=426'
+];
 const options = {
   chromeFlags: ['--headless'],
   output: 'json'
@@ -46,23 +54,6 @@ async function runLighthouse(url, options, config = null) {
     throw new Error('MOODLE_TESTER_USERNAME (' + username + ') and MOODLE_TESTER_PASSWORD must be set and must be strings');
   }
 
-  // Check if the username field exists
-  const usernameField = await page.$('#username');
-  if (!usernameField) {
-    throw new Error('No element found for selector: #username');
-  }
-  await usernameField.type(username);
-
-  // Check if the password field exists
-  const passwordField = await page.$('#password');
-  if (!passwordField) {
-    throw new Error('No element found for selector: #password');
-  }
-  await page.type('#password', password);
-
-  // console.log('Current working directory:', process.cwd());
-  // Resule: /home/runner/work/moodle-nginx/moodle-nginx
-
   await page.screenshot({path: 'before_login_1_open.png'}); // Take a screenshot before clicking the login button
   const content = await page.content();
   await fsp.writeFile('before_login.html', content);
@@ -87,6 +78,20 @@ async function runLighthouse(url, options, config = null) {
       }
     });
 
+    // Check if the username field exists
+    const usernameField = await page.$('#username');
+    if (!usernameField) {
+      throw new Error('No element found for selector: #username');
+    }
+    await usernameField.type(username);
+
+    // Check if the password field exists
+    const passwordField = await page.$('#password');
+    if (!passwordField) {
+      throw new Error('No element found for selector: #password');
+    }
+    await page.type('#password', password);
+
     // Wait for both the click and navigation
     await Promise.all([
       page.click('#loginbtn'),
@@ -110,15 +115,6 @@ async function runLighthouse(url, options, config = null) {
   }
 
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
-
-  // Define the paths you want to navigate
-  const paths = [
-    '/course/view.php?id=60',
-    '/mod/book/view.php?id=3078',
-    '/mod/page/view.php?id=3079',
-    '/course/view.php?id=60&section=2#module-3080',
-    '/mod/url/view.php?id=3143'
-  ];
 
   const pathCount = paths.length;
   let pathsPassed = 0;
