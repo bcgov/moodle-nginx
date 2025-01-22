@@ -1,13 +1,6 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
-// Define the paths you want to navigate
-const paths = [
-  '/course/view.php?id=62',
-  '/mod/assign/view.php?id=3218',
-  '/mod/page/view.php?id=3224',
-  '/mod/forum/view.php?id=3215',
-  '/mod/forum/discuss.php?d=426'
-];
+
 const options = {
   chromeFlags: ['--headless'],
   output: 'json'
@@ -15,6 +8,14 @@ const options = {
 const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
+  // Define the paths you want to navigate
+  const paths = [
+    '/course/view.php?id=62',
+    '/mod/assign/view.php?id=3218',
+    '/mod/page/view.php?id=3224',
+    '/mod/forum/view.php?id=3215',
+    '/mod/forum/discuss.php?d=426'
+  ];
   // Import chrome-launcher
   const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
   let errors = new Array();
@@ -39,7 +40,7 @@ async function runLighthouse(url, options, config = null) {
     browserURL: `http://127.0.0.1:${chrome.port}`
   });
   const page = await browser.newPage();
-  const username = process.env.USERNAME; // Use the MOODLE_TESTER_USERNAME environment variable
+  const username = sanitizeInput(process.env.USERNAME); // Use the MOODLE_TESTER_USERNAME environment variable
   const password = sanitizeInput(process.env.PASSWORD); // Use the MOODLE_TESTER_PASSWORD environment variable
 
   // Import Lighthouse
@@ -123,7 +124,6 @@ async function runLighthouse(url, options, config = null) {
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
-
     const url = 'https://' + process.env.APP_HOST_URL + path;
     await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
