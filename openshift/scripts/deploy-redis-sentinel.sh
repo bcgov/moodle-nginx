@@ -78,6 +78,24 @@ rm values.yaml
 
 echo "Helm updates completed for $REDIS_NAME."
 
+sleep 10
+
+echo "Deploying $REDIS_PROXY_NAME..."
+if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "deployment/$REDIS_PROXY_NAME job NOT FOUND..."
+else
+  # If the proxy exists, delete it
+  echo "deployment/$REDIS_PROXY_NAME job found... deleting..."
+  oc delete deployment/$REDIS_PROXY_NAME
+  sleep 20
+fi
+
+# Deploy the Redis proxy
+oc process -f ./openshift/redis-proxy.yml \
+  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
+  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
+  | oc create -f -
+
 # Set best-effort resource limits for the deployment
 # echo "Setting best-effort resource limits for the deployment..."
 # oc set resources sts/$REDIS_STS_NAME --limits=cpu=0,memory=0 --requests=cpu=0,memory=0

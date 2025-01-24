@@ -520,13 +520,17 @@ mariadbConfiguration: |-
   innodb_doublewrite=1
   innodb_flush_method=O_DIRECT
   innodb_log_files_in_group=2
-  innodb_log_file_size=128M
-  innodb_flush_log_at_trx_commit=1
   innodb_file_per_table=1
   # 80% Memory is default reco.
   # Need to re-evaluate when DB size grows
-  innodb_buffer_pool_size=2G
+  innodb_buffer_pool_size=20G
+  innodb_buffer_pool_instances=8
+  innodb_read_io_threads=8
+  innodb_write_io_threads=4
+  innodb_log_buffer_size=256M
+  innodb_log_file_size=1G
   innodb_file_format=Barracuda
+  thread_handling=pool-of-threads
 
   ## Logging
   ##
@@ -556,6 +560,8 @@ mariadbConfiguration: |-
 
   [mariadb]
   plugin_load_add=auth_pam
+  extra_port = 8385
+  extra_max_connections = 10
 
   ## Data-at-Rest Encryption
   ## Use extraVolumes and extraVolumeMounts to mount /encryption filesystem
@@ -720,7 +726,7 @@ persistence:
     - ReadWriteOnce
   ## @param persistence.size Persistent Volume Size
   ##
-  size: 8Gi
+  size: 10Gi
 ## @param priorityClassName Priority Class Name for Statefulset
 ##
 priorityClassName: ""

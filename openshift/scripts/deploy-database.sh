@@ -20,10 +20,6 @@ else
   echo "Recreating $DB_DEPLOYMENT_NAME from image: $IMAGE_REPO$DB_IMAGE"
 
   # Delete resources
-  # First schedule PVC volumes for deletion (second and third of three - leave #1/0 for data replication)
-  # data-mariadb-galera-0 (delete: data-mariadb-galera-1, data-mariadb-galera-2)
-  oc delete pvc/data-$DB_DEPLOYMENT_NAME-1 -n $DEPLOY_NAMESPACE
-  oc delete pvc/data-$DB_DEPLOYMENT_NAME-2 -n $DEPLOY_NAMESPACE
   # Then delete the StatefulSet, ConfigMap, and Service
   oc delete sts $DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE
   oc delete configmap $DB_DEPLOYMENT_NAME-config -n $DEPLOY_NAMESPACE

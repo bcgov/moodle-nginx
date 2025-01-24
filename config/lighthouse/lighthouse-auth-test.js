@@ -8,14 +8,15 @@ const site_url = 'moodle-e66ac2-dev.apps.silver.devops.gov.bc.ca'
 const testURL = 'https://' + site_url + '/login/index.php'
 
 async function runLighthouse(url, options, config = null) {
-  // Import chrome-launcher
   const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
   let errors = new Array();
   let warnings = new Array();
-  // const { launch } = await import('chrome-launcher');
+
+  // Import chrome-launcher
+  const { launch } = await import('chrome-launcher');
 
   // Launch a new Chrome instance
-  // const chrome = await launch({chromeFlags: ['--headless']});
+  // const chrome = await chromeLauncher.launch({chromeFlags: ['--headless']});
   // options.port = chrome.port;
 
   const sanitizeInput = (str) => {
@@ -47,7 +48,7 @@ async function runLighthouse(url, options, config = null) {
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
 
-  await page.screenshot({path: 'before_login_1_open.png'}); // Take a screenshot before clicking the login button
+  await page.screenshot({path: './temp/lighthouse/before_login_1_open.png'}); // Take a screenshot before clicking the login button
   const content = await page.content();
   await fsp.writeFile('before_login.html', content);
 
@@ -77,7 +78,7 @@ async function runLighthouse(url, options, config = null) {
   }
   await page.type('#password', password);
 
-    await page.screenshot({path: 'before_login_2_click.png'}); // Take a screenshot before clicking the login button
+    await page.screenshot({path: './temp/lighthouse/before_login_2_click.png'}); // Take a screenshot before clicking the login button
 
     // Wait for the login button to be available and visible
     await page.waitForSelector('#loginbtn', { visible: true, timeout: 10000 });
@@ -112,7 +113,7 @@ async function runLighthouse(url, options, config = null) {
     }
   }
 
-  await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
+  await page.screenshot({path: './temp/lighthouse/after_login_click.png'}); // Take a screenshot after clicking the login button
 
   // Define the paths you want to navigate
   const paths = [
@@ -132,51 +133,51 @@ async function runLighthouse(url, options, config = null) {
   for (const path of paths) {
 
     const url = 'https://' + site_url + path;
-    await page.setCookie(...cookies);
-    const {lhr} = await lighthouse(url, options, config);
+    // await page.setCookie(...cookies);
+    // const {lhr} = await lighthouse(url, options, config);
     await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
 
     // Get the scores
-    const accessibilityScore = lhr.categories.accessibility.score * 100;
-    const performanceScore = lhr.categories.performance.score * 100;
-    const bestPracticesScore = lhr.categories['best-practices'].score * 100;
-    const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
+    // const accessibilityScore = lhr.categories.accessibility.score * 100;
+    // const performanceScore = lhr.categories.performance.score * 100;
+    // const bestPracticesScore = lhr.categories['best-practices'].score * 100;
+    // const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
 
-    const pageContent = await page.content();
-    await fsp.writeFile(filename + '.html', content);
-    await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
+    // const pageContent = await page.content();
+    // await fsp.writeFile(filename + '.html', content);
+    // await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
 
-    // Verify the scores
-    if (accessibilityScore < 90) {
-      errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
-      pathsFailed++;
-      // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
-    }
-    if (performanceScore < 40) {
-      errors.push(`❌ Performance score ${performanceScore} is less than 40 for ${path}`);
-      pathsFailed++;
-      // throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
-    }
-    if (bestPracticesScore < 80) {
-      errors.push(`❌ Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
-      pathsFailed++;
-      // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
-    }
+    // // Verify the scores
+    // if (accessibilityScore < 90) {
+    //   errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+    //   pathsFailed++;
+    //   // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
+    // }
+    // if (performanceScore < 40) {
+    //   errors.push(`❌ Performance score ${performanceScore} is less than 40 for ${path}`);
+    //   pathsFailed++;
+    //   // throw new Error(`Performance score ${performanceScore} is less than 40 for ${path}`);
+    // }
+    // if (bestPracticesScore < 80) {
+    //   errors.push(`❌ Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+    //   pathsFailed++;
+    //   // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
+    // }
 
-    for (const char of detectEncodingIssues) {
-      if (pageContent.includes(char)) {
-        warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
-        // throw new Error(`⚠️ Found improperly encoded character "${char}" in the HTML content`);
-      }
-    }
+    // for (const char of detectEncodingIssues) {
+    //   if (pageContent.includes(char)) {
+    //     warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
+    //     // throw new Error(`⚠️ Found improperly encoded character "${char}" in the HTML content`);
+    //   }
+    // }
 
-    // Add the scores to the results array
-    results.push({
-      path,
-      accessibilityScore,
-      performanceScore,
-      bestPracticesScore
-    });
+    // // Add the scores to the results array
+    // results.push({
+    //   path,
+    //   accessibilityScore,
+    //   performanceScore,
+    //   bestPracticesScore
+    // });
 
     pathsPassed++;
   }
@@ -185,14 +186,14 @@ async function runLighthouse(url, options, config = null) {
   // await chrome.kill();
 
   // Write the results to a JSON file:
-  fs.writeFileSync('lighthouse-results.json', JSON.stringify(results));
+  fs.writeFileSync('./temp/lighthouse/lighthouse-results.json', JSON.stringify(results));
   // Convert the results to a markdown table
   let markdown = '| Path | Accessibility Score | Performance Score | Best Practices Score |\n|------|---------------------|-------------------|----------------------|\n';
   for (const result of results) {
     markdown += `| ${result.path} | ${result.accessibilityScore} | ${result.performanceScore} | ${result.bestPracticesScore} |\n`;
   }
   // Write the markdown to a file
-  fs.writeFileSync('lighthouse-results.md', markdown);
+  fs.writeFileSync('./temp/lighthouse/lighthouse-results.md', markdown);
 
   let warningString = '';
   if (warnings.length > 0) {

@@ -2,7 +2,10 @@
 	"Sentinels_addresses_list":[
 		"redis-node-0.redis-headless.e66ac2-dev.svc.cluster.local:26379",
 		"redis-node-1.redis-headless.e66ac2-dev.svc.cluster.local:26379",
-		"redis-node-2.redis-headless.e66ac2-dev.svc.cluster.local:26379"
+		"redis-node-2.redis-headless.e66ac2-dev.svc.cluster.local:26379",
+		"redis-node-3.redis-headless.e66ac2-dev.svc.cluster.local:26379",
+		"redis-node-4.redis-headless.e66ac2-dev.svc.cluster.local:26379",
+		"redis-node-5.redis-headless.e66ac2-dev.svc.cluster.local:26379"
 	],
 	"Databases":[
 		{

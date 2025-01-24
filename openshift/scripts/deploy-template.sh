@@ -119,6 +119,7 @@ oc apply -f -
 echo "Redirecting traffic to maintenance-message..."
 oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
 
+# Wait for redirect to take effect
 sleep 60
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
@@ -167,22 +168,6 @@ sleep 10
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
-
-sleep 10
-
-echo "Deploying $REDIS_PROXY_NAME..."
-# Check if the proxy exists, if so, delete it
-if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "deployment/$REDIS_PROXY_NAME job NOT FOUND..."
-else
-  echo "deployment/$REDIS_PROXY_NAME job found... deleting..."
-  oc delete deployment/$REDIS_PROXY_NAME
-  sleep 20
-fi
-oc process -f ./openshift/redis-proxy.yml \
-  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
-  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
-  | oc create -f -
 
 sleep 10
 

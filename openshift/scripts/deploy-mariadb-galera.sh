@@ -6,12 +6,18 @@ PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
 
 # Check if the Helm deployment exists
 if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
-  echo "$DB_DEPLOYMENT_NAME Installation found...Skipping..."
+  echo "$DB_DEPLOYMENT_NAME installation found"
+
+  # Scale the StatefulSet to 0
+  echo "Scaling $DB_DEPLOYMENT_NAME to 0..."
   oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
+
+  # Wait for the StatefulSet to scale to 0
   ATTEMPTS=0
   MAX_ATTEMPTS=120
   while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
-    echo "Waiting for $DB_DEPLOYMENT_NAME to scale to 0..."
+    WAITED=$((ATTEMPTS * 10))
+    echo "Waiting... $WAITED seconds"
     sleep 10
     ATTEMPTS=$((ATTEMPTS + 1))
   done
@@ -20,7 +26,15 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     exit 1
   fi
 
-  # helm uninstall $DB_DEPLOYMENT_NAME
+  # Delete resources
+  # First schedule PVC volumes for deletion (second and third of three - leave first [#0] for data replication)
+  # data-mariadb-galera-0 (delete: data-mariadb-galera-1, data-mariadb-galera-2)
+  echo "Deleting replica PVCs..."
+  PVC_ARRAY=("pvc/data-$DB_DEPLOYMENT_NAME-1" "pvc/data-$DB_DEPLOYMENT_NAME-2")
+  for PVC in "${PVC_ARRAY[@]}"; do
+    oc delete $PVC
+  done
+
   echo "Upgrading $DB_DEPLOYMENT_NAME..."
 
   # Capture the output of the helm upgrade command into a variable
@@ -62,6 +76,7 @@ else
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.tag=10.6 \
+    --set image.pullPolicy=Always \
     --set podManagementPolicy=Parallel \
     --set galera.bootstrap.forceSafeToBootstrap=true \
     --set galera.bootstrap.forceBootstrap=true \
