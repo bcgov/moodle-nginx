@@ -29,10 +29,17 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Delete resources
   # First schedule PVC volumes for deletion (second and third of three - leave first [#0] for data replication)
   # data-mariadb-galera-0 (delete: data-mariadb-galera-1, data-mariadb-galera-2)
-  echo "Deleting replica PVCs..."
-  PVC_ARRAY=("pvc/data-$DB_DEPLOYMENT_NAME-1" "pvc/data-$DB_DEPLOYMENT_NAME-2")
-  for PVC in "${PVC_ARRAY[@]}"; do
-    oc delete $PVC
+  echo "Deleting $DB_DEPLOYMENT_NAME replica PVCs..."
+
+  # Gather related PVC names from OpenShift
+  PVC_LIST=$(oc get pvc -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep "data-$DB_DEPLOYMENT_NAME-")
+
+  # Loop through the PVCs and delete all except the primary (#0)
+  for PVC in $PVC_LIST; do
+    if [[ $PVC =~ ^data-$DB_DEPLOYMENT_NAME-[1-9][0-9]*$ ]]; then
+      echo "Deleting PVC: $PVC"
+      oc delete pvc $PVC
+    fi
   done
 
   echo "Upgrading $DB_DEPLOYMENT_NAME..."

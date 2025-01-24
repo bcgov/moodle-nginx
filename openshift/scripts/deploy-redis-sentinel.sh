@@ -85,6 +85,11 @@ if [[ ! `oc describe configmap $REDIS_PROXY_NAME-config 2>&1` =~ "NotFound" ]]; 
   oc delete configmap $REDIS_PROXY_NAME-config
 fi
 
+if [[ ! `oc describe svc $REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "Service exists... Deleting: $REDIS_PROXY_NAME"
+  oc delete svc $REDIS_PROXY_NAME
+fi
+
 sleep 10
 
 echo "Creating configMap: $REDIS_PROXY_NAME-config"
@@ -94,10 +99,10 @@ sleep 10
 
 echo "Deploying $REDIS_PROXY_NAME..."
 if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "deployment/$REDIS_PROXY_NAME job NOT FOUND..."
+  echo "deployment/$REDIS_PROXY_NAME NOT FOUND..."
 else
   # If the proxy exists, delete it
-  echo "deployment/$REDIS_PROXY_NAME job found... deleting..."
+  echo "deployment/$REDIS_PROXY_NAME found... deleting..."
   oc delete deployment/$REDIS_PROXY_NAME
   sleep 20
 fi
