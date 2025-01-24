@@ -80,6 +80,18 @@ echo "Helm updates completed for $REDIS_NAME."
 
 sleep 10
 
+if [[ ! `oc describe configmap $REDIS_PROXY_NAME-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $REDIS_PROXY_NAME-config"
+  oc delete configmap $REDIS_PROXY_NAME-config
+fi
+
+sleep 10
+
+echo "Creating configMap: $REDIS_PROXY_NAME-config"
+oc create configmap $REDIS_PROXY_NAME-config --from-file=config.json=./config/redis/sentinel_tunnel.remote.config.json
+
+sleep 10
+
 echo "Deploying $REDIS_PROXY_NAME..."
 if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
   echo "deployment/$REDIS_PROXY_NAME job NOT FOUND..."

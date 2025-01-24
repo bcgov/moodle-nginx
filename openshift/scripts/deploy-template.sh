@@ -67,18 +67,6 @@ oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPL
 
 sleep 10
 
-if [[ ! `oc describe configmap $REDIS_PROXY_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $REDIS_PROXY_NAME-config"
-  oc delete configmap $REDIS_PROXY_NAME-config
-fi
-
-sleep 10
-
-echo "Creating configMap: $REDIS_PROXY_NAME-config"
-oc create configmap $REDIS_PROXY_NAME-config --from-file=config.json=./config/redis/sentinel_tunnel.remote.config.json
-
-sleep 10
-
 echo "Checking for: deployment/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
 
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then

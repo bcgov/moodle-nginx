@@ -181,6 +181,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           REDIS_NAME: ${{ inputs.REDIS_NAME }}
           REDIS_PROXY_NAME: ${{ inputs.REDIS_PROXY_NAME }}
+          REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.DEPLOY_NAMESPACE }}
           SECRET_REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REDIS_REPLICAS: ${{ inputs.REDIS_REPLICAS }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
@@ -203,7 +204,6 @@ jobs:
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
           REDIS_PROXY_NAME: ${{ inputs.REDIS_PROXY_NAME }}
-          REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.DEPLOY_NAMESPACE }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           CRON_NAME: ${{ inputs.CRON_NAME }}
