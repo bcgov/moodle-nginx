@@ -174,7 +174,7 @@ fi
 
 sleep 10
 
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=5
 
 sleep 15
 

@@ -66,8 +66,6 @@ async function runLighthouse(url, options, config = null) {
     // Click the link to open the form
     await page.click('.loginform>details summary');
 
-    await page.screenshot({path: 'before_login_2_click.png'}); // Take a screenshot before clicking the login button
-
     // Wait for the login button to be available and visible
     await page.waitForSelector('#loginbtn', { visible: true, timeout: 10000 });
 
@@ -84,6 +82,7 @@ async function runLighthouse(url, options, config = null) {
     if (!usernameField) {
       throw new Error('No element found for selector: #username');
     }
+    // Enter the username
     await usernameField.type(username);
 
     // Check if the password field exists
@@ -91,7 +90,10 @@ async function runLighthouse(url, options, config = null) {
     if (!passwordField) {
       throw new Error('No element found for selector: #password');
     }
+    // Enter the password
     await page.type('#password', password);
+
+    await page.screenshot({path: 'before_login_2_click.png'}); // Take a screenshot before clicking the login button
 
     // Wait for both the click and navigation
     await Promise.all([
@@ -105,7 +107,7 @@ async function runLighthouse(url, options, config = null) {
     process.exit(1); // Fail the test
   }
 
-  const cookies = await page.cookies();
+  // const cookies = await page.cookies();
   // console.log('cookies: ', JSON.stringify(cookies));
 
   for (const char of detectEncodingIssues) {
@@ -125,7 +127,7 @@ async function runLighthouse(url, options, config = null) {
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
-    await page.setCookie(...cookies);
+    // await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
     await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
 
