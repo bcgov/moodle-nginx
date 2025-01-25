@@ -262,12 +262,6 @@ echo "Running Moodle upgrades..."
 moodle_upgrade_result=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
 echo "Result: $moodle_upgrade_result"
 
-sleep 10
-
-# DB was scaled-down for deployment and maintenance, scale it back up
-echo "Scaling up $DB_DEPLOYMENT_NAME to 3 replicas..."
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=3
-
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
 

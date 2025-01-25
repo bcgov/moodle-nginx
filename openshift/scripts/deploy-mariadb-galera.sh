@@ -1,5 +1,8 @@
 # Deploy MariaDB Galera to OpenShift
 
+# Set the number of replicas for the MariaDB Galera deployment
+DB_REPLICAS=5
+
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
@@ -93,9 +96,9 @@ else
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
-    --set replicaCount=3 \
+    --set replicaCount=$DB_REPLICAS \
     --set persistence.size=5Gi \
-    --set resources.requests.cpu=10m \
+    --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=500m \
     --set resources.limits.memory=2500Mi \
@@ -174,7 +177,7 @@ fi
 
 sleep 10
 
-DB_REPLICAS=5
+echo "Scaling $DB_DEPLOYMENT_NAME to $DB_REPLICAS replicas..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
 
 sleep 15
