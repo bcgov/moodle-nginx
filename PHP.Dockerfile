@@ -76,18 +76,9 @@ RUN dos2unix /usr/local/bin/migrate-build-files.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 RUN dos2unix /usr/local/bin/test-migration-complete.sh
 
-# SETUP PHP-FPM CONFIG SETTINGS (max_children / max_requests)
-RUN echo 'pm.max_children = 200' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.max_requests = 10000' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.process_idle_timeout = 15s' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.start_servers = 25' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.min_spare_servers = 25' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.max_spare_servers = 50' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.status_path = /status' >> $PHP_FPM_CONF_FILE && \
-    echo 'pm.max_spare_servers = 50' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_flag[display_errors] = on' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_value[memory_limit] = 1024M' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_value[max_execution_time] = 600' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_value[max_input_time] = 600' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_value[upload_max_filesize] = 512M' >> $PHP_FPM_CONF_FILE && \
-    echo 'php_value[post_max_size] = 512M' >> $PHP_FPM_CONF_FILE
+# Copy the custom PHP-FPM configuration file into the Docker image
+COPY ./config/php/php-fpm.conf /tmp/php-fpm.conf
+# Append the contents of the custom configuration file to the PHP-FPM configuration file
+RUN cat /tmp/php-fpm.conf >> $PHP_FPM_CONF_FILE
+# Clean up the temporary configuration file
+RUN rm /tmp/php-fpm.conf
