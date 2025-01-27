@@ -77,6 +77,10 @@ else
   # oc rollout latest deployment/$WEB_DEPLOYMENT_NAME
 fi
 
+# Only use 1 redis replica for deployment / upgrade to avoid conflicts
+echo "Scale down $PHP_DEPLOYMENT_NAME to 0 replicas..."
+oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=0
+
 sleep 30
 
 echo "Deploy Template to OpenShift ..."
