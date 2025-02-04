@@ -218,8 +218,8 @@
             "updatePeriodSeconds": 1,
             "intervalSeconds": 1,
             "timeoutSeconds": 600,
-            "maxUnavailable": "25%",
-            "maxSurge": "25%"
+            "maxUnavailable": "1",
+            "maxSurge": "3"
           }
         },
         "template": {
@@ -298,6 +298,10 @@
                   "requests": {
                     "memory": "${PHP_MEMORY_REQUEST}",
                     "cpu": "${PHP_CPU_REQUEST}"
+                  },
+                  "limits": {
+                    "memory": "${PHP_MEMORY_LIMIT}",
+                    "cpu": "${PHP_CPU_LIMIT}"
                   }
                 },
                 "env": [
@@ -663,8 +667,8 @@
             "updatePeriodSeconds": 1,
             "intervalSeconds": 1,
             "timeoutSeconds": 600,
-            "maxUnavailable": "33%",
-            "maxSurge": "33%"
+            "maxUnavailable": "1",
+            "maxSurge": "3"
           }
         },
         "template": {
@@ -725,6 +729,10 @@
                   "requests": {
                     "memory": "${CRON_MEMORY_REQUEST}",
                     "cpu": "${WEB_CPU_REQUEST}"
+                  },
+                  "limits": {
+                    "memory": "${WEB_MEMORY_LIMIT}",
+                    "cpu": "${WEB_CPU_LIMIT}"
                   }
                 }
               }
@@ -873,28 +881,40 @@
       "value": "50m"
     },
     {
+      "description": "Requested amount of memory for the PHP container.",
+      "displayName": "PHP Request Limit",
+      "name": "PHP_MEMORY_LIMIT",
+      "value": ""
+    },
+    {
+      "description": "Requested CPU for the PHP container.",
+      "displayName": "PHP Limit CPU",
+      "name": "PHP_CPU_LIMIT",
+      "value": "800m"
+    },
+    {
       "description": "Requested amount of memory for the CRON container.",
       "displayName": "CRON Memory Request",
       "name": "CRON_MEMORY_REQUEST",
       "value": "50Mi"
     },
     {
-      "description": "Maximum amount of memory the CRON container can use.",
-      "displayName": "CRON Memory Limit",
+      "description": "Maximum amount of memory the Web container can use.",
+      "displayName": "Web Memory Limit",
       "name": "WEB_MEMORY_LIMIT",
-      "value": "128Mi"
+      "value": ""
     },
     {
       "description": "Requested amount of CPU for the CRON container.",
       "displayName": "CRON CPU Request",
       "name": "WEB_CPU_REQUEST",
-      "value": "30m"
+      "value": "2m"
     },
     {
-      "description": "Maximum amount of CPU the CRON container can use.",
-      "displayName": "CRON CPU Limit",
-      "name": "CRON_CPU_LIMIT",
-      "value": "150m"
+      "description": "Maximum amount of CPU the WEB container can use.",
+      "displayName": "WEB CPU Limit",
+      "name": "WEB_CPU_LIMIT",
+      "value": "5m"
     },
     {
       "description": "Database password.",
