@@ -218,8 +218,8 @@
             "updatePeriodSeconds": 1,
             "intervalSeconds": 1,
             "timeoutSeconds": 600,
-            "maxUnavailable": "1",
-            "maxSurge": "3"
+            "maxUnavailable": 1,
+            "maxSurge": 3
           }
         },
         "template": {
@@ -667,8 +667,8 @@
             "updatePeriodSeconds": 1,
             "intervalSeconds": 1,
             "timeoutSeconds": 600,
-            "maxUnavailable": "1",
-            "maxSurge": "3"
+            "maxUnavailable": 1,
+            "maxSurge": 3
           }
         },
         "template": {

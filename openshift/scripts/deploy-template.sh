@@ -31,8 +31,9 @@ fi
 # oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
-echo "Scale down $REDIS_NAME to 1 replica..."
-oc scale sts/$REDIS_NAME --replicas=1
+# REDIS_EXTENDED_NAME=$REDIS_NAME-node
+# echo "Scale down $REDIS_EXTENDED_NAME to 1 replica..."
+# oc scale sts/$REDIS_EXTENDED_NAME --replicas=1
 
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
@@ -278,9 +279,9 @@ echo "Result: $plugin_purge"
 
 sleep 10
 
-echo "Running Moodle upgrades..."
-moodle_upgrade_result=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
-echo "Result: $moodle_upgrade_result"
+# echo "Running Moodle upgrades..."
+# moodle_upgrade_result=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
+# echo "Result: $moodle_upgrade_result"
 
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
