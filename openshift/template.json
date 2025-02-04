@@ -84,6 +84,24 @@
       }
     },
     {
+      "kind": "PersistentVolumeClaim",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "file-temp-localcache"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "netapp-file-standard"
+      }
+    },
+    {
       "apiVersion": "v1",
       "kind": "Service",
       "metadata": {
@@ -106,6 +124,24 @@
       "kind": "Service",
       "metadata": {
         "name": "${PHP_DEPLOYMENT_NAME}"
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "${PHP_DEPLOYMENT_NAME}",
+            "port": 9000
+          }
+        ],
+        "selector": {
+          "deployment": "${PHP_DEPLOYMENT_NAME}"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "${PHP_DEPLOYMENT_NAME}-backup"
       },
       "spec": {
         "ports": [
@@ -198,11 +234,23 @@
                 "name": "artifactory-m950-learning"
               }
             ],
+            "terminationGracePeriodSeconds": 60,
             "containers": [
               {
                 "image": "${IMAGE_REPO}${PHP_DEPLOYMENT_NAME}:${DEPLOY_NAMESPACE}",
                 "name": "${PHP_DEPLOYMENT_NAME}",
                 "imagePullPolicy": "Always",
+                "lifecycle": {
+                  "preStop": {
+                    "exec": {
+                      "command": [
+                        "/bin/sh",
+                        "-c",
+                        "kill -SIGQUIT 1"
+                      ]
+                    }
+                  }
+                },
                 "ports": [
                   {
                     "containerPort": 9000
@@ -213,6 +261,11 @@
                     "name": "${APP_NAME}-config",
                     "mountPath": "/var/www/html/config.php",
                     "subPath": "config.php"
+                  },
+                  {
+                    "name": "${PHP_DEPLOYMENT_NAME}-fpm-config",
+                    "mountPath": "/usr/local/etc/php-fpm.d/zz-docker.conf",
+                    "subPath": "zz-docker.conf"
                   },
                   {
                     "name": "redis-stats",
@@ -230,6 +283,10 @@
                   {
                     "mountPath": "/tmp/file-backups",
                     "name": "file-backup-data"
+                  },
+                  {
+                    "mountPath": "/tmp/localcache",
+                    "name": "file-temp-localcache"
                   },
                   {
                     "name": "${APP_NAME}-env",
@@ -304,6 +361,19 @@
                     {
                       "key": "config.php",
                       "path": "config.php"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "${PHP_DEPLOYMENT_NAME}-fpm-config",
+                "configMap": {
+                  "name": "${PHP_DEPLOYMENT_NAME}-fpm-config",
+                  "defaultMode": 420,
+                  "items": [
+                    {
+                      "key": "zz-docker.conf",
+                      "path": "zz-docker.conf"
                     }
                   ]
                 }
@@ -423,6 +493,10 @@
                   {
                     "mountPath": "/tmp/file-backups",
                     "name": "file-backup-data"
+                  },
+                  {
+                    "mountPath": "/tmp/localcache",
+                    "name": "file-temp-localcache"
                   },
                   {
                     "name": "${APP_NAME}-env",
@@ -584,7 +658,14 @@
           }
         },
         "strategy": {
-          "type": "Recreate"
+          "type": "RollingUpdate",
+          "rollingParams": {
+            "updatePeriodSeconds": 1,
+            "intervalSeconds": 1,
+            "timeoutSeconds": 600,
+            "maxUnavailable": "33%",
+            "maxSurge": "33%"
+          }
         },
         "template": {
           "metadata": {
@@ -598,11 +679,23 @@
                 "name": "artifactory-m950-learning"
               }
             ],
+            "terminationGracePeriodSeconds": 60,
             "containers": [
               {
                 "image": "${WEB_IMAGE}",
                 "name": "${WEB_DEPLOYMENT_NAME}",
                 "imagePullPolicy": "Always",
+                "lifecycle": {
+                  "preStop": {
+                    "exec": {
+                      "command": [
+                        "/bin/sh",
+                        "-c",
+                        "sleep 10 && /usr/sbin/nginx -s quit"
+                      ]
+                    }
+                  }
+                },
                 "ports": [
                   {
                     "containerPort": 8080

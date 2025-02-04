@@ -25,9 +25,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     libonig-dev \
-    rsync \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+    rsync
+
+RUN apt-get upgrade -y
+RUN apt-get autoremove -y
+RUN apt-get clean
+RUN rm -rf /var/lib/apt/lists/*
 
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
@@ -77,8 +80,8 @@ COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migratio
 RUN dos2unix /usr/local/bin/test-migration-complete.sh
 
 # Copy the custom PHP-FPM configuration file into the Docker image
-COPY ./config/php/php-fpm.conf /tmp/php-fpm.conf
+# COPY ./config/php/php-fpm.conf /tmp/php-fpm.conf
 # Append the contents of the custom configuration file to the PHP-FPM configuration file
-RUN cat /tmp/php-fpm.conf >> $PHP_FPM_CONF_FILE
+# RUN cat /tmp/php-fpm.conf >> $PHP_FPM_CONF_FILE
 # Clean up the temporary configuration file
-RUN rm /tmp/php-fpm.conf
+# RUN rm /tmp/php-fpm.conf

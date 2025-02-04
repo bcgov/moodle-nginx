@@ -7,6 +7,9 @@ unset($CFG);
 global $CFG;
 $CFG = new stdClass();
 
+// Do not do this unless you understand all the consequences.
+$CFG->disablelogintoken = true;
+
 $CFG->dbtype    = 'mariadb';
 $CFG->dblibrary = 'native';
 $CFG->dbhost    = $_SERVER['DB_HOST'];
@@ -31,7 +34,8 @@ $CFG->session_redis_serializer_use_igbinary = true;
 // localcachedir should be on LOCAL fast storage
 $CFG->localcachedir = '/tmp/localcache';
 // localrequestdir should be on LOCAL fast storage
-$CFG->localrequestdir = '/tmp';
+$CFG->localrequestdir = '/tmp/requests';
+$CFG->backuptempdir = '/var/www/moodledata/temp/backup';
 // cachedir should be on SHARED storage
 $CFG->cachedir = '/var/www/moodledata/cache';
 // tempdir should be on SHARED storage

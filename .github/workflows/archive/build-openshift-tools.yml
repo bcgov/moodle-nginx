@@ -73,7 +73,7 @@ jobs:
       # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
       - name: 🔑 Log in to OpenShift
         run: |
-          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
+          oc login --token=${{ secrets.SA_TOKEN }} --server=${{ env.OPENSHIFT_SERVER }}
 
       # Get Environment Variables from file
       - name: 📋 Setup Environment from File

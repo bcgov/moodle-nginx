@@ -60,10 +60,26 @@ if [[ ! `oc describe configmap $CRON_NAME-config 2>&1` =~ "NotFound" ]]; then
   oc delete configmap $CRON_NAME-config
 fi
 
+if [[ ! `oc describe configmap $PHP_DEPLOYMENT_NAME-fpm-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $PHP_DEPLOYMENT_NAME-fpm-config"
+  oc delete configmap $PHP_DEPLOYMENT_NAME-fpm-config
+fi
+
+sleep 10
+
+echo "Creating configMap: $PHP_DEPLOYMENT_NAME-fpm-config"
+oc create configmap $PHP_DEPLOYMENT_NAME-fpm-config --from-file=zz-docker.conf=./config/php/php-fpm.conf
+
 sleep 10
 
 echo "Creating configMap: $CRON_NAME-config"
 oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
+
+echo "Creating configMap: check-pod-logs-script"
+oc create configmap check-pod-logs-script --from-file=check-pod-logs.sh=../openshift/scripts/check-pod-logs.sh
+oc process -f ./openshift/cron-check-errors.yml \
+  -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
+  | oc create -f -
 
 sleep 10
 
