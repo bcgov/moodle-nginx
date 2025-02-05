@@ -32,7 +32,7 @@ sentinel:
   enabled: true
   persistence:
     enabled: true
-    size: 1Mi
+    size: 10Mi
 auth:
   enabled: false
   sentinel: false
