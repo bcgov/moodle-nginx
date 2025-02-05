@@ -1,18 +1,80 @@
 global:
   redis:
     password: ""
-replica:
-  replicaCount: 3
-  persistence:
+usePassword: false
+persistence:
     enabled: true
     size: 100Mi
+persistentVolumeClaimRetentionPolicy:
+  enabled: true
+  whenScaled: Delete
+  whenDeleted: Delete
+diagnosticMode:
+  enabled: false
+  command:
+    - sleep
+  args:
+    - infinity
+master:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 10m
+    limits:
+      cpu: 80m
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 5
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 1
+    successThreshold: 1
+    failureThreshold: 5
+cluster:
+  nodes: 6
+  replicas: 1
+redis:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 10m
+    limits:
+      cpu: 80m
+updateJob:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 5m
+    limits:
+      cpu: 10m
+replica:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 60
 sentinel:
   enabled: true
-  persistence:
-    enabled: true
-    size: 20Mi
+  automateClusterRecovery: true
 auth:
   enabled: false
   sentinel: false
   password: ""
   usePasswordFileFromSecret: false
+image:
+  pullPolicy: Always
+  debug: true
