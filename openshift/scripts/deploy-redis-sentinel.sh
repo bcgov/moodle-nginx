@@ -27,12 +27,12 @@ replica:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: true
-    size: 500Mi
+    size: 100Mi
 sentinel:
   enabled: true
   persistence:
     enabled: true
-    size: 20Mi
+    size: 1Mi
 auth:
   enabled: false
   sentinel: false

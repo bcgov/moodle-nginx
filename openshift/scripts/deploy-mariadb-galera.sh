@@ -177,6 +177,13 @@ fi
 
 sleep 10
 
+# The value of "partition" determines which ordinals a change applies to
+# Make sure to use a number bigger than the last ordinal for the
+# StatefulSet, Also ensure PVC retention policy is set to "Retain"
+oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRetentionPolicy":{"whenDeleted":"Retain","whenScaled":"Retain"}, "updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":3}}}}'
+
+sleep 10
+
 echo "Scaling $DB_DEPLOYMENT_NAME to $DB_REPLICAS replicas..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
 

@@ -1,0 +1,48 @@
+kind: Template
+apiVersion: template.openshift.io/v1
+metadata:
+  name: cron-check-errors-template
+parameters:
+  - name: OPENSHIFT_SERVER
+    description: The OpenShift server URL
+    required: true
+objects:
+  - apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: check-pod-logs
+    spec:
+      schedule: "*/5 * * * *" # Run every 5 minutes
+      jobTemplate:
+        spec:
+          template:
+            spec:
+              containers:
+                - name: check-errors
+                  image: openshift/origin-control-plane:latest
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 256Mi
+                  command: ["/bin/sh", "-c"]
+                  args:
+                    - echo "Logging into OpenShift..." && \
+                      oc login --token=${OPENSHIFT_TOKEN} --server=${OPENSHIFT_SERVER} && \
+                      echo "Running check-pod-logs.sh script..." && \
+                      /scripts/check-pod-logs.sh
+                  env:
+                    - name: OPENSHIFT_TOKEN
+                      valueFrom:
+                        secretKeyRef:
+                          name: github-actions-sa-token-bcgk6
+                          key: token
+                    - name: OPENSHIFT_SERVER
+                      value: ${OPENSHIFT_SERVER}
+                  volumeMounts:
+                    - name: script-volume
+                      mountPath: /scripts
+              restartPolicy: OnFailure
+              volumes:
+                - name: script-volume
+                  configMap:
+                    name: check-pod-logs-script

@@ -77,10 +77,14 @@ echo "Creating configMap: $CRON_NAME-config"
 oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
 
 echo "Creating configMap: check-pod-logs-script"
+if [[ ! `oc describe configmap check-pod-logs-script 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: check-pod-logs-script"
+  oc delete configmap check-pod-logs-script
+fi
 oc create configmap check-pod-logs-script --from-file=check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh
-oc process -f ./openshift/cron-check-errors.yml \
+oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
-  | oc create -f -
+  | oc apply -f
 
 sleep 10
 
@@ -125,11 +129,41 @@ oc apply -f -
 # oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
 
 # Redirect traffic to maintenance-message
-echo "Redirecting traffic to maintenance-message..."
-oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+# echo "Redirecting traffic to maintenance-message..."
+# oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
+
+# Define HPA settings
+HPAS=(
+  "php deployment/php 3 20 400m"
+  "redis-node sts/redis-node 3 20 35m"
+  "redis-proxy deployment/redis-proxy 3 20 3m"
+  "web deployment/web 1 20 4m"
+)
+
+# Delete existing HPAs
+for HPA in "${HPAS[@]}"; do
+  NAME=$(echo $HPA | awk '{print $1}')
+  echo "Deleting existing HPA: $NAME"
+  oc delete hpa $NAME --ignore-not-found
+done
+
+# Create new HPAs
+for HPA in "${HPAS[@]}"; do
+  NAME=$(echo $HPA | awk '{print $1}')
+  TARGET=$(echo $HPA | awk '{print $2}')
+  MIN_REPLICAS=$(echo $HPA | awk '{print $3}')
+  MAX_REPLICAS=$(echo $HPA | awk '{print $4}')
+  AVG_VALUE=$(echo $HPA | awk '{print $5}')
+
+  echo "Creating HPA: $NAME"
+  oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
+done
 
 # Wait for redirect to take effect
-sleep 60
+sleep 120
+
+# Enable Moodle maintenance mode
+sh ./openshift/scripts/check-pod-logs.sh
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 # oc rollout latest deployment/$PHP_DEPLOYMENT_NAME
@@ -267,6 +301,8 @@ do
     pkill -P $$ oc
   fi
 done
+
+oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=3
 
 echo "Purging caches..."
 oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'

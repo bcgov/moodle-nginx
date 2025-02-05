@@ -5,7 +5,7 @@ replica:
   replicaCount: 3
   persistence:
     enabled: true
-    size: 500Mi
+    size: 100Mi
 sentinel:
   enabled: true
   persistence:

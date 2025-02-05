@@ -8,4 +8,4 @@ metrics:
   serviceMonitor:
     enabled: false
 podManagementPolicy: OrderedReady
-replicaCount: 3
+replicaCount: 5

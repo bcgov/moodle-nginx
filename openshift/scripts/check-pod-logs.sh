@@ -4,9 +4,10 @@
 declare -A DEPLOYMENTS
 DEPLOYMENTS=(
   ["php"]="error"
-  ["redis-proxy"]="error"
+  ["redis-proxy"]="err:"
   ["redis-node"]="lost"
   ["web"]="error"
+  # ["mariadb-galera"]="Aborted"
 )
 
 # Define error handling functions
@@ -36,7 +37,7 @@ for DEPLOYMENT_NAME in "${!DEPLOYMENTS[@]}"; do
   echo "Checking deployment: $DEPLOYMENT_NAME"
 
   # Get the list of pods in the deployment
-  PODS=$(oc get pods -l app=$DEPLOYMENT_NAME -o jsonpath='{.items[*].metadata.name}')
+  PODS=$(oc get pods -l deployment=$DEPLOYMENT_NAME -o jsonpath='{.items[*].metadata.name}')
 
   # Loop through each pod and check the logs
   for POD in $PODS; do
