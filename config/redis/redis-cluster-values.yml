@@ -1,51 +1,6 @@
 global:
   redis:
     password: ""
-usePassword: false
-persistence:
-    enabled: true
-    size: 100Mi
-persistentVolumeClaimRetentionPolicy:
-  enabled: true
-  whenScaled: Delete
-  whenDeleted: Delete
-diagnosticMode:
-  enabled: false
-  command:
-    - sleep
-  args:
-    - infinity
-master:
-  resources:
-    requests:
-      memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 80m
-  startupProbe:
-    enabled: false
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 5
-    successThreshold: 1
-    failureThreshold: 5
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 5
-    successThreshold: 1
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 1
-    successThreshold: 1
-    failureThreshold: 5
-cluster:
-  nodes: 6
-  replicas: 1
 redis:
   resources:
     requests:
@@ -61,15 +16,33 @@ updateJob:
     limits:
       cpu: 10m
 replica:
-  replicaCount: 3
+  replicaCount: 6
+  persistence:
+    enabled: true
+    size: 100Mi
   autoscaling:
     enabled: true
-    minReplicas: 3
+    minReplicas: 6
     maxReplicas: 20
     targetCPUUtilizationPercentage: 60
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 10m
+    limits:
+      cpu: 80m
 sentinel:
   enabled: true
   automateClusterRecovery: true
+  persistence:
+    enabled: false
+    size: 100Mi
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 10m
+    limits:
+      cpu: 80m
 auth:
   enabled: false
   sentinel: false

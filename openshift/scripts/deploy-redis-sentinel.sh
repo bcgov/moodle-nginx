@@ -23,83 +23,21 @@ cat <<EOF > values.yaml
 global:
   redis:
     password: ""
-usePassword: false
-persistence:
-    enabled: true
-    size: 100Mi
-persistentVolumeClaimRetentionPolicy:
-  enabled: true
-  whenScaled: Delete
-  whenDeleted: Delete
-diagnosticMode:
-  enabled: false
-  command:
-    - sleep
-  args:
-    - infinity
-master:
-  resources:
-    requests:
-      memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 60m
-  startupProbe:
-    enabled: false
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 5
-    successThreshold: 1
-    failureThreshold: 5
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 5
-    successThreshold: 1
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 1
-    successThreshold: 1
-    failureThreshold: 5
-cluster:
-  nodes: 6
-  replicas: 1
-redis:
-  resources:
-    requests:
-      memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 60m
-updateJob:
-  resources:
-    requests:
-      memory: 32Mi
-      cpu: 5m
-    limits:
-      cpu: 10m
 replica:
-  replicaCount: 3
-  autoscaling:
+  replicaCount: $REDIS_REPLICAS
+  persistence:
     enabled: true
-    minReplicas: 3
-    maxReplicas: 20
-    targetCPUUtilizationPercentage: 60
+    size: 50Mi
 sentinel:
   enabled: true
-  automateClusterRecovery: true
+  persistence:
+    enabled: true
+    size: 5Mi
 auth:
   enabled: false
   sentinel: false
   password: ""
   usePasswordFileFromSecret: false
-image:
-  pullPolicy: Always
-  debug: true
 EOF
 
 # Check if the Helm deployment exists
@@ -132,7 +70,7 @@ if helm list -q | grep -q "^$REDIS_NAME$"; then
 else
   echo "Helm deployment ($REDIS_NAME) NOT FOUND. Beginning deployment..."
   # Removed: --set auth.password="$SECRET_REDIS_PASSWORD"
-  helm install $REDIS_NAME $REDIS_HELM_CHART --values values.yaml
+  helm install --values values.yaml $REDIS_NAME $REDIS_HELM_CHART
 fi
 
 # Clean up the temporary values file

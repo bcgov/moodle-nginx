@@ -132,36 +132,6 @@ oc apply -f -
 # echo "Redirecting traffic to maintenance-message..."
 # oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
 
-# Define HPA settings
-HPAS=(
-  "php deployment/php 3 20 400m"
-  "redis-node sts/redis-node 3 20 35m"
-  "redis-proxy deployment/redis-proxy 3 20 3m"
-  "web deployment/web 1 20 4m"
-)
-
-# Delete existing HPAs
-for HPA in "${HPAS[@]}"; do
-  NAME=$(echo $HPA | awk '{print $1}')
-  echo "Deleting existing HPA: $NAME"
-  oc delete hpa $NAME --ignore-not-found
-done
-
-# Create new HPAs
-for HPA in "${HPAS[@]}"; do
-  NAME=$(echo $HPA | awk '{print $1}')
-  TARGET=$(echo $HPA | awk '{print $2}')
-  MIN_REPLICAS=$(echo $HPA | awk '{print $3}')
-  MAX_REPLICAS=$(echo $HPA | awk '{print $4}')
-  AVG_VALUE=$(echo $HPA | awk '{print $5}')
-
-  echo "Creating HPA: $NAME"
-  oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
-done
-
-# Wait for redirect to take effect
-sleep 120
-
 # Enable Moodle maintenance mode
 sh ./openshift/scripts/check-pod-logs.sh
 
@@ -321,6 +291,59 @@ sleep 10
 
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
+
+# Define HPA settings
+HPAS=(
+  "php deployment/php 3 20 400m"
+  "redis-node sts/redis-node 6 20 35m"
+  "redis-proxy deployment/redis-proxy 3 20 3m"
+  "web deployment/web 1 20 4m"
+)
+
+# Delete existing HPAs
+for HPA in "${HPAS[@]}"; do
+  NAME=$(echo $HPA | awk '{print $1}')
+  echo "Deleting existing HPA: $NAME"
+  oc delete hpa $NAME --ignore-not-found
+done
+
+# Create new HPAs
+for HPA in "${HPAS[@]}"; do
+  NAME=$(echo $HPA | awk '{print $1}')
+  TARGET=$(echo $HPA | awk '{print $2}')
+  MIN_REPLICAS=$(echo $HPA | awk '{print $3}')
+  MAX_REPLICAS=$(echo $HPA | awk '{print $4}')
+  AVG_VALUE=$(echo $HPA | awk '{print $5}')
+
+  echo "Creating HPA: $NAME"
+
+# Create a temporary template file
+cat <<EOF > hpa.yaml
+apiVersion: autoscaling/v2alpha1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: $NAME
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta1
+    kind: ReplicationController
+    name: $NAME
+  minReplicas: $MIN_REPLICAS
+  maxReplicas: $MAX_REPLICAS
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: $AVG_VALUE
+EOF
+
+  oc create -f hpa.yaml
+  # Older method - uses cpu percentage from requested value - not ideal
+  # oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
+done
+
+# Wait for redirect to take effect
+sleep 120
 
 sleep 10
 
