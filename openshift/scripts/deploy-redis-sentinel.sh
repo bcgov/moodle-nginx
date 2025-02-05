@@ -40,11 +40,20 @@ auth:
   usePasswordFileFromSecret: false
 EOF
 
+# Create minimal file for updates (or it will fail)
+cat <<EOF > redis-upgrade.yaml
+replica:
+  replicaCount: $REDIS_REPLICAS
+  persistence:
+    enabled: true
+    size: 50Mi
+EOF
+
 # Check if the Helm deployment exists
 if helm list -q | grep -q "^$REDIS_NAME$"; then
   echo "Helm deployment found. Updating..."
   # Removed: --set auth.password="$SECRET_REDIS_PASSWORD"
-  helm_upgrade_response=$(helm upgrade --reuse-values --set password="" -f values.yaml $REDIS_NAME $REDIS_HELM_CHART)
+  helm_upgrade_response=$(helm upgrade --reuse-values --set password="" -f redis-upgrade.yaml $REDIS_NAME $REDIS_HELM_CHART)
 
   # Output the response for debugging purposes
   echo "1. $helm_upgrade_response"
@@ -75,6 +84,7 @@ fi
 
 # Clean up the temporary values file
 rm values.yaml
+rm redis-upgrade.yaml
 
 echo "Helm updates completed for $REDIS_NAME."
 
