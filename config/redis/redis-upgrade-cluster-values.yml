@@ -1,0 +1,5 @@
+replicas:
+  replicaCount: 6
+  persistence:
+    enabled: true
+    size: 50Mi
