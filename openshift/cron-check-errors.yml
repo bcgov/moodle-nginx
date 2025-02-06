@@ -18,10 +18,7 @@ spec:
                   memory: 256Mi
               command: ["/bin/sh", "-c"]
               args:
-                - echo "Logging into OpenShift..." && \
-                  oc login --token=$OPENSHIFT_TOKEN --server=$OPENSHIFT_SERVER && \
-                  echo "Running check-pod-logs.sh script..." && \
-                  /scripts/check-pod-logs.sh
+                - /scripts/check-pod-logs.sh
               env:
                 - name: OPENSHIFT_TOKEN
                   valueFrom:

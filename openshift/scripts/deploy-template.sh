@@ -1,23 +1,29 @@
 #!/bin/bash
 #set -e # Exit on error
 
+# Source the utility script
+source ./openshift/scripts/utils.sh
+
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
+
+# Scale maintenance-message to 1 replica
+oc scale deployment/maintenance-message --replicas=1
+wait_for_deployment "deployment/maintenance-message"
+
+# Redirect traffic to maintenance-message
+echo "Redirecting traffic to maintenance-message..."
+patch_route moodle-web maintenance-message
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
 # Enable Moodle maintenance mode
-sh ./openshift/scripts/enable-maintenance.sh
+manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 
-sleep 10
-
-# Redirect traffic to maintenance-message
-echo "Redirecting traffic to maintenance-message..."
-oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
-
-sleep 60
+# Scale web to 0 replicas
+oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=0
 
 echo "Delete cron job if it exists..."
 # Check if cron exists
@@ -124,21 +130,7 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
-# Only use 1 db replica for deployment / upgrade to avoid conflicts
-# echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
-# oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
-
-# Redirect traffic to maintenance-message
-# echo "Redirecting traffic to maintenance-message..."
-# oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
-
-# Enable Moodle maintenance mode
-bash ./openshift/scripts/check-pod-logs.sh
-
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
-# oc rollout latest deployment/$PHP_DEPLOYMENT_NAME
-
-# Check PHP deployment rollout status until complete.
 ATTEMPTS=0
 MAX_ATTEMPTS=6
 WAIT_TIME=30
@@ -303,6 +295,9 @@ echo "Result: $plugin_purge"
 
 sleep 10
 
+# Scale web to 3 replicas
+oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=3
+
 # echo "Running Moodle upgrades..."
 # moodle_upgrade_result=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
 # echo "Result: $moodle_upgrade_result"
@@ -335,8 +330,17 @@ for HPA in "${HPAS[@]}"; do
 
   echo "Creating HPA: $NAME"
 
-# Create a temporary template file
-cat <<EOF > hpa.yaml
+  # Determine the kind of the target resource
+  KIND="Deployment"
+  if [[ $TARGET == sts/* ]]; then
+    KIND="StatefulSet"
+    TARGET=${TARGET#sts/}
+  elif [[ $TARGET == deployment/* ]]; then
+    TARGET=${TARGET#deployment/}
+  fi
+
+  # Create a temporary template file
+  cat <<EOF > hpa.yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -344,8 +348,8 @@ metadata:
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
-    kind: Deployment
-    name: $NAME
+    kind: $KIND
+    name: $TARGET
   minReplicas: $MIN_REPLICAS
   maxReplicas: $MAX_REPLICAS
   metrics:
@@ -360,22 +364,16 @@ EOF
   echo "Creating HPA from template:"
   echo $(cat hpa.yaml)
   oc create -f hpa.yaml
-  # Older method - uses cpu percentage from requested value - not ideal
-  # oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
+
+  wait_for_deployment "$TARGET"
 done
 
-# Wait for redirect to take effect
-sleep 120
-
-sleep 10
-
+# Disable maintenance mode and verify output
 echo "Disabling maintenance mode..."
-oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/maintenance.php --disable'
+manage_maintenance_mode "disable" $PHP_DEPLOYMENT_NAME
 
-echo "Disabling maintenance-message and redirecting traffic [back] to Moodle..."
-oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "web"}]'
-
-sleep 30
+echo "Redirecting traffic [back] to Moodle..."
+patch_route moodle-web web
 
 oc scale deployment/maintenance-message --replicas=0
 

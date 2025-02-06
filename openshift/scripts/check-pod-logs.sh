@@ -13,24 +13,16 @@ DEPLOYMENTS=(
 )
 
 # Define error handling functions
-handle_php_error() {
+
+delete_pod() {
   local pod=$1
-  local error_line=$2
-  echo "Error found in pod: $pod. Error: $error_line. Deleting pod..."
+  echo "Restarting pod..."
   oc delete pod $pod
 }
 
-handle_redis_proxy_error() {
+log_error_continue() {
   local pod=$1
-  local error_line=$2
-  echo "Error found in pod: $pod. Error: $error_line. Restarting pod..."
-  oc delete pod $pod
-}
-
-handle_web_error() {
-  local pod=$1
-  local error_line=$2
-  echo "Error found in pod: $pod. Error: $error_line. Logging error and continuing..."
+  echo "Continuing..."
   # Add any additional error handling logic here
 }
 
@@ -52,18 +44,20 @@ for DEPLOYMENT_NAME in "${!DEPLOYMENTS[@]}"; do
     if echo "$LOGS" | grep -q "$ERROR_MESSAGE"; then
       # Capture the matched error line
       ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$ERROR_MESSAGE")
-      echo "Error found in pod: $POD. Error: $ERROR_LINE."
+
+      echo "Error detected in: $POD"
+      echo "Error: $ERROR_LINE."
 
       # Call the appropriate error handling function
       case $DEPLOYMENT_NAME in
         php)
-          handle_php_error $POD "$ERROR_LINE"
+          delete_pod $POD
           ;;
         redis-proxy)
-          handle_redis_proxy_error $POD "$ERROR_LINE"
+          delete_pod $POD
           ;;
         web)
-          handle_web_error $POD "$ERROR_LINE"
+          delete_pod $POD
           ;;
         *)
           echo "No error handling function defined for deployment: $DEPLOYMENT_NAME"
@@ -71,7 +65,7 @@ for DEPLOYMENT_NAME in "${!DEPLOYMENTS[@]}"; do
       esac
       break
     else
-      echo "No errors found in pod: $POD"
+      echo "No errors found."
     fi
   done
 done
