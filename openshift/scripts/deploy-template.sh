@@ -84,7 +84,7 @@ fi
 oc create configmap check-pod-logs-script --from-file=check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh
 oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
-  | oc apply -f
+  | oc apply -f -
 
 sleep 10
 
