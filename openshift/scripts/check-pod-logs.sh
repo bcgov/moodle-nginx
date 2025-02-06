@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "Checking pod logs, using shell: $SHELL"
+
 # Define the list of deployments and their corresponding error messages and handling functions
 declare -A DEPLOYMENTS
 DEPLOYMENTS=(

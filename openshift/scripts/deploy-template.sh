@@ -133,7 +133,7 @@ oc apply -f -
 # oc patch route moodle-web --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "maintenance-message"}]'
 
 # Enable Moodle maintenance mode
-sh ./openshift/scripts/check-pod-logs.sh
+bash ./openshift/scripts/check-pod-logs.sh
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 # oc rollout latest deployment/$PHP_DEPLOYMENT_NAME
