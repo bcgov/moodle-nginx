@@ -294,10 +294,10 @@ sleep 10
 
 # Define HPA settings
 HPAS=(
-  "php deployment/php 3 20 400m"
-  "redis-node sts/redis-node 6 20 35m"
-  "redis-proxy deployment/redis-proxy 3 20 3m"
-  "web deployment/web 1 20 4m"
+  "php deployment/php 3 20 1000"
+  "redis-node sts/redis-node 6 20 500"
+  "redis-proxy deployment/redis-proxy 3 20 200"
+  "web deployment/web 1 20 1000"
 )
 
 # Delete existing HPAs
