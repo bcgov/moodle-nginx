@@ -334,7 +334,9 @@ spec:
   - type: Resource
     resource:
       name: cpu
-      targetAverageUtilization: $AVG_VALUE
+      taeget:
+        type: Utilization
+        averageUtilization: $AVG_VALUE
 EOF
 
   echo "Creating HPA from template:"

@@ -417,6 +417,13 @@
                 }
               },
               {
+                "name": "file-temp-localcache",
+                "persistentVolumeClaim": {
+                  "claimName": "file-temp-localcache",
+                  "defaultMode": 755
+                }
+              },
+              {
                 "name": "${PHP_DEPLOYMENT_NAME}-config",
                 "configMap": {
                   "name": "${PHP_DEPLOYMENT_NAME}-config",
