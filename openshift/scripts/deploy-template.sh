@@ -2,7 +2,7 @@
 #set -e # Exit on error
 
 # Source the utility script
-source ./openshift/scripts/utils.sh
+source ./openshift/scripts/_utils.sh
 
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
