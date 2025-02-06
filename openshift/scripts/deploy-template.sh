@@ -272,7 +272,25 @@ do
   fi
 done
 
+echo "Scaling up php to 3 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=3
+
+# Get the name of the first pod created for the deployment
+php_pod_name=$(oc get pods --selector=deployment=$PHP_DEPLOYMENT_NAME -o jsonpath='{.items[0].metadata.name}')
+
+# Wait until the pod is in the "Running" state
+while [[ $(oc get pod $php_pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
+  if [[ $(oc get pod $php_pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
+    echo "moodle-upgrade job Failed. Retrieving logs..."
+    oc logs $php_pod_name
+    echo "Exiting..."
+    exit 1
+  fi
+  echo "Waiting for pod $php_pod_name to be running..."
+  sleep 10
+done
+
+echo "Pod $php_pod_name is running."
 
 echo "Purging caches..."
 oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
@@ -334,7 +352,7 @@ spec:
   - type: Resource
     resource:
       name: cpu
-      taeget:
+      target:
         type: Utilization
         averageUtilization: $AVG_VALUE
 EOF
