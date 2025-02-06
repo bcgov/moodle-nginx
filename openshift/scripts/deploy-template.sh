@@ -319,14 +319,14 @@ for HPA in "${HPAS[@]}"; do
 
 # Create a temporary template file
 cat <<EOF > hpa.yaml
-apiVersion: autoscaling/v2alpha1
+apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: $NAME
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1beta1
-    kind: ReplicationController
+    apiVersion: apps/v1
+    kind: Deployment
     name: $NAME
   minReplicas: $MIN_REPLICAS
   maxReplicas: $MAX_REPLICAS
@@ -337,6 +337,8 @@ spec:
       targetAverageUtilization: $AVG_VALUE
 EOF
 
+  echo "Creating HPA from template:"
+  echo cat hpa.yaml
   oc create -f hpa.yaml
   # Older method - uses cpu percentage from requested value - not ideal
   # oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
