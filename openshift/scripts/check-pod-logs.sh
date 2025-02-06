@@ -51,7 +51,7 @@ for DEPLOYMENT_NAME in "${!DEPLOYMENTS[@]}"; do
 
     if echo "$LOGS" | grep -q "$ERROR_MESSAGE"; then
       # Capture the matched error line
-      ERROR_LINE=$(echo "$LOGS" | grep "$ERROR_MESSAGE")
+      ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$ERROR_MESSAGE")
       echo "Error found in pod: $POD. Error: $ERROR_LINE."
 
       # Call the appropriate error handling function
@@ -69,6 +69,7 @@ for DEPLOYMENT_NAME in "${!DEPLOYMENTS[@]}"; do
           echo "No error handling function defined for deployment: $DEPLOYMENT_NAME"
           ;;
       esac
+      break
     else
       echo "No errors found in pod: $POD"
     fi

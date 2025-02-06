@@ -338,7 +338,7 @@ spec:
 EOF
 
   echo "Creating HPA from template:"
-  echo cat hpa.yaml
+  echo $(cat hpa.yaml)
   oc create -f hpa.yaml
   # Older method - uses cpu percentage from requested value - not ideal
   # oc autoscale $TARGET --name=$NAME --min=$MIN_REPLICAS --max=$MAX_REPLICAS --cpu-percent=$AVG_VALUE
