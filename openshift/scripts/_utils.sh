@@ -161,9 +161,14 @@ wait_for() {
   local retry_count=0
   local wait_time=10
 
-  ## Extract resource type and name
-  local resource_type=${resource%%/*}
-  local resource_name=${resource##*/}
+  # Extract resource type and name
+  if [[ $resource == */* ]]; then
+    local resource_type=${resource%%/*}
+    local resource_name=${resource##*/}
+  else
+    echo "Invalid resource format: $resource. Expected format: <type>/<name>"
+    exit 1
+  fi
 
   while true; do
     if [[ $resource_type == "job" ]]; then

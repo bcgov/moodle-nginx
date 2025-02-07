@@ -10,7 +10,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Scale maintenance-message to 1 replica
 oc scale deployment/maintenance-message --replicas=1
-wait_for "deployment/maintenance-message" "ready" "90s"
+wait_for "deployment/maintenance-message" "up" "90s"
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
@@ -18,7 +18,7 @@ patch_route moodle-web maintenance-message
 
 # Scale php to 1 replica
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "up" "120s"
 
 # Define HPA settings
 HPAS=(
@@ -43,6 +43,7 @@ manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 
 # Scale web to 0 replicas
 oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=0
+wait_for "deployment/$WEB_DEPLOYMENT_NAME" "down" "60s"
 
 echo "Delete cron job if it exists..."
 # Check if cron exists
@@ -264,7 +265,7 @@ done
 
 echo "Scaling up php to 3 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=3
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "320s"
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "up" "320s"
 
 echo "Purging caches..."
 oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' --wait
@@ -275,7 +276,7 @@ echo "Result: $plugin_purge"
 
 # Scale web to 3 replicas
 oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=3
-wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
+wait_for "deployment/$WEB_DEPLOYMENT_NAME" "up" "120s"
 
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
