@@ -22,10 +22,10 @@ wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
 
 # Define HPA settings
 HPAS=(
-  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 1000"
-  "redis-node sts/redis-node 6 20 500"
-  "redis-proxy deployment/redis-proxy 3 20 200"
-  "web deployment/$WEB_DEPLOYMENT_NAME 1 20 1000"
+  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 60m"
+  "redis-node sts/redis-node 6 20 80m"
+  "redis-proxy deployment/redis-proxy 3 20 3m"
+  "web deployment/$WEB_DEPLOYMENT_NAME 3 20 3m"
 )
 
 # Delete existing HPAs
@@ -191,10 +191,6 @@ sleep 5
 # Wait for file migration to complete
 wait_for "job/migrate-build-files" "complete" "800s"
 
-# Wait for the migrate-build-files job to complete
-echo "Pod $pod_name is now running."
-echo "Waiting for $pod_name job to complete..."
-
 sleep 60
 
 COUNT=0
@@ -319,7 +315,7 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: $AVG_VALUE
+        averageValue: $AVG_VALUE
 EOF
 
   echo "Creating HPA from template:"

@@ -174,6 +174,8 @@ wait_for() {
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
   local total_wait_time=$((timeout_seconds + wait_time))
 
+  echo "Waiting for $resource to be $condition. Max time: $timeout..."
+
   while true; do
     if [[ $resource_type == "job" ]]; then
       # Check job status
@@ -223,8 +225,8 @@ wait_for() {
       exit 1
     fi
 
-    echo "Retrying... ($((retry_count + 1))/$total_wait_time)"
+    echo "Retrying... ($((retry_count + 1 * wait_time))/$timeout)"
     sleep $wait_time
-    retry_count=$((retry_count + wait_time))
+    retry_count=$((retry_count + 1))
   done
 }
