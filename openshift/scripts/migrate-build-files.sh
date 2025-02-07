@@ -1,5 +1,5 @@
 # Source the utility script
-source ./openshift/scripts/_utils.sh
+source ./_utils.sh
 
 # Check if the script has been run within the past hour
 check_last_run_timestamp

@@ -76,6 +76,8 @@ COPY ./openshift/scripts/moodle-upgrade.sh /usr/local/bin/moodle-upgrade.sh
 RUN dos2unix /usr/local/bin/moodle-upgrade.sh
 COPY ./openshift/scripts/migrate-build-files.sh /usr/local/bin/migrate-build-files.sh
 RUN dos2unix /usr/local/bin/migrate-build-files.sh
+COPY ./openshift/scripts/_utils.sh /usr/local/bin/_utils.sh
+RUN dos2unix /usr/local/bin/_utils.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 RUN dos2unix /usr/local/bin/test-migration-complete.sh
 

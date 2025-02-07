@@ -117,10 +117,13 @@ COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenanc
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
 COPY ./config/moodle/moodle_index_during_maintenance.php /tmp/moodle_index_during_maintenance.php
 COPY ./openshift/scripts/migrate-build-files.sh /usr/local/bin/migrate-build-files.sh
+COPY ./openshift/scripts/_utils.sh /usr/local/bin/_utils.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 
 RUN chmod +x /usr/local/bin/migrate-build-files.sh && \
 	dos2unix /usr/local/bin/migrate-build-files.sh && \
+  chmod +x /usr/local/bin/_utils.sh && \
+	dos2unix /usr/local/bin/_utils.sh && \
   chmod +x /usr/local/bin/test-migration-complete.sh && \
   dos2unix /usr/local/bin/test-migration-complete.sh
 
