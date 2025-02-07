@@ -128,12 +128,12 @@ patch_route() {
   local target_service=$2
 
   echo "Patching route $route_name to target $target_service..."
-  oc patch route $route_name --type=json -p "[{\"op\": \"replace\", \"path\": \"/spec/to/name\", \"value\": \"$target_service\"}]"
+  oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
   # Wait for the route change to take effect
   local max_retries=30
   local retry_count=0
-  local wait_time=2
+  local wait_time=5
 
   while true; do
     current_target=$(oc get route $route_name -o jsonpath='{.spec.to.name}')
@@ -225,7 +225,7 @@ wait_for() {
       exit 1
     fi
 
-    echo "Retrying... ($((retry_count + 1 * wait_time))/$timeout)"
+    echo "Retrying... ($(((retry_count + 1) * wait_time))/$timeout)"
     sleep $wait_time
     retry_count=$((retry_count + 1))
   done

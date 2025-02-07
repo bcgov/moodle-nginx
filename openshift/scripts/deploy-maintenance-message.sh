@@ -1,5 +1,7 @@
 #!/bin/bash
 
+$DEPLOYMENT_SELECTOR="$DEPLOYMENT_SELECTOR"
+
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
@@ -19,58 +21,33 @@ else
   oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
 fi
 
-if [[ `oc describe deployment/$BUILD_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "$BUILD_NAME NOT FOUND: Beginning deployment..."
+if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
+  echo "$DEPLOYMENT_SELECTOR NOT FOUND: Beginning deployment..."
   oc process -f ./openshift/maintenance.yml \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
     -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
     | oc create -f -
 else
-  echo "$BUILD_NAME Installation found...Scaling to 0..."
-  oc scale deployment/$BUILD_NAME --replicas=0
-
-  ATTEMPTS=0
-  MAX_ATTEMPTS=60
-  while [[ $(oc get deployment/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
-    echo "Waiting for $BUILD_NAME to scale to 0..."
-    sleep 10
-    ATTEMPTS=$((ATTEMPTS + 1))
-  done
-  if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
-    echo "Timeout waiting for $BUILD_NAME to scale to 0"
-    exit 1
-  fi
+  echo "$DEPLOYMENT_SELECTOR Installation found...Scaling to 0..."
+  oc scale $DEPLOYMENT_SELECTOR --replicas=0
+  wait_for "$DEPLOYMENT_SELECTOR" "ready" "20s" "down"
 
   echo "Recreating $BUILD_NAME..."
-  oc delete deployment/$BUILD_NAME -n $DEPLOY_NAMESPACE
+  oc delete $DEPLOYMENT_SELECTOR -n $DEPLOY_NAMESPACE
   oc delete svc/$BUILD_NAME -n $DEPLOY_NAMESPACE
 
-  sleep 10
+  sleep 5
 
   oc process -f ./openshift/maintenance.yml \
     -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
     -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
     | oc create -f -
+
+  # Wait for the deployment/to scale to 1
+  wait_for "$DEPLOYMENT_SELECTOR"
 fi
-
-# Wait for the deployment/to scale to 1
-ATTEMPTS=0
-MAX_ATTEMPTS=60
-while [[ $(oc get deployment/$BUILD_NAME -o jsonpath='{.status.replicas}') -ne 1 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
-  echo "Waiting for $BUILD_NAME to scale to 1..."
-  sleep 10
-  ATTEMPTS=$((ATTEMPTS + 1))
-done
-if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
-  echo "Timeout waiting for $BUILD_NAME to scale to 1"
-  exit 1
-fi
-
-echo "$BUILD_NAME deployment/complete"
-
-sleep 20
 
 # Redirect traffic to maintenance-message
-patch_route moodle-web $BUILD_NAME
+patch_route $ROUTE_NAME $BUILD_NAME

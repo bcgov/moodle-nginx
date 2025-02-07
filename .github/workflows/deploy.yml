@@ -137,6 +137,7 @@ jobs:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
+          ROUTE_NAME: "moodle-web"
 
       - name: Create ConfigMap (moodle-env)
         if: success()

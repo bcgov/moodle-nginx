@@ -10,7 +10,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Scale maintenance-message to 1 replica
 oc scale deployment/maintenance-message --replicas=1
-wait_for "deployment/maintenance-message" "ready" "90s"
+wait_for "deployment/maintenance-message"
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
