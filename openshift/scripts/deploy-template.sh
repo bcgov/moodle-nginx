@@ -10,11 +10,15 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Scale maintenance-message to 1 replica
 oc scale deployment/maintenance-message --replicas=1
-wait_for_deployment "deployment/maintenance-message"
+wait_for "deployment=maintenance-message" "up" "90s"
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
 patch_route moodle-web maintenance-message
+
+# Scale php to 1 replica
+oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "up" "120s"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
@@ -32,15 +36,6 @@ if oc get deployment $CRON_NAME; then
   oc delete deployment $CRON_NAME
 fi
 
-# Only use 1 db replica for deployment / upgrade to avoid conflicts
-# echo "Scale down $DB_DEPLOYMENT_NAME to 1 replica..."
-# oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
-
-# Only use 1 redis replica for deployment / upgrade to avoid conflicts
-# REDIS_EXTENDED_NAME=$REDIS_NAME-node
-# echo "Scale down $REDIS_EXTENDED_NAME to 1 replica..."
-# oc scale sts/$REDIS_EXTENDED_NAME --replicas=1
-
 # Create ConfigMaps (first delete, if necessary)
 if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
@@ -57,7 +52,7 @@ if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
   oc delete configmap $APP-config
 fi
 
-sleep 10
+sleep 5
 
 echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
@@ -72,12 +67,12 @@ if [[ ! `oc describe configmap $PHP_DEPLOYMENT_NAME-fpm-config 2>&1` =~ "NotFoun
   oc delete configmap $PHP_DEPLOYMENT_NAME-fpm-config
 fi
 
-sleep 10
+sleep 5
 
 echo "Creating configMap: $PHP_DEPLOYMENT_NAME-fpm-config"
 oc create configmap $PHP_DEPLOYMENT_NAME-fpm-config --from-file=zz-docker.conf=./config/php/php-fpm.conf
 
-sleep 10
+sleep 5
 
 echo "Creating configMap: $CRON_NAME-config"
 oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
@@ -92,7 +87,7 @@ oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
   | oc apply -f -
 
-sleep 10
+sleep 5
 
 echo "Checking for: deployment/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
 
@@ -107,8 +102,8 @@ fi
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
 echo "Scale down $PHP_DEPLOYMENT_NAME to 0 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=0
+wait_for "deployment=$PHP_DEPLOYMENT_NAME" "down" "120s"
 
-sleep 30
 
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
@@ -174,26 +169,14 @@ sleep 10
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
-sleep 10
+sleep 5
 
 # Get the name of the pod created by the job
-pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
-
-# Wait until the pod is in the "Running" state
-while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
-  if [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
-    echo "migrate-build-files job Failed. Retrieving logs..."
-    oc logs $pod_name
-    echo "Exiting..."
-    exit 1
-  fi
-  echo "Waiting for pod $pod_name to be running."
-  sleep 30
-done
+# pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
+wait_for "job-name=migrate-build-files" "complete" "600s"
 
 # Wait for the migrate-build-files job to complete
 echo "Pod $pod_name is now running."
-
 echo "Waiting for $pod_name job to complete..."
 
 sleep 60
@@ -266,41 +249,18 @@ done
 
 echo "Scaling up php to 3 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=3
-
-# Get the name of the first pod created for the deployment
-php_pod_name=$(oc get pods --selector=deployment=$PHP_DEPLOYMENT_NAME -o jsonpath='{.items[0].metadata.name}')
-
-# Wait until the pod is in the "Running" state
-while [[ $(oc get pod $php_pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
-  if [[ $(oc get pod $php_pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
-    echo "moodle-upgrade job Failed. Retrieving logs..."
-    oc logs $php_pod_name
-    echo "Exiting..."
-    exit 1
-  fi
-  echo "Waiting for pod $php_pod_name to be running..."
-  sleep 10
-done
-
-echo "Pod $php_pod_name is running."
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "up" "320s"
 
 echo "Purging caches..."
-oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php'
-
-sleep 10
+oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' --wait
 
 echo "Purging missing plugins..."
-plugin_purge=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run')
+plugin_purge=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run' --wait)
 echo "Result: $plugin_purge"
-
-sleep 10
 
 # Scale web to 3 replicas
 oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=3
-
-# echo "Running Moodle upgrades..."
-# moodle_upgrade_result=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/upgrade.php --non-interactive')
-# echo "Result: $moodle_upgrade_result"
+wait_for "deployment/$WEB_DEPLOYMENT_NAME" "up" "120s"
 
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
@@ -380,4 +340,4 @@ oc scale deployment/maintenance-message --replicas=0
 echo "Deployment complete."
 
 # Wait for things to warm up a bit before proceeding with the [lighthouse] tests
-sleep 120
+sleep 300

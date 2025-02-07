@@ -150,3 +150,66 @@ patch_route() {
     retry_count=$((retry_count + 1))
   done
 }
+
+# Function to wait for deployment pods to be ready or scaled to zero
+wait_for() {
+  local selector=$1
+  local condition=${2:-ready}
+  local timeout=${3:-90s}
+  local scale_direction=${4:-up}
+  local max_retries=30
+  local retry_count=0
+  local wait_time=10
+
+  # Extract job name from selector if it is a job
+  local job_name=""
+  if [[ $selector == job-name=* ]]; then
+    job_name=${selector#job-name=}
+  fi
+
+  while true; do
+    if [[ -n $job_name ]]; then
+      # Check job status
+      job_status=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
+      if [[ $job_status > 0 ]]; then
+        echo "Job $job_name has failed. Retrieving logs..."
+        pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
+        oc logs $pod_name
+        echo "Exiting..."
+        exit 1
+      fi
+
+      job_status=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
+      if [[ $job_status > 0 ]]; then
+        echo "Job $job_name has completed successfully."
+        break
+      fi
+
+      echo "Waiting for job $job_name to complete..."
+    else
+      # Check pod status
+      output=$(oc wait --for=condition=$condition pod -l $selector --timeout=$timeout 2>&1)
+
+      if [[ $scale_direction == "up" ]]; then
+        if echo "$output" | grep -q "condition met"; then
+          echo "All pods with selector '$selector' are in '$condition' condition."
+          break
+        fi
+      elif [[ $scale_direction == "down" ]]; then
+        if echo "$output" | grep -q "no matching resources found"; then
+          echo "All pods with selector '$selector' have been scaled down."
+          break
+        fi
+      fi
+    fi
+
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "Timeout waiting for condition '$condition' with selector '$selector'. Exiting..."
+      exit 1
+    fi
+
+    echo "Retrying... ($((retry_count + 1))/$max_retries)"
+    sleep $wait_time
+    retry_count=$((retry_count + 1))
+  done
+}

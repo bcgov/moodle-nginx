@@ -1,3 +1,8 @@
+#!/bin/bash
+
+# Source the utility script
+source ./openshift/scripts/_utils.sh
+
 # maintenance html page
 if [[ `oc describe configmap maintenance-page 2>&1` =~ "NotFound" ]]; then
   oc create configmap maintenance-page --from-file=./config/maintenance/index.html
@@ -67,8 +72,5 @@ echo "$BUILD_NAME deployment/complete"
 
 sleep 20
 
-# Redirect traffic to $BUILD_NAME
-echo "Redirecting traffic to $BUILD_NAME..."
-oc patch route moodle-web --type=json -p "[{\"op\": \"replace\", \"path\": \"/spec/to/name\", \"value\": \"$BUILD_NAME\"}]"
-
-sleep 30
+# Redirect traffic to maintenance-message
+patch_route moodle-web $BUILD_NAME
