@@ -10,7 +10,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Scale maintenance-message to 1 replica
 oc scale deployment/maintenance-message --replicas=1
-wait_for "deployment=maintenance-message" "ready" "90s"
+wait_for "deployment/maintenance-message" "ready" "90s"
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
@@ -19,6 +19,21 @@ patch_route moodle-web maintenance-message
 # Scale php to 1 replica
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
 wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
+
+# Define HPA settings
+HPAS=(
+  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 1000"
+  "redis-node sts/redis-node 6 20 500"
+  "redis-proxy deployment/redis-proxy 3 20 200"
+  "web deployment/$WEB_DEPLOYMENT_NAME 1 20 1000"
+)
+
+# Delete existing HPAs
+for HPA in "${HPAS[@]}"; do
+  NAME=$(echo $HPA | awk '{print $1}')
+  echo "Deleting existing HPA: $NAME"
+  oc delete hpa $NAME --ignore-not-found
+done
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
@@ -102,7 +117,7 @@ fi
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
 echo "Scale down $PHP_DEPLOYMENT_NAME to 0 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=0
-wait_for "deployment=$PHP_DEPLOYMENT_NAME" "down" "120s"
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "down" "120s"
 
 
 echo "Deploy Template to OpenShift ..."
@@ -264,21 +279,6 @@ wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
 
 # Right-sizing cluster, according to environment
 # bash ./openshift/scripts/right-sizing.sh
-
-# Define HPA settings
-HPAS=(
-  "php deployment/php 3 20 1000"
-  "redis-node sts/redis-node 6 20 500"
-  "redis-proxy deployment/redis-proxy 3 20 200"
-  "web deployment/web 1 20 1000"
-)
-
-# Delete existing HPAs
-for HPA in "${HPAS[@]}"; do
-  NAME=$(echo $HPA | awk '{print $1}')
-  echo "Deleting existing HPA: $NAME"
-  oc delete hpa $NAME --ignore-not-found
-done
 
 # Create new HPAs
 for HPA in "${HPAS[@]}"; do

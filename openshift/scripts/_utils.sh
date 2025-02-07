@@ -161,50 +161,56 @@ wait_for() {
   local retry_count=0
   local wait_time=10
 
-  # Extract job name from selector if it is a job
-  local job_name=""
-  if [[ $selector == job-name=* ]]; then
-    job_name=${selector#job-name=}
-  fi
+  ## Extract resource type and name
+  local resource_type=${resource%%/*}
+  local resource_name=${resource##*/}
 
   while true; do
-    if [[ -n $job_name ]]; then
+    if [[ $resource_type == "job" ]]; then
       # Check job status
-      job_status=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
+      job_status=$(oc get jobs $resource_name -o 'jsonpath={..status.failed}')
       if [[ $job_status > 0 ]]; then
-        echo "Job $job_name has failed. Retrieving logs..."
-        pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
+        echo "Job $resource_name has failed. Retrieving logs..."
+        pod_name=$(oc get pods --selector=job-name=$resource_name -o jsonpath='{.items[0].metadata.name}')
         oc logs $pod_name
         echo "Exiting..."
         exit 1
       fi
 
-      job_status=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
+      job_status=$(oc get jobs $resource_name -o 'jsonpath={..status.succeeded}')
       if [[ $job_status > 0 ]]; then
-        echo "Job $job_name has completed successfully."
+        echo "Job $resource_name has completed successfully."
         break
       fi
 
-      echo "Waiting for job $job_name to complete..."
+      echo "Waiting for job $resource_name to complete..."
     else
+      # Determine the appropriate label selector
+      local label_selector=""
+      if [[ $resource_type == "deployment" ]]; then
+        label_selector="deployment=$resource_name"
+      elif [[ $resource_type == "sts" || $resource_type == "statefulset" ]]; then
+        label_selector="app.kubernetes.io/name=$resource_name"
+      fi
+
       # Check pod status
-      output=$(oc wait --for=condition=$condition pod -l $selector --timeout=$timeout 2>&1)
+      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$timeout 2>&1)
 
       if [[ $scale_direction == "up" ]]; then
         if echo "$output" | grep -q "condition met"; then
-          echo "All pods with selector '$selector' are in '$condition' condition."
+          echo "All pods with selector '$label_selector' are in '$condition' condition."
           break
         fi
       elif [[ $scale_direction == "down" ]]; then
         if echo "$output" | grep -q "no matching resources found"; then
-          echo "All pods with selector '$selector' have been scaled down."
+          echo "All pods with selector '$label_selector' have scaled down."
           break
         fi
       fi
     fi
 
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "Timeout waiting for condition '$condition' with selector '$selector'. Exiting..."
+      echo "Timeout waiting for condition '$condition' with selector '$resource_type=$resource_name'. Exiting..."
       exit 1
     fi
 
