@@ -13,7 +13,7 @@
       "openshift.io/long-description": "This template provides application deployments for web (nginx), php and cron with related PVCs, route and secrets. Database and Redis cache are managed via helm chart installlations.",
       "tags": "application,${APP_NAME}"
     },
-    "name": "${NAME}"
+    "name": "${APP_NAME}"
   },
   "objects": [
     {
@@ -155,42 +155,6 @@
         }
       }
     },
-    {
-			"apiVersion": "v1",
-			"kind": "Route",
-			"metadata": {
-        "name": "${APP_NAME}-${WEB_DEPLOYMENT_NAME}",
-        "namespace": "${DEPLOY_NAMESPACE}",
-        "labels": {
-          "service": "${WEB_DEPLOYMENT_NAME}"
-        },
-        "annotations": {
-          "haproxy.router.openshift.io/timeout": "600s"
-        }
-      },
-      "spec": {
-        "host": "${SITE_URL}",
-        "to": {
-          "kind": "Service",
-          "name": "${WEB_DEPLOYMENT_NAME}",
-          "weight": 100
-        },
-        "conditions": [
-          {
-            "type": "Admitted",
-            "status": "True"
-          }
-        ],
-        "tls": {
-          "termination": "edge",
-          "insecureEdgeTerminationPolicy": "Redirect"
-        },
-        "port": {
-          "targetPort": 8080
-        },
-        "wildcardPolicy": "None"
-      }
-		},
     {
       "apiVersion": "apps/v1",
       "kind": "Deployment",
@@ -880,7 +844,7 @@
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Limit CPU",
       "name": "PHP_CPU_LIMIT",
-      "value": "800m"
+      "value": "1200m"
     },
     {
       "description": "Requested amount of memory for the CRON container.",

@@ -100,8 +100,8 @@ else
     --set persistence.size=5Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
-    --set resources.limits.cpu=500m \
-    --set resources.limits.memory=2500Mi \
+    --set resources.limits.cpu=0 \
+    --set resources.limits.memory=0 \
     --set readinessProbe.enabled=false \
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \

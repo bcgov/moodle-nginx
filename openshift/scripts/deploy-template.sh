@@ -22,10 +22,10 @@ wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
 
 # Define HPA settings
 HPAS=(
-  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 60m"
+  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 200m"
   "redis-node sts/redis-node 6 20 80m"
   "redis-proxy deployment/redis-proxy 3 20 3m"
-  "web deployment/$WEB_DEPLOYMENT_NAME 3 20 3m"
+  "web deployment/$WEB_DEPLOYMENT_NAME 3 20 4m"
 )
 
 # Delete existing HPAs
@@ -59,8 +59,6 @@ if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]
   oc delete configmap $WEB_DEPLOYMENT_NAME-config
 fi
 
-sleep 10
-
 echo "Creating configMap: $WEB_DEPLOYMENT_NAME-config"
 oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/default.conf
 
@@ -68,8 +66,6 @@ if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $APP-config"
   oc delete configmap $APP-config
 fi
-
-sleep 5
 
 echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
@@ -84,12 +80,8 @@ if [[ ! `oc describe configmap $PHP_DEPLOYMENT_NAME-fpm-config 2>&1` =~ "NotFoun
   oc delete configmap $PHP_DEPLOYMENT_NAME-fpm-config
 fi
 
-sleep 5
-
 echo "Creating configMap: $PHP_DEPLOYMENT_NAME-fpm-config"
 oc create configmap $PHP_DEPLOYMENT_NAME-fpm-config --from-file=zz-docker.conf=./config/php/php-fpm.conf
-
-sleep 5
 
 echo "Creating configMap: $CRON_NAME-config"
 oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
@@ -104,8 +96,6 @@ oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
   | oc apply -f -
 
-sleep 5
-
 echo "Checking for: deployment/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
 
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
@@ -113,14 +103,12 @@ if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
 else
   echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
   oc annotate --overwrite  deployment/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
-  # oc rollout latest deployment/$WEB_DEPLOYMENT_NAME
 fi
 
 # Only use 1 redis replica for deployment / upgrade to avoid conflicts
 echo "Scale down $PHP_DEPLOYMENT_NAME to 0 replicas..."
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=0
 wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "60s" "down"
-
 
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
@@ -143,27 +131,7 @@ oc process -f ./openshift/template.json \
 oc apply -f -
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
-ATTEMPTS=0
-MAX_ATTEMPTS=6
-WAIT_TIME=30
-ROLLOUT_STATUS_CMD="oc rollout status deployment/$PHP_DEPLOYMENT_NAME"
-
-until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
-  OUTPUT=$($ROLLOUT_STATUS_CMD 2>&1)
-  echo "$OUTPUT"
-
-  if echo "$OUTPUT" | grep -q "success"; then
-    echo "Deployment/$PHP_DEPLOYMENT_NAME successfully rolled out."
-    break
-  elif echo "$OUTPUT" | grep -q "error"; then
-    echo "Error: Deployment/$PHP_DEPLOYMENT_NAME rollout failed."
-    exit 1
-  fi
-
-  ATTEMPTS=$((ATTEMPTS + 1))
-  echo "Waiting for deployment/$PHP_DEPLOYMENT_NAME: $(($ATTEMPTS * $WAIT_TIME)) seconds..."
-  sleep $WAIT_TIME
-done
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "360s"
 
 # Check if the moodle-upgrade exists, if so, delete it
 if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
@@ -181,39 +149,9 @@ else
   oc delete job/migrate-build-files
 fi
 
-sleep 5
-
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
-
-sleep 5
-
-# Wait for file migration to complete
 wait_for "job/migrate-build-files" "complete" "800s"
-
-sleep 60
-
-COUNT=0
-SLEEP=10
-while true; do
-  # Make sure we have the most current name of the pod created by the job
-  job_status=$(oc get jobs migrate-build-files -o 'jsonpath={..status.failed}')
-  pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
-  message=$(oc logs $pod_name)
-  if [[ $job_status > 0 ]]; then
-    echo "migrate-build-files job has failed... Exiting due to error: $message"
-    exit 1
-  fi
-  if [[ $(oc get jobs migrate-build-files -o 'jsonpath={..status.active}') != "1" ]]; then
-    break
-  fi
-  echo "migrate-build-files job is still running... $(($COUNT * $SLEEP + 60)) seconds..."
-  COUNT=$((COUNT + 1))
-  sleep $SLEEP
-done
-echo "migrate-build-files job has completed."
-
-sleep 15
 
 echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade.yml \
@@ -221,36 +159,11 @@ oc process -f ./openshift/moodle-upgrade.yml \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
-
-sleep 15
-
-# Get the name of the pod created by the job
-pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
-
-# Wait until the pod is in the "Running" state
-while [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') != "Running" ]]; do
-  if [[ $(oc get pod $pod_name -o 'jsonpath={..status.phase}') == "Failed" ]]; then
-    echo "moodle-upgrade job Failed. Retrieving logs..."
-    oc logs $pod_name
-    echo "Exiting..."
-    exit 1
-  fi
-  echo "Waiting for pod $pod_name to be running."
-  sleep 10
-done
-
-sleep 30
-
-echo "Waiting for moodle-upgrade job to complete..."
-COUNT=0
-while [[ $(oc get jobs moodle-upgrade -o 'jsonpath={..status.active}') == "1" ]]; do
-  echo "moodle-upgrade job is still running..."
-  COUNT=$((COUNT + 1))
-  sleep $SLEEP
-done
-echo "moodle-upgrade job has completed."
+wait_for "job/moodle-upgrade" "complete" "800s"
 
 # Wait for the "File copy complete." message
+# Get the name of the pod created by the job
+pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
 oc logs -f $pod_name | while read line
 do
   echo $line
@@ -322,19 +235,28 @@ EOF
   echo $(cat hpa.yaml)
   oc create -f hpa.yaml
 
-  wait_for_deployment "$TARGET"
+  wait_for_deployment_without_errors "$TARGET"
+  wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
 done
 
 # Disable maintenance mode and verify output
 echo "Disabling maintenance mode..."
 manage_maintenance_mode "disable" $PHP_DEPLOYMENT_NAME
 
+# Create / update web route to direct traffic [back] to app
+oc process -f ./openshift/web-route.yml \
+  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  -p APP_NAME=$APP \
+  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
+  -p SITE_URL=$SITE_URL \
+  | oc create -f -
+
 echo "Redirecting traffic [back] to Moodle..."
-patch_route moodle-web web
+patch_route $APP-$WEB_DEPLOYMENT_NAME $WEB_DEPLOYMENT_NAME
 
 oc scale deployment/maintenance-message --replicas=0
 
 echo "Deployment complete."
 
 # Wait for things to warm up a bit before proceeding with the [lighthouse] tests
-sleep 300
+sleep 30

@@ -24,9 +24,9 @@ check_pod_logs() {
   # Check for the specific error message in the logs
   LOGS=$(oc logs $pod)
 
-  if echo "$LOGS" | grep -q "$error_message"; then
+  if echo "$LOGS" | grep -q "$error_search_string"; then
     # Capture the matched error line
-    ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_message")
+    ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
 
     echo "Error detected in: $pod"
     echo "Error: $ERROR_LINE."
@@ -41,7 +41,7 @@ check_pod_logs() {
 }
 
 # Function to wait for all pods in a deployment or statefulset to be running and check for errors
-wait_for_deployment() {
+wait_for_deployment_without_errors() {
   local resource=$1
   local error_search_string=${2:-error}
   local error_handler=${3:-delete_pod}

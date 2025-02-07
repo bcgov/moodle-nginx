@@ -1,0 +1,20 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    haproxy.router.openshift.io/timeout: 600s
+  labels:
+    service: ${WEB_DEPLOYMENT_NAME}
+    template: ${APP_NAME}
+  name: ${APP_NAME}-${WEB_DEPLOYMENT_NAME}
+  namespace: ${DEPLOY_NAMESPACE}
+spec:
+  host: ${SITE_URL}
+  port:
+    targetPort: 8080
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: ${WEB_DEPLOYMENT_NAME}
