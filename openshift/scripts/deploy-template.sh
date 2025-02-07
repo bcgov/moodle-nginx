@@ -189,7 +189,7 @@ oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 sleep 5
 
 # Wait for file migration to complete
-wait_for "job/migrate-build-files" "complete" "600s"
+wait_for "job/migrate-build-files" "complete" "800s"
 
 # Wait for the migrate-build-files job to complete
 echo "Pod $pod_name is now running."
