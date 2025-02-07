@@ -1,6 +1,6 @@
 #!/bin/bash
 
-$DEPLOYMENT_SELECTOR="$DEPLOYMENT_SELECTOR"
+$DEPLOYMENT_SELECTOR="deployment/$BUILD_NAME"
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh
