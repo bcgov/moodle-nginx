@@ -181,16 +181,15 @@ else
   oc delete job/migrate-build-files
 fi
 
-sleep 10
+sleep 5
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 
 sleep 5
 
-# Get the name of the pod created by the job
-# pod_name=$(oc get pods --selector=job-name=migrate-build-files -o jsonpath='{.items[0].metadata.name}')
-wait_for "job-name=migrate-build-files" "complete" "600s"
+# Wait for file migration to complete
+wait_for "job/migrate-build-files" "complete" "600s"
 
 # Wait for the migrate-build-files job to complete
 echo "Pod $pod_name is now running."

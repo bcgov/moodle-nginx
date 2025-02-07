@@ -191,7 +191,6 @@
         "wildcardPolicy": "None"
       }
 		},
-
     {
       "apiVersion": "apps/v1",
       "kind": "Deployment",
@@ -290,7 +289,6 @@
                     "cpu": "${PHP_CPU_REQUEST}"
                   },
                   "limits": {
-                    "memory": "${PHP_MEMORY_LIMIT}",
                     "cpu": "${PHP_CPU_LIMIT}"
                   }
                 },
@@ -647,7 +645,6 @@
         "test": false
       }
     },
-
     {
       "apiVersion": "apps/v1",
       "kind": "Deployment",
@@ -725,7 +722,6 @@
                     "cpu": "${WEB_CPU_REQUEST}"
                   },
                   "limits": {
-                    "memory": "${WEB_MEMORY_LIMIT}",
                     "cpu": "${WEB_CPU_LIMIT}"
                   }
                 }
@@ -890,7 +886,7 @@
       "description": "Requested amount of memory for the CRON container.",
       "displayName": "CRON Memory Request",
       "name": "CRON_MEMORY_REQUEST",
-      "value": "50Mi"
+      "value": "32Mi"
     },
     {
       "description": "Maximum amount of memory the Web container can use.",

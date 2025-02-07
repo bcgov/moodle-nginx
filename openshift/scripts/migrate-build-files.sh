@@ -1,7 +1,7 @@
 src_dir='/app/public'
 dest_dir='/var/www/html'
 timestamp_file='/var/www/html/last_migration_timestamp'
-rerun_block_seconds=3600 # Block rerun if last_run < 1 hour
+rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
 
 # Check if the script has been run within the past hour
 if [ -f "$timestamp_file" ]; then
