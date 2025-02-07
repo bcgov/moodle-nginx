@@ -153,7 +153,7 @@ patch_route() {
 
 # Function to wait for deployment pods to be ready or scaled to zero
 wait_for() {
-  local selector=$1
+  local resource=$1
   local condition=${2:-ready}
   local timeout=${3:-90s}
   local scale_direction=${4:-up}
