@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Source the utility script
-source ./openshift/scripts/_utils.sh
+source _utils.sh
 
 echo "Checking pod logs, using shell: $SHELL"
 

@@ -91,7 +91,9 @@ if [[ ! `oc describe configmap check-pod-logs-script 2>&1` =~ "NotFound" ]]; the
   echo "ConfigMap exists... Deleting: check-pod-logs-script"
   oc delete configmap check-pod-logs-script
 fi
-oc create configmap check-pod-logs-script --from-file=check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh
+oc create configmap check-pod-logs-script \
+  --from-file=check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh \
+  --from-file=_utils.sh=./openshift/scripts/_utils.sh
 oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
   | oc apply -f -

@@ -1,5 +1,5 @@
 # Source the utility script
-source ./_utils.sh
+source /usr/local/bin/_utils.sh
 
 # Check if the script has been run within the past hour
 check_last_run_timestamp
