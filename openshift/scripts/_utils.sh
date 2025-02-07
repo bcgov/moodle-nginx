@@ -1,5 +1,7 @@
 #!/bin/bash
 
+timestamp_file='/var/www/html/last_migration_timestamp'
+
 # Define error handling functions
 delete_pod() {
   local pod=$1
@@ -229,4 +231,40 @@ wait_for() {
     sleep $wait_time
     retry_count=$((retry_count + 1))
   done
+}
+
+check_last_run_timestamp() {
+  local rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
+  local rerun_minutes=$((rerun_block_seconds / 60))
+  local rerun_hours=$((rerun_minutes / 60))
+
+  echo "Checking last time maintenance script was run..."
+
+  # Check if the script has been run within the past hour
+  if [ -f "$timestamp_file" ]; then
+    last_run=$(stat -c %Y "$timestamp_file")
+    current_time=$(date +%s)
+    time_diff=$((current_time - last_run))
+    time_diff_minutes=$((time_diff / 60))
+    time_diff_hours=$((time_diff_minutes / 60))
+
+    if [ $time_diff_minutes -gt 60 ]; then
+      last_run_message="Last run was $time_diff_hours hours ago."
+    else
+      last_run_message="Last run was $time_diff_minutes minutes ago."
+    fi
+
+    echo "Timestamp file found. $last_run_message"
+
+    if [ $time_diff -lt rerun_block_seconds ]; then
+      echo "The script has been run within the past $rerun_hours hours."
+      echo "Skipping file maintenance and migration."
+      exit 0
+    else
+      echo "The script has not been run within the past $rerun_hours hours."
+      echo "Continuing with file maintenance and migration processes..."
+    fi
+  else
+    echo "No timestamp file found. Continuing..."
+  fi
 }

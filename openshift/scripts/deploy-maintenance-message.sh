@@ -44,10 +44,10 @@ else
     -p WEB_IMAGE=$WEB_IMAGE \
     -p BUILD_NAME=$BUILD_NAME \
     | oc create -f -
-
-  # Wait for the deployment/to scale to 1
-  wait_for "$DEPLOYMENT_SELECTOR"
 fi
+
+# Wait for the deployment/to scale to 1
+wait_for "$DEPLOYMENT_SELECTOR"
 
 # Redirect traffic to maintenance-message
 patch_route $ROUTE_NAME $BUILD_NAME
