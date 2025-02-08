@@ -77,6 +77,10 @@ jobs:
       REDIS_URL: ${{ env.REDIS_URL }}
       REDIS_PORT: ${{ env.REDIS_PORT }}
       REDIS_REPLICAS: ${{ env.REDIS_REPLICAS }}
+      REDIS_REQUEST_CPU: ${{ env.REDIS_REQUEST_CPU }}
+      REDIS_REQUEST_MEMORY: ${{ env.REDIS_REQUEST_MEMORY }}
+      REDIS_LIMIT_CPU: ${{ env.REDIS_LIMIT_CPU }}
+      REDIS_LIMIT_MEMORY: ${{ env.REDIS_LIMIT_MEMORY }}
       DB_BACKUP_DEPLOYMENT_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_NAME }}
       DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ env.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
       BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
@@ -214,6 +218,10 @@ jobs:
       REDIS_HOST: ${{ needs.checkEnv.outputs.REDIS_HOST }}
       REDIS_URL: ${{ needs.checkEnv.outputs.REDIS_URL }}
       REDIS_REPLICAS: ${{ needs.checkEnv.outputs.REDIS_REPLICAS }}
+      REDIS_REQUEST_CPU: ${{ needs.checkEnv.outputs.REDIS_REQUEST_CPU }}
+      REDIS_REQUEST_MEMORY: ${{ needs.checkEnv.outputs.REDIS_REQUEST_MEMORY }}
+      REDIS_LIMIT_CPU: ${{ needs.checkEnv.outputs.REDIS_LIMIT_CPU }}
+      REDIS_LIMIT_MEMORY: ${{ needs.checkEnv.outputs.REDIS_LIMIT_MEMORY }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}

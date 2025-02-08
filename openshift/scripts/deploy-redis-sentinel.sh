@@ -28,6 +28,13 @@ replicas:
   persistence:
     enabled: true
     size: 50Mi
+  resources:
+    requests:
+      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
+    limits:
+      cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 sentinel:
   enabled: true
   persistence:

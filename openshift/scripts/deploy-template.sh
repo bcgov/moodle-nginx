@@ -23,7 +23,7 @@ wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
 # Define HPA settings
 HPAS=(
   "php deployment/$PHP_DEPLOYMENT_NAME 3 20 200m"
-  "redis-node sts/redis-node 6 20 80m"
+  "redis-node sts/redis-node 6 20 110m"
   "redis-proxy deployment/redis-proxy 3 20 3m"
   "web deployment/$WEB_DEPLOYMENT_NAME 3 20 4m"
 )

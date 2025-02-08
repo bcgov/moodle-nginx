@@ -60,6 +60,18 @@ on:
       REDIS_REPLICAS:
         required: true
         type: string
+      REDIS_REQUEST_CPU:
+        required: true
+        type: string
+      REDIS_REQUEST_MEMORY:
+        required: true
+        type: string
+      REDIS_LIMIT_CPU:
+        required: true
+        type: string
+      REDIS_LIMIT_MEMORY:
+        required: true
+        type: string
       REDIS_HOST:
         required: true
         type: string
@@ -188,6 +200,10 @@ jobs:
           REDIS_PROXY_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.REDIS_PROXY_NAME }}:${{ inputs.DEPLOY_NAMESPACE }}
           SECRET_REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           REDIS_REPLICAS: ${{ inputs.REDIS_REPLICAS }}
+          REDIS_REQUEST_CPU: ${{ inputs.REDIS_REQUEST_CPU }}
+          REDIS_REQUEST_MEMORY: ${{ inputs.REDIS_REQUEST_MEMORY }}
+          REDIS_LIMIT_CPU: ${{ inputs.REDIS_LIMIT_CPU }}
+          REDIS_LIMIT_MEMORY: ${{ inputs.REDIS_LIMIT_MEMORY }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
 
       - name: Deploy Moodle Template and Run Upgrades
