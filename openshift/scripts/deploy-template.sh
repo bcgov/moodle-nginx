@@ -12,11 +12,18 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 oc scale deployment/maintenance-message --replicas=1
 wait_for "deployment/maintenance-message"
 
+# Create / update web route
+oc apply -f ./openshift/web-route.yml \
+  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  -p APP_NAME=$APP \
+  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
+  -p SITE_URL=$SITE_URL
+
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
 patch_route moodle-web maintenance-message
 
-# Scale php to 1 replica
+# Scale [down] php to 1 replica
 oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
 wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
 
@@ -46,11 +53,35 @@ manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=0
 wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "60s" "down"
 
-echo "Delete cron job if it exists..."
+echo "Delete cron jobs if they exists..."
 # Check if cron exists
 if oc get deployment $CRON_NAME; then
   echo "$CRON_NAME Installation FOUND...Deleting..."
   oc delete deployment $CRON_NAME
+fi
+
+# Check if the job: moodle-upgrade exists, if so, delete it
+if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
+  echo "moodle-upgrade job NOT FOUND..."
+else
+  echo "moodle-upgrade job found... deleting..."
+  oc delete job moodle-upgrade
+fi
+
+# Check if the job: migrate-build-files exists, if so, delete it
+if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
+  echo "migrate-build-files job NOT FOUND..."
+else
+  echo "migrate-build-files job FOUND...Deleting..."
+  oc delete job/migrate-build-files
+fi
+
+# Check if the job: check-pod-logs exists, if so, delete it
+if [[ `oc describe cronjob check-pod-logs 2>&1` =~ "NotFound" ]]; then
+  echo "check-pod-logs cron job NOT FOUND..."
+else
+  echo "check-pod-logs cron job found... deleting..."
+  oc delete cronjob check-pod-logs
 fi
 
 # Create ConfigMaps (first delete, if necessary)
@@ -134,22 +165,6 @@ oc apply -f -
 
 echo "Rolling out $PHP_DEPLOYMENT_NAME..."
 wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "360s"
-
-# Check if the moodle-upgrade exists, if so, delete it
-if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
-  echo "moodle-upgrade job NOT FOUND..."
-else
-  echo "moodle-upgrade job found... deleting..."
-  oc delete job moodle-upgrade
-fi
-
-# Check if the migrate-build-files job exists, if so, delete it
-if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
-  echo "migrate-build-files job NOT FOUND..."
-else
-  echo "migrate-build-files job FOUND...Deleting..."
-  oc delete job/migrate-build-files
-fi
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
@@ -245,15 +260,7 @@ done
 echo "Disabling maintenance mode..."
 manage_maintenance_mode "disable" $PHP_DEPLOYMENT_NAME
 
-# Create / update web route to direct traffic [back] to app
-oc process -f ./openshift/web-route.yml \
-  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p APP_NAME=$APP \
-  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-  -p SITE_URL=$SITE_URL \
-  | oc apply -f -
-
-echo "Redirecting traffic [back] to Moodle..."
+echo "Directing traffic / route to Moodle..."
 patch_route $APP-$WEB_DEPLOYMENT_NAME $WEB_DEPLOYMENT_NAME
 
 oc scale deployment/maintenance-message --replicas=0

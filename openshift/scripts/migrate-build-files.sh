@@ -10,8 +10,10 @@ fi
 source /usr/local/bin/_utils.sh
 
 # Check if the script has been run within the time limit
-if [ check_last_run_timestamp -gt 0 ]; then
-  # The script has been run recently, skip it
+if check_last_run_timestamp; then
+  echo "File migration processes has not been run recently. Proceeding..."
+else
+  echo "Skipping file maintenance and migration processes as it has been run recenty."
   exit 0
 fi
 
@@ -39,7 +41,7 @@ echo "Clearing config caches..."
 rm /var/www/moodledata/muc/config.php
 
 # Count the number of files in the destination directory, excluding hidden files and directories
-final_count=$(find ${dest_dir} -type f -not -name '.*' | wc -l)
+final_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 echo "Final file count: $final_count"
 
 # Calculate the number of files deleted

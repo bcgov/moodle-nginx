@@ -284,17 +284,17 @@ check_last_run_timestamp() {
 
   # Check if the script has been run within the past hour
   if [ -f "$file_to_test" ]; then
-    if [ last_modified_minutes -lt $rerun_minutes ]; then
+    if [ "$last_modified_minutes" -lt "$rerun_minutes" ]; then
       echo "The script has been run within the past $rerun_hours hours."
       echo "Skipping file maintenance and migration."
       return 1
     else
       echo "The script has not been run within the past $rerun_hours hours."
       echo "Continuing with file maintenance and migration processes..."
+      return 0
     fi
   else
     echo "No file found to test last run time ($file_to_test). Continuing..."
+    return 0
   fi
-
-  return 0
 }
