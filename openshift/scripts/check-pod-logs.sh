@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Ensure the script is running with bash
+if [ -z "$BASH_VERSION" ]; then
+  echo "This script must be run with bash. Switching to bash..."
+  exec /bin/bash "$0" "$@"
+fi
+
 # Source the utility script
 source /scripts/_utils.sh
 
