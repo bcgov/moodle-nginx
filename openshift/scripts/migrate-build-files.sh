@@ -9,8 +9,11 @@ fi
 # Source the utility script
 source /usr/local/bin/_utils.sh
 
-# Check if the script has been run within the past hour
-check_last_run_timestamp
+# Check if the script has been run within the time limit
+if [ check_last_run_timestamp -gt 0 ]; then
+  # The script has been run recently, skip it
+  exit 0
+fi
 
 src_dir='/app/public'
 dest_dir='/var/www/html'

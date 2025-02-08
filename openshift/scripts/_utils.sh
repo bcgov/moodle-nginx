@@ -20,38 +20,63 @@ check_pod_logs() {
   local pod=$1
   local error_search_strings=${2:-"error"}
   local error_handler=${3:-delete_pod}
-
-  echo "Checking: $pod"
+  local max_retries=5
+  local retry_count=0
+  local wait_time=10
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
-  # Get the list of containers in the pod
-  CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
+  local total_containers=0
+  local total_errors=0
 
-  echo $CONTAINERS
+  while true; do
+    local errors_detected=0
 
-  for container in $CONTAINERS; do
-    echo "Checking: $pod, container: $container"
+    # Get the list of containers in the pod
+    CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
+    total_containers=$(echo $CONTAINERS | wc -w)
 
-    # Check for the specific error message in the logs
-    LOGS=$(oc logs $pod -c $container)
+    for container in $CONTAINERS; do
+      echo "Checking logs for pod: $pod, container: $container"
 
-    for error_search_string in "${error_search_strings[@]}"; do
-      if echo "$LOGS" | grep -q "$error_search_string"; then
-        # Capture the matched error line
-        ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
+      # Check for the specific error messages in the logs
+      LOGS=$(oc logs $pod -c $container)
 
-        echo "Error detected in: $pod, container: $container"
-        echo "Error: $ERROR_LINE."
+      for error_search_string in "${error_strings[@]}"; do
+        if echo "$LOGS" | grep -q "$error_search_string"; then
+          # Capture the matched error line
+          ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
 
-        # Call the appropriate error handling function
-        $error_handler $pod
+          echo "Error detected in: $pod, container: $container"
+          echo "Error: $ERROR_LINE."
+
+          # Call the appropriate error handling function
+          $error_handler $pod
+          errors_detected=$((errors_detected + 1))
+          total_errors=$((total_errors + 1))
+          break
+        fi
+      done
+    done
+
+    if [ $errors_detected -eq 0 ]; then
+      echo "No errors found in pod: $pod after checking $total_containers containers."
+      break
+    else
+      echo "Total errors detected: $total_errors. Retrying after pod restart..."
+      retry_count=$((retry_count + 1))
+      if [ $retry_count -ge $max_retries ]; then
+        echo "Max retries reached. Exiting..."
         return 1
       fi
-    done
+      echo "Waiting for pod to restart and stabilize..."
+      sleep $wait_time
+    fi
   done
 
+  echo "Total containers checked: $total_containers"
+  echo "Total errors detected: $total_errors"
   return 0
 }
 
@@ -252,34 +277,24 @@ check_last_run_timestamp() {
   local rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
   local rerun_minutes=$((rerun_block_seconds / 60))
   local rerun_hours=$((rerun_minutes / 60))
+  local file_to_test=/var/www/html/index.php
+  local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
 
   echo "Checking last time maintenance script was run..."
 
   # Check if the script has been run within the past hour
-  if [ -f "$timestamp_file" ]; then
-    last_run=$(stat -c %Y "$timestamp_file")
-    current_time=$(date +%s)
-    time_diff=$((current_time - last_run))
-    time_diff_minutes=$((time_diff / 60))
-    time_diff_hours=$((time_diff_minutes / 60))
-
-    if [ $time_diff_minutes -gt 60 ]; then
-      last_run_message="Last run was $time_diff_hours hours ago."
-    else
-      last_run_message="Last run was $time_diff_minutes minutes ago."
-    fi
-
-    echo "Timestamp file found. $last_run_message"
-
-    if [ $time_diff -lt rerun_block_seconds ]; then
+  if [ -f "$file_to_test" ]; then
+    if [ $rerun_minutes -lt last_modified_minutes ]; then
       echo "The script has been run within the past $rerun_hours hours."
       echo "Skipping file maintenance and migration."
-      exit 0
+      return 1
     else
       echo "The script has not been run within the past $rerun_hours hours."
       echo "Continuing with file maintenance and migration processes..."
     fi
   else
-    echo "No timestamp file found. Continuing..."
+    echo "No file found to test last run time ($file_to_test). Continuing..."
   fi
+
+  return 0
 }
