@@ -216,7 +216,7 @@ wait_for() {
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
   local total_wait_time=$((timeout_seconds + wait_time))
 
-  echo "Waiting for $resource to be $condition. Max time: $timeout..."
+  echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
   while true; do
     if [[ $resource_type == "job" ]]; then
@@ -273,28 +273,40 @@ wait_for() {
   done
 }
 
-check_last_run_timestamp() {
-  local rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
-  local rerun_minutes=$((rerun_block_seconds / 60))
-  local rerun_hours=$((rerun_minutes / 60))
-  local file_to_test=/var/www/html/index.php
-  local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
+check_timestamp() {
+  local file_to_test=${1:-/var/www/html/index.php}
+  local default_rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
+  local rerun_block_seconds=${REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
 
   echo "Checking last time maintenance script was run..."
+
+  # Check if the environment variable is set and valid
+  if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
+    echo "Invalid REBUILD_TIME_LIMIT value. Using default value."
+    rerun_block_seconds=$default_rerun_block_seconds
+  fi
+
+  # If the value is 0, do not enforce the time limit
+  if [ "$rerun_block_seconds" -eq 0 ]; then
+    echo "REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
+    return 0
+  fi
+
+  local rerun_minutes=$((rerun_block_seconds / 60))
+  local rerun_hours=$((rerun_minutes / 60))
+  local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
 
   # Check if the script has been run within the past hour
   if [ -f "$file_to_test" ]; then
     if [ "$last_modified_minutes" -lt "$rerun_minutes" ]; then
       echo "The script has been run within the past $rerun_hours hours."
-      echo "Skipping file maintenance and migration."
       return 1
     else
       echo "The script has not been run within the past $rerun_hours hours."
-      echo "Continuing with file maintenance and migration processes..."
       return 0
     fi
   else
-    echo "No file found to test last run time ($file_to_test). Continuing..."
+    echo "No file found to test last run time ($file_to_test)."
     return 0
   fi
 }

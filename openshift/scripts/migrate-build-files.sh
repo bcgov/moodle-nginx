@@ -10,10 +10,10 @@ fi
 source /usr/local/bin/_utils.sh
 
 # Check if the script has been run within the time limit
-if check_last_run_timestamp; then
-  echo "File migration processes has not been run recently. Proceeding..."
+if check_timestamp; then
+  echo "Proceeding..."
 else
-  echo "Skipping file maintenance and migration processes as it has been run recenty."
+  echo "Skipping file maintenance."
   exit 0
 fi
 

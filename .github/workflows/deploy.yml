@@ -9,6 +9,9 @@ env:
 on:
   workflow_call:
     inputs:
+      REBUILD_TIME_LIMIT:
+        required: true
+        type: string
       DEPLOY_ENVIRONMENT:
         required: true
         type: string
@@ -210,6 +213,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
+          REBUILD_TIME_LIMIT: ${{ inputs.REBUILD_TIME_LIMIT }}
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           APP: ${{ inputs.APP }}

@@ -14,7 +14,7 @@ echo "Starting Moodle upgrade job..."
 cd /
 
 # Check if the script has been run within the time limit
-if [ check_last_run_timestamp -gt 0 ]; then
+if [ check_timestamp -gt 0 ]; then
   echo "The script has been run recently, skip upgrades."
   # exit 0
 else

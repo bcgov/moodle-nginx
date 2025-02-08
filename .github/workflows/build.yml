@@ -11,6 +11,9 @@ env:
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
   SKIP_DEPLOY: "NO"
+  # Only migarte new files if it hasn't been done recently
+  # in seconds, set to 0 to disable
+  REBUILD_TIME_LIMIT: 0
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -55,6 +58,7 @@ jobs:
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
       BRANCH: ${{ env.BRANCH }}
+      REBUILD_TIME_LIMIT: ${{ env.REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ env.OPENSHIFT_SERVER }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -195,6 +199,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
+      REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}
       APP: ${{ needs.checkEnv.outputs.APP }}
