@@ -251,7 +251,7 @@ oc process -f ./openshift/web-route.yml \
   -p APP_NAME=$APP \
   -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
   -p SITE_URL=$SITE_URL \
-  | oc create -f -
+  | oc apply -f -
 
 echo "Redirecting traffic [back] to Moodle..."
 patch_route $APP-$WEB_DEPLOYMENT_NAME $WEB_DEPLOYMENT_NAME
