@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Source the utility script
-source ./openshift/scripts/_utils.sh
+source /usr/local/bin/_utils.sh
 
 echo "Starting Moodle upgrade job..."
 

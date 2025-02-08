@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Source the utility script
-source _utils.sh
+source /usr/local/bin/_utils.sh
 
 echo "Checking pod logs, using shell: $SHELL"
 
