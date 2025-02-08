@@ -5,7 +5,7 @@ timestamp_file='/var/www/html/last_migration_timestamp'
 # Define error handling functions
 delete_pod() {
   local pod=$1
-  echo "Restarting pod..."
+  echo "Restarting (deleting) pod..."
   oc delete pod $pod
 }
 
@@ -18,26 +18,41 @@ log_error_continue() {
 # Function to check pod logs for errors
 check_pod_logs() {
   local pod=$1
-  local error_search_string=$2
+  local error_search_strings=${2:-"error"}
   local error_handler=${3:-delete_pod}
 
-  # Check for the specific error message in the logs
-  LOGS=$(oc logs $pod)
+  echo "Checking: $pod"
 
-  if echo "$LOGS" | grep -q "$error_search_string"; then
-    # Capture the matched error line
-    ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
+  # Split the error_search_strings into an array
+  IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
-    echo "Error detected in: $pod"
-    echo "Error: $ERROR_LINE."
+  # Get the list of containers in the pod
+  CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
 
-    # Call the appropriate error handling function
-    $error_handler $pod
-    return 1
-  else
-    echo "No errors found in pod: $pod"
-    return 0
-  fi
+  echo $CONTAINERS
+
+  for container in $CONTAINERS; do
+    echo "Checking: $pod, container: $container"
+
+    # Check for the specific error message in the logs
+    LOGS=$(oc logs $pod -c $container)
+
+    for error_search_string in "${error_search_strings[@]}"; do
+      if echo "$LOGS" | grep -q "$error_search_string"; then
+        # Capture the matched error line
+        ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
+
+        echo "Error detected in: $pod, container: $container"
+        echo "Error: $ERROR_LINE."
+
+        # Call the appropriate error handling function
+        $error_handler $pod
+        return 1
+      fi
+    done
+  done
+
+  return 0
 }
 
 # Function to wait for all pods in a deployment or statefulset to be running and check for errors
