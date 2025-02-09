@@ -19,7 +19,7 @@ set cron-command="php %moodle-cli-path%/cron.php"
 
 :: Build / upgrade moodle
 :: PHP pod
-echo "Enabble maintenance mode..."
+echo "Enable maintenance mode..."
 docker exec -it %php-container-name% sh -c %maintenance-enable-command%
 
 SLEEP 10

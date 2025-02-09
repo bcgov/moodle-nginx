@@ -1,19 +1,5 @@
 #!/bin/bash
 
-text_to_find='Moodle frontpage.'
-file='/var/www/html/index.php'
-src_dir='/app/public'
-dest_dir='/var/www/html'
-
-echo 'Waiting for file copy to complete...'
-
-until grep -q "${text_to_find}" "${file}"
-do
-  sleep 5s
-done
-
-echo "File copy complete."
-echo ""
 echo "Verifying files in source and destination directories..."
 echo ""
 
@@ -30,25 +16,46 @@ if [ $src_count -eq $dest_count ]; then
 else
   echo "File copy is not complete. Source has $src_count files, but destination has $dest_count files."
   echo "Finding missing files..."
-  cd $src_dir && find . -type f | sort > /tmp/src_files
-  cd $dest_dir && find . -type f | sort > /tmp/dest_files
+
+  # Create temporary files to store the list of files
+  src_files=$(mktemp)
+  dest_files=$(mktemp)
+
+  # List files in source and destination directories, excluding hidden files and symbolic links
+  cd $src_dir && find . -type f ! -name ".*" ! -type l | sort > $src_files
+  cd $dest_dir && find . -type f ! -name ".*" ! -type l | sort > $dest_files
 
   # Find files that exist in the source directory but not in the destination directory
-  missing_files=$(comm -23 /tmp/src_files /tmp/dest_files)
+  missing_files=$(comm -23 $src_files $dest_files)
   if [ -n "$missing_files" ]; then
-    echo "Missing files:"
+    echo "Missing files in destination:"
     echo "$missing_files"
     echo ""
+  else
+    echo "No missing files in destination."
   fi
 
-   # Find files that exist in both directories but have different contents
+  # Find files that exist in the destination directory but not in the source directory
+  extra_files=$(comm -13 $src_files $dest_files)
+  if [ -n "$extra_files" ]; then
+    echo "Extra files in destination:"
+    echo "$extra_files"
+    echo ""
+  else
+    echo "No extra files in destination."
+  fi
+
+  # Find files that exist in both directories but have different contents
   differing_files=$(diff --brief -r $src_dir $dest_dir | grep -v "^Only")
   if [ -n "$differing_files" ]; then
     echo "Files with different contents:"
     echo "$differing_files"
+  else
+    echo "No files with different contents."
   fi
 
-  rm /tmp/src_files /tmp/dest_files
+  # Clean up temporary files
+  rm $src_files $dest_files
 
   # exit 1 # Don't exit here, as it will currently break deployments
 fi
