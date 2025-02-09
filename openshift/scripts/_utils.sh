@@ -17,51 +17,55 @@ log_error_continue() {
 
 # Function to check pod logs for errors
 check_pod_logs() {
-  local pod=$1
+  local deployment=$1
   local error_search_strings=${2:-"error"}
   local error_handler=${3:-delete_pod}
   local max_retries=5
   local retry_count=0
-  local wait_time=10
+  local wait_time=15
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
-  local total_containers=0
   local total_errors=0
 
   while true; do
     local errors_detected=0
 
-    # Get the list of containers in the pod
-    CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
-    total_containers=$(echo $CONTAINERS | wc -w)
+    # Get the list of pods in the deployment
+    PODS=$(oc get pods -l $deployment -o jsonpath='{.items[*].metadata.name}')
 
-    for container in $CONTAINERS; do
-      echo "Checking logs for pod: $pod, container: $container"
+    for pod in $PODS; do
+      # Get the list of containers in the pod
+      CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
+      total_containers=$(echo $CONTAINERS | wc -w)
 
-      # Check for the specific error messages in the logs
-      LOGS=$(oc logs $pod -c $container)
+      for container in $CONTAINERS; do
+        echo "Checking logs for pod: $pod, container: $container"
 
-      for error_search_string in "${error_strings[@]}"; do
-        if echo "$LOGS" | grep -q "$error_search_string"; then
-          # Capture the matched error line
-          ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
+        # Check for the specific error messages in the logs
+        LOGS=$(oc logs $pod -c $container)
 
-          echo "Error detected in: $pod, container: $container"
-          echo "Error: $ERROR_LINE."
+        for error_search_string in "${error_strings[@]}"; do
+          if echo "$LOGS" | grep -q "$error_search_string"; then
+            # Capture the matched error line
+            ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
 
-          # Call the appropriate error handling function
-          $error_handler $pod
-          errors_detected=$((errors_detected + 1))
-          total_errors=$((total_errors + 1))
-          break
-        fi
+            echo "Error detected in: $pod, container: $container"
+            echo "Error: $ERROR_LINE."
+
+            # Call the appropriate error handling function
+            $error_handler $pod
+            errors_detected=$((errors_detected + 1))
+            total_errors=$((total_errors + 1))
+            break
+          fi
+        done
       done
     done
 
     if [ $errors_detected -eq 0 ]; then
-      echo "No errors found in pod: $pod after checking $total_containers containers."
+      echo "No errors found in deployment: $deployment after checking $total_containers containers."
       break
     else
       echo "Total errors detected: $total_errors. Retrying after pod restart..."
@@ -70,7 +74,7 @@ check_pod_logs() {
         echo "Max retries reached. Exiting..."
         return 1
       fi
-      echo "Waiting for pod to restart and stabilize..."
+      echo "Waiting for pods to restart and stabilize..."
       sleep $wait_time
     fi
   done
