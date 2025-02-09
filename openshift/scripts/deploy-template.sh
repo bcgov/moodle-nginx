@@ -13,11 +13,7 @@ oc scale deployment/maintenance-message --replicas=1
 wait_for "deployment/maintenance-message"
 
 # Create / update web route
-oc apply -f ./openshift/web-route.yml \
-  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p APP_NAME=$APP \
-  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-  -p SITE_URL=$SITE_URL
+envsubst < ./openshift/web-route.yml | oc apply -f -
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
