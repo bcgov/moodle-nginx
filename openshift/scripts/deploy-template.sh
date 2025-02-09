@@ -23,9 +23,9 @@ oc apply -f ./openshift/web-route.yml \
 echo "Redirecting traffic to maintenance-message..."
 patch_route moodle-web maintenance-message
 
-# Scale [down] php to 1 replica
-oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
+# Enable Moodle maintenance mode
+# Should probbaly call cron deployment for this
+manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 
 # Define HPA settings
 HPAS=(
@@ -45,9 +45,9 @@ done
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
-# Enable Moodle maintenance mode
-# Should probbaly call cron deployment for this
-manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
+# Scale [down] php to 1 replica
+oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
 
 # Scale web to 0 replicas
 oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=0

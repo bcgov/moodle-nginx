@@ -14,10 +14,7 @@ echo "Starting Moodle upgrade job..."
 cd /
 
 # Check if the script has been run within the time limit
-if [ check_timestamp -gt 0 ]; then
-  echo "The script has been run recently, skip upgrades."
-  # exit 0
-else
+if check_timestamp; then
   echo "Running file maintenance and migration processes..."
 
   echo "Check for missing plugins..."
@@ -34,6 +31,8 @@ else
 
   echo "Run PHP config check..."
   php /var/www/html/info/phpconfigcheck.php
+else
+  echo "Skipping Moodle upgrade as it has been run within REBUILD_TIME_LIMIT."
 fi
 
 echo "Purging cache..."
