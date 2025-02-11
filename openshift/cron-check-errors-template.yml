@@ -43,4 +43,4 @@ objects:
                 - name: script-volume
                   configMap:
                     name: check-pod-logs-script
-                    defaultMode: 420
+                    defaultMode: 0755
