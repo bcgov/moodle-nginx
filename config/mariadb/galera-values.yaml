@@ -561,7 +561,7 @@ mariadbConfiguration: |-
   [mariadb]
   plugin_load_add=auth_pam
   extra_port = 8385
-  extra_max_connections = 10
+  extra_max_connections = 1000
 
   ## Data-at-Rest Encryption
   ## Use extraVolumes and extraVolumeMounts to mount /encryption filesystem

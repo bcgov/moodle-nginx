@@ -1,7 +1,7 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: ${APP_NAME}-${WEB_DEPLOYMENT_NAME}
+  name: ${APP}-${WEB_DEPLOYMENT_NAME}
   namespace: ${DEPLOY_NAMESPACE}
 spec:
   to:

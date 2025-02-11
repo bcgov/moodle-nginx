@@ -3,8 +3,11 @@
 echo "Verifying files in source and destination directories..."
 echo ""
 
+# Exclude directories that may cause permission issues
+EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig"
+
 # Use rsync to copy files, excluding hidden files and symbolic links
-rsync -rcn --out-format="%n" --existing --exclude=".*" --exclude='*/.*' $src_dir/ $dest_dir/ | sort | uniq
+rsync -rcn --out-format="%n" --existing $EXCLUDES $src_dir/ $dest_dir/ | sort | uniq
 
 # Count the number of files in source and destination directories, excluding hidden files and symbolic links
 src_count=$(find $src_dir -type f ! -name ".*" ! -type l | wc -l)

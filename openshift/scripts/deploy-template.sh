@@ -17,7 +17,7 @@ envsubst < ./openshift/web-route.yml | oc apply -f -
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
-patch_route moodle-web maintenance-message
+patch_route $APP-$WEB_DEPLOYMENT_NAME maintenance-message
 
 # Enable Moodle maintenance mode
 # Should probbaly call cron deployment for this
