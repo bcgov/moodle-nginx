@@ -32,7 +32,7 @@ if check_timestamp; then
   echo "Run PHP config check..."
   php /var/www/html/info/phpconfigcheck.php
 else
-  echo "Skipping Moodle upgrade as it has been run within REBUILD_TIME_LIMIT."
+  echo "Skipping Moodle upgrade as it has been run within $REBUILD_TIME_LIMIT seconds."
 fi
 
 echo "Purging cache..."

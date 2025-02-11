@@ -252,6 +252,8 @@ EOF
   wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
 done
 
+wait_for_deployment_without_errors "deployment/redis-proxy"
+
 # Disable maintenance mode and verify output
 echo "Disabling maintenance mode..."
 manage_maintenance_mode "disable" $PHP_DEPLOYMENT_NAME

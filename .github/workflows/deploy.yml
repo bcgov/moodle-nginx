@@ -11,7 +11,7 @@ on:
     inputs:
       REBUILD_TIME_LIMIT:
         required: true
-        type: string
+        type: number
       DEPLOY_ENVIRONMENT:
         required: true
         type: string

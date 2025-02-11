@@ -286,7 +286,7 @@ check_timestamp() {
 
   # Check if the environment variable is set and valid
   if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
-    echo "Invalid REBUILD_TIME_LIMIT value. Using default value."
+    echo "Invalid REBUILD_TIME_LIMIT value ($REBUILD_TIME_LIMIT). Using default value."
     rerun_block_seconds=$default_rerun_block_seconds
   fi
 

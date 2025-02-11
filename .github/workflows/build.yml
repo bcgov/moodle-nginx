@@ -9,7 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
   SKIP_DEPLOY: "NO"
   # Only migarte new files if it hasn't been done recently
   # in seconds, set to 0 to disable
