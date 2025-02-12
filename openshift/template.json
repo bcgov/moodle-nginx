@@ -844,7 +844,7 @@
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Limit CPU",
       "name": "PHP_CPU_LIMIT",
-      "value": "1200m"
+      "value": "2"
     },
     {
       "description": "Requested amount of memory for the CRON container.",
