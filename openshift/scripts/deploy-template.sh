@@ -85,15 +85,20 @@ if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]
   echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
   oc delete configmap $WEB_DEPLOYMENT_NAME-config
 fi
-
 echo "Creating configMap: $WEB_DEPLOYMENT_NAME-config"
 oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/default.conf
+
+if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-nginx-root-config 2>&1` =~ "NotFound" ]]; then
+  echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-nginx-root-config"
+  oc delete configmap $WEB_DEPLOYMENT_NAME-nginx-root-config
+fi
+echo "Creating configMap: $WEB_DEPLOYMENT_NAME-nginx-root-config"
+oc create configmap $WEB_DEPLOYMENT_NAME-nginx-root-config --from-file=./config/nginx/nginx.conf
 
 if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
   echo "ConfigMap exists... Deleting: $APP-config"
   oc delete configmap $APP-config
 fi
-
 echo "Creating configMap: $APP-config"
 oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
 
