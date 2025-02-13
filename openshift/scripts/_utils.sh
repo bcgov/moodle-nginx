@@ -40,7 +40,10 @@ check_pod_logs() {
       CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
       total_containers=$(echo $CONTAINERS | wc -w)
 
-      for container in $CONTAINERS; do
+      # Convert CONTAINERS to an array
+      IFS=' ' read -r -a container_array <<< "$CONTAINERS"
+
+      for container in "${container_array[@]}"; do
         echo "Checking logs for pod: $pod, container: $container"
 
         # Check for the specific error messages in the logs
@@ -65,10 +68,10 @@ check_pod_logs() {
     done
 
     if [ $errors_detected -eq 0 ]; then
-      echo "No errors found in deployment: $deployment after checking $total_containers containers."
+      echo "No errors detected."
       break
     else
-      echo "Total errors detected: $total_errors. Retrying after pod restart..."
+      echo "Errors detected: $total_errors. Retrying after pod restart..."
       retry_count=$((retry_count + 1))
       if [ $retry_count -ge $max_retries ]; then
         echo "Max retries reached. Exiting..."
@@ -79,8 +82,8 @@ check_pod_logs() {
     fi
   done
 
-  echo "Total containers checked: $total_containers"
-  echo "Total errors detected: $total_errors"
+  # echo "Total containers checked: $total_containers"
+  # echo "Total errors detected: $total_errors"
   return 0
 }
 
