@@ -67,8 +67,8 @@ create_redis_services "$REDIS_NAME"
 
 # Deploy the Redis proxy
 deploy_resource_from_template "./openshift/redis-proxy.yml" \
-  DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
-  REDIS_PROXY_NAME=$REDIS_PROXY_NAME
+  "DEPLOY_IMAGE=$REDIS_PROXY_IMAGE" \
+  "REDIS_PROXY_NAME=$REDIS_PROXY_NAME"
 wait_for "deployment/$REDIS_PROXY_NAME"
 
 # Deploy Redis Insight

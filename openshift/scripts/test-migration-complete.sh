@@ -4,10 +4,10 @@ echo "Verifying files in source and destination directories..."
 echo ""
 
 # Exclude directories that may cause permission issues
-EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig --exclude=.git"
+# EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig --exclude=.git"
 
 # Use rsync to copy files, excluding hidden files and symbolic links
-rsync -rcn --out-format="%n" --existing $EXCLUDES $src_dir/ $dest_dir/ | sort | uniq
+# rsync -rcn --out-format="%n" --existing $EXCLUDES $src_dir/ $dest_dir/ | sort | uniq
 
 # Count the number of files in source and destination directories, excluding hidden files and symbolic links
 src_count=$(find $src_dir -type f ! -name ".*" ! -type l | wc -l)
@@ -15,7 +15,7 @@ dest_count=$(find $dest_dir -type f ! -name ".*" ! -type l | wc -l)
 
 # Compare the file counts
 if [ $src_count -eq $dest_count ]; then
-  echo "All files have been copied. Count of src and dest match: $dest_count."
+  echo "All files have been copied. Count of src and dest match: $src_count / $dest_count."
 else
   echo "File copy is not complete. Source has $src_count files, but destination has $dest_count files."
   echo "Finding missing files..."

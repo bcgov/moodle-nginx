@@ -191,6 +191,18 @@ check_deployment_logs() {
   return 0
 }
 
+# Function to check if a resource exists
+resource_exists() {
+  local resource_type=$1
+  local resource_name=$2
+
+  if oc get $resource_type $resource_name &> /dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 # Function to wait for all pods in a deployment
 # or statefulset to be running and check for errors
 wait_for_deployment_without_errors() {
@@ -204,6 +216,12 @@ wait_for_deployment_without_errors() {
   # Split the resource into type and name
   local resource_type=${resource%%/*}
   local resource_name=${resource##*/}
+
+  # Check if the resource exists
+  if ! resource_exists $resource_type $resource_name; then
+    echo "Error from server (NotFound): ${resource_type}s.apps \"$resource_name\" not found"
+    return 1
+  fi
 
   # Get the list of pods created for the resource
   local pods=$(oc get pods --selector=${resource_type}=${resource_name} -o jsonpath='{.items[*].metadata.name}')
@@ -248,7 +266,7 @@ wait_for_deployment_without_errors() {
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
   local route_name="moodle-web"
-  local service_name="maintennance-message"
+  local service_name="maintenance-message"
   local route_timeout="30s"
 
   echo "Deploying maintenance mode..."
@@ -636,5 +654,13 @@ deploy_resource_from_template() {
   shift
   local params=("$@")
 
-  oc process -f $template_file "${params[@]}" | oc create -f -
+  # Construct the oc process command with parameters
+  local process_cmd="oc process -f $template_file"
+  for param in "${params[@]}"; do
+    process_cmd+=" -p $param"
+  done
+
+  # Execute the command
+  echo "Executing: $process_cmd"
+  eval $process_cmd | oc apply -f -
 }
