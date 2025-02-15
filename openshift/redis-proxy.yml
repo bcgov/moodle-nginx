@@ -12,7 +12,7 @@ objects:
         - port: 6379
           targetPort: 6379
       selector:
-        app: ${REDIS_PROXY_NAME}
+        deployment: ${REDIS_PROXY_NAME}
 
   - apiVersion: apps/v1
     kind: Deployment
@@ -20,15 +20,17 @@ objects:
       name: ${REDIS_PROXY_NAME}
       labels:
         app: ${REDIS_PROXY_NAME}
+        deployment: ${REDIS_PROXY_NAME}
     spec:
       replicas: 3
       selector:
         matchLabels:
-          app: ${REDIS_PROXY_NAME}
+          deployment: ${REDIS_PROXY_NAME}
       template:
         metadata:
           labels:
             app: ${REDIS_PROXY_NAME}
+            deployment: ${REDIS_PROXY_NAME}
         spec:
           imagePullSecrets:
             - name: artifactory-m950-learning

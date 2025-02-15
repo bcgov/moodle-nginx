@@ -324,7 +324,7 @@ wait_for() {
 
   # If timeout has been adjusted via parameter,
   #  use the new value by adjusting max_retries
-  if timeout_seconds -ne $((max_retries * wait_time)); then
+  if [[ $timeout_seconds -ne $((max_retries * wait_time)) ]]; then
     max_retries=$((timeout_seconds / wait_time))
     echo "Max retries set to $max_retries. Total wait time: $total_wait_time seconds."
   fi
@@ -368,6 +368,9 @@ wait_for() {
         if echo "$output" | grep -q "condition met"; then
           echo "All pods with selector '$label_selector' are in '$condition' condition."
           break
+        elif echo "$output" | grep -q "no matching resources found"; then
+          echo "No pods with selector '$label_selector' found. Exiting..."
+          return 1
         fi
       elif [[ $scale_direction == "down" ]]; then
         if echo "$output" | grep -q "no matching resources found"; then
@@ -379,13 +382,15 @@ wait_for() {
 
     if [[ $retry_count -ge $max_retries ]]; then
       echo "Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
-      exit 1
+      return 1
     fi
 
     echo "Retrying... ($(((retry_count + 1) * wait_time))/$timeout)"
     sleep $wait_time
     retry_count=$((retry_count + 1))
   done
+
+  return 0
 }
 
 check_timestamp() {
