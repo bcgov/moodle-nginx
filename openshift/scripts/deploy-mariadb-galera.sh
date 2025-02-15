@@ -98,10 +98,10 @@ else
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
     --set persistence.size=5Gi \
-    --set resources.requests.cpu=400m \
+    --set resources.requests.cpu=40m \
     --set resources.requests.memory=256Mi \
-    --set resources.limits.cpu=0 \
-    --set resources.limits.memory=0 \
+    --set resources.limits.cpu=null \
+    --set resources.limits.memory=null \
     --set readinessProbe.enabled=false \
     --set livenessProbe.enabled=false \
     --set galera.mariabackup.password=$DB_PASSWORD \

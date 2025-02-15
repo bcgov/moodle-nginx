@@ -453,7 +453,7 @@ wait_for() {
 
 check_timestamp() {
   local file_to_test=${1:-/var/www/html/index.php}
-  local default_rerun_block_seconds=36000 # Block rerun if last_run < 10 hours
+  local default_rerun_block_seconds=0 # Default to never blocking reruns
   local rerun_block_seconds=${REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
 
   echo "Checking last time maintenance script was run..."
