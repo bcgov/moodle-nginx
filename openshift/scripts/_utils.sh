@@ -327,7 +327,7 @@ wait_for() {
       fi
     fi
 
-    if [[ $retry_count -ge $total_wait_time ]]; then
+    if [[ $retry_count -ge $max_retries ]]; then
       echo "Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
       exit 1
     fi
