@@ -273,8 +273,19 @@ enable_maintenance_mode() {
 
   # Scale to 1 replica
   scale_deployment deployment $service_name 1 1
+
   # Create / update route
-  envsubst < ./openshift/web-route.yml | oc apply -f -
+  echo "Processing web-route.yml with oc process..."
+  processed_template=$(oc process -f ./openshift/web-route.yml -p ROUTE_NAME=$route_name -p SERVICE_NAME=$service_name -p ROUTE_TIMEOUT=$route_timeout)
+
+  # Print the processed template for debugging
+  echo "Processed template:"
+  echo "$processed_template"
+
+  # Apply the processed template
+  echo "Applying the processed template..."
+  echo "$processed_template" | oc apply -f -
+
   # Redirect traffic
   echo "Redirecting traffic: $route_name > $service_name"
   patch_route $route_name $service_name
