@@ -275,8 +275,13 @@ enable_maintenance_mode() {
   scale_deployment deployment $service_name 1 1
 
   # Create / update route
-  echo "Processing web-route.yml with oc process..."
-  processed_template=$(oc process -f ./openshift/web-route.yml -p ROUTE_NAME=$route_name -p SERVICE_NAME=$service_name -p ROUTE_TIMEOUT=$route_timeout)
+  echo "Processing web-route..."
+  processed_template=$(oc process \
+    -f ./openshift/web-route.yml \
+    -p ROUTE_NAME=$route_name \
+    -p SERVICE_NAME=$service_name \
+    -p ROUTE_TIMEOUT=$route_timeout
+  )
 
   # Print the processed template for debugging
   echo "Processed template:"
@@ -430,6 +435,8 @@ wait_for() {
         label_selector="app.kubernetes.io/name=$resource_name"
       fi
 
+      # oc wait --for=condition=ready pod -l 'deployment=maintenance-message' --timeout=5s
+
       # Check pod status
       output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$timeout 2>&1)
 
@@ -500,6 +507,21 @@ check_timestamp() {
   fi
 }
 
+# Ensure openShift resource values are valid
+validate_and_format_resource_value() {
+  local value=$1
+  local unit=$2
+
+  # Check if the value is a valid number
+  if [[ $value =~ ^[1-9]+$ ]]; then
+    echo "${value}${unit}"
+  elif [[ $value == "0" ]]; then
+    echo "'${value}'"
+  else
+    echo "null"
+  fi
+}
+
 # Function to set resources for a deployment
 set_resources() {
   local type=$1
@@ -509,29 +531,14 @@ set_resources() {
   local cpu_limit=null # removed from OS
   local mem_limit=null # removed from OS
 
-  if cpu_limit -gt 0 && mem_limit -gt 0; then
-    cpu_limit="${cpu_limit}m"
-    mem_limit="${mem_limit}Mi"
-  else
-    cpu_limit=null
-    mem_limit=null
-  fi
+  # Validate and format resource values
+  cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
+  mem_request=$(validate_and_format_resource_value "$mem_request" "Mi")
+  cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
+  mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  if cpu_request -gt 0 && mem_request -gt 0; then
-    cpu_request="${cpu_request}m"
-    mem_request="${mem_request}Mi"
-  elif cpu_request -eq 0 && mem_request -eq 0; then
-    cpu_request='0'
-    mem_request='0'
-    cpu_limit='0'
-    mem_limit='0'
-  else
-    cpu_request=null
-    mem_request=null
-  fi
-
-  cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
-  echo "Set: --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
+  cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
+  echo "Set: --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
   $cmd
 }
 
