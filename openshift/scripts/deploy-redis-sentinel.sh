@@ -10,13 +10,15 @@ export REDIS_STS_NAME="$REDIS_NAME-node"
 export REDIS_STATS_NAME="$REDIS_NAME-stats"
 
 # Create or update the ConfigMap for Redis stats
-create_or_update_configmap "$REDIS_STATS_NAME" "./config/redis/redis-stats.php"
+create_or_update_configmap "$REDIS_STATS_NAME" \
+  "./config/redis/redis-stats.php"
 
 # Delete existing Service for Redis proxy if it exists
 delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
 
 # Create the ConfigMap for Redis proxy
-create_or_update_configmap "$REDIS_PROXY_NAME-config" "config.json=./config/redis/sentinel_tunnel.remote.config.json"
+create_or_update_configmap "$REDIS_PROXY_NAME-config" \
+  "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
 # Create a temporary values file
 cat <<EOF > values.yaml
@@ -55,16 +57,18 @@ EOF
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
-create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" "values.yaml" "upgrade.yaml"
+create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
+  "values.yaml" \
+  "upgrade.yaml"
 wait_for "statefulset/$REDIS_NAME"
 
 # Create a service for each redis pod
-create_redis_services "$REDIS_NAME" "$DEPLOY_NAMESPACE"
+create_redis_services "$REDIS_NAME"
 
 # Deploy the Redis proxy
 deploy_resource_from_template "./openshift/redis-proxy.yml" \
-  -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
-  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME
+  DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
+  REDIS_PROXY_NAME=$REDIS_PROXY_NAME
 wait_for "deployment/$REDIS_PROXY_NAME"
 
 # Deploy Redis Insight

@@ -15,6 +15,52 @@ log_error_continue() {
   # Add any additional error handling logic here
 }
 
+# Function to scale a deployment
+scale_deployment() {
+  local type=$1
+  local deployment=$2
+  local pod_count=$3
+  local max_pods=$4
+
+  if [[ "$type" == "sts" ]]; then
+    cmd="oc scale $type $deployment --replicas=$pod_count"
+    echo "Executing: $cmd"
+    $cmd
+  elif [[ "$type" == "deployment" ]]; then
+    cmd="oc scale $type/$deployment --replicas=$pod_count"
+    echo "Executing: $cmd"
+    $cmd
+
+    # Remove existing autoscaler if it exists
+    if oc get hpa $deployment &> /dev/null; then
+      echo "Removing existing HorizontalPodAutoscaler for $deployment"
+      delete_resource_if_exists hpa $deployment
+    fi
+
+    # Add HorizontalPodAutoscaler if MaxPods > PodCount
+    local diff=$((max_pods - pod_count))
+    if [[ $diff -gt 0 ]]; then
+      cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
+      echo "Executing: $cmd"
+      $cmd
+    fi
+
+    # Calculate maxSurge and patch the deployment
+    local max_surge=$(( (diff * 100) / pod_count ))
+    max_surge="${max_surge}%"
+    echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+    oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+  fi
+
+  # Wait for the deployment to be ready
+  if wait_for_deployment_without_errors "$type/$deployment"; then
+    return 0
+  else
+    echo "Deployment $deployment failed to scale. Exiting..."
+    exit 1
+  fi
+}
+
 # Function to check logs for a single pod
 check_pod_logs() {
   local pod=$1
@@ -201,39 +247,33 @@ wait_for_deployment_without_errors() {
 
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
-  local deployment_name=$1
+  local route_name="moodle-web"
+  local service_name="maintennance-message"
   local route_timeout="30s"
-  local redirect_route_name="$APP-$WEB_DEPLOYMENT_NAME"
 
   echo "Deploying maintenance mode..."
 
   # Scale to 1 replica
-  scale_deployment deployment $redirect_route_name 1 1
+  scale_deployment deployment $service_name 1 1
   # Create / update route
   envsubst < ./openshift/web-route.yml | oc apply -f -
-  # Apply timeout to route (increase from default 30s)
-  oc annotate route $deployment_name --overwrite haproxy.router.openshift.io/timeout=$route_timeout
-  # Redirect traffic new route
-  echo "Redirecting traffic to $redirect_route_name..."
-  patch_route $deployment_name $redirect_route_name
+  # Redirect traffic
+  echo "Redirecting traffic: $route_name > $service_name"
+  patch_route $route_name $service_name
 }
 
 # Function to disable maintenance mode
 disable_maintenance_mode() {
-  local deployment_name=$1
-  local redirect_route_name="maintenance-message"
+  local route_name="moodle-web"
+  local service_name="web"
 
-  echo "Deploying maintenance mode..."
+  echo "Disabling maintenance mode..."
 
-  # Scale to 1 replica
-  scale_deployment deployment $redirect_route_name 1 1
-  # Create / update route
-  envsubst < ./openshift/web-route.yml | oc apply -f -
-  # Apply timeout to route (increase from default 30s)
-  oc annotate route $deployment_name --overwrite haproxy.router.openshift.io/timeout=$route_timeout
-  # Redirect traffic new route
-  echo "Redirecting traffic to $redirect_route_name..."
-  patch_route $deployment_name $redirect_route_name
+  # Scale to 0
+  scale_deployment deployment/$route_name 0 0
+  # Redirect traffic back to aapplication
+  echo "Redirecting traffic to $service_name..."
+  patch_route $route_name $service_name
 }
 
 # Function to manage maintenance mode
@@ -250,7 +290,7 @@ manage_maintenance_mode() {
   local expected_output=""
 
   if [[ $action == "enable" ]]; then
-    enable_maintenance_mode $deployment_name
+    enable_maintenance_mode
     expected_output="Your site is currently in CLI maintenance mode"
   else
     disable_mainenance_mode $deployment_name
@@ -445,52 +485,6 @@ set_resources() {
   $cmd
 }
 
-# Function to scale a deployment
-scale_deployment() {
-  local type=$1
-  local deployment=$2
-  local pod_count=$3
-  local max_pods=$4
-
-  if [[ "$type" == "sts" ]]; then
-    cmd="oc scale $type $deployment --replicas=$pod_count"
-    echo "Executing: $cmd"
-    $cmd
-  elif [[ "$type" == "deployment" ]]; then
-    cmd="oc scale $type/$deployment --replicas=$pod_count"
-    echo "Executing: $cmd"
-    $cmd
-
-    # Remove existing autoscaler if it exists
-    if oc get hpa $deployment &> /dev/null; then
-      echo "Removing existing HorizontalPodAutoscaler for $deployment"
-      delete_resource_if_exists hpa $deployment
-    fi
-
-    # Add HorizontalPodAutoscaler if MaxPods > PodCount
-    local diff=$((max_pods - pod_count))
-    if [[ $diff -gt 0 ]]; then
-      cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
-      echo "Executing: $cmd"
-      $cmd
-    fi
-
-    # Calculate maxSurge and patch the deployment
-    local max_surge=$(( (diff * 100) / pod_count ))
-    max_surge="${max_surge}%"
-    echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
-    oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
-  fi
-
-  # Wait for the deployment to be ready
-  if [[ wait_for_deployment_without_errors "$type/$deployment" ]]; then
-    return 0
-  fi
-
-  echo "Deployment $deployment failed to scale. Exiting..."
-  exit 1
-}
-
 # Function to create HorizontalPodAutoscaler
 create_hpa() {
   local name=$1
@@ -552,10 +546,9 @@ EOF
 # Function to create Redis services for each pod
 create_redis_services() {
   local redis_name=$1
-  local deploy_namespace=$2
 
   echo "Deploy Redis Service for each pod ..."
-  PODS=$(oc get pods -l app.kubernetes.io/name=$redis_name -n $deploy_namespace -o jsonpath='{.items[*].metadata.name}')
+  PODS=$(oc get pods -l app.kubernetes.io/name=$redis_name -o jsonpath='{.items[*].metadata.name}')
   for pod_name in $PODS; do
     sed "s/\${POD_NAME}/$pod_name/g" < ./openshift/redis-services.yml | oc apply -f -
     echo "Service created for: $pod_name"
