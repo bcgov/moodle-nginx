@@ -262,11 +262,11 @@ patch_route() {
 wait_for() {
   local resource=$1
   local condition=${2:-ready}
-  local timeout=${3:-90s}
+  local timeout=${3:-120s}
   local scale_direction=${4:-up}
-  local max_retries=30
+  local max_retries=24
   local retry_count=0
-  local wait_time=10
+  local wait_time=5
 
   # Extract resource type and name
   if [[ $resource == */* ]]; then
@@ -280,6 +280,13 @@ wait_for() {
   # Convert timeout to seconds for calculation
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
   local total_wait_time=$((timeout_seconds + wait_time))
+
+  # If timeout has been adjusted via parameter,
+  #  use the new value by adjusting max_retries
+  if timeout_seconds -ne $((max_retries * wait_time)); then
+    max_retries=$((timeout_seconds / wait_time))
+    echo "Max retries set to $max_retries. Total wait time: $total_wait_time seconds."
+  fi
 
   echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
@@ -492,10 +499,10 @@ create_redis_services() {
   local deploy_namespace=$2
 
   echo "Deploy Redis Service for each pod ..."
-  PODS=$(oc get pods -l app=$redis_name -n $deploy_namespace -o jsonpath='{.items[*].metadata.name}')
+  PODS=$(oc get pods -l app.kubernetes.io/name=$redis_name -n $deploy_namespace -o jsonpath='{.items[*].metadata.name}')
   for pod_name in $PODS; do
     sed "s/\${POD_NAME}/$pod_name/g" < ./openshift/redis-services.yml | oc apply -f -
-    echo "Service created for pod $pod_name"
+    echo "Service created for: $pod_name"
   done
 }
 
