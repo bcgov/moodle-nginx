@@ -275,13 +275,8 @@ enable_maintenance_mode() {
   scale_deployment deployment $service_name 1 1
 
   # Create / update route
-  echo "Processing web-route..."
-  processed_template=$(oc process \
-    -f ./openshift/web-route.yml \
-    -p ROUTE_NAME=$route_name \
-    -p SERVICE_NAME=$service_name \
-    -p ROUTE_TIMEOUT=$route_timeout
-  )
+  echo "Processing web-route-template..."
+  processed_template=$(oc process -f ./openshift/web-route-template.yml -p APP=$APP -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME -p APP_HOST_URL=$APP_HOST_URL)
 
   # Print the processed template for debugging
   echo "Processed template:"
