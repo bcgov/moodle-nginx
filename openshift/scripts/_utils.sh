@@ -21,6 +21,8 @@ scale_deployment() {
   local deployment=$2
   local pod_count=$3
   local max_pods=$4
+  local max_surge="100%"
+  local max_unavailable="33%"
 
   if [[ "$type" == "sts" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
@@ -45,11 +47,9 @@ scale_deployment() {
       $cmd
     fi
 
-    # Calculate maxSurge and patch the deployment
-    local max_surge=$(( (diff * 100) / pod_count ))
-    max_surge="${max_surge}%"
-    echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
-    oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+    # Patch the deployment
+    echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+    oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"$max_unavailable\"}}}}"
   fi
 
   # Wait for the deployment to be ready
@@ -435,18 +435,15 @@ wait_for() {
         label_selector="app.kubernetes.io/name=$resource_name"
       fi
 
-      # oc wait --for=condition=ready pod -l 'deployment=maintenance-message' --timeout=5s
-
       # Check pod status
-      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$timeout 2>&1)
+      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$wait_time 2>&1)
 
       if [[ $scale_direction == "up" ]]; then
         if echo "$output" | grep -q "condition met"; then
           echo "All pods with selector '$label_selector' are in '$condition' condition."
           break
         elif echo "$output" | grep -q "no matching resources found"; then
-          echo "No pods with selector '$label_selector' found. Exiting..."
-          return 1
+          echo "No pods with selector '$label_selector' found. Retrying..."
         fi
       elif [[ $scale_direction == "down" ]]; then
         if echo "$output" | grep -q "no matching resources found"; then
@@ -461,7 +458,7 @@ wait_for() {
       return 1
     fi
 
-    echo "Retrying... ($(((retry_count + 1) * wait_time))/$timeout)"
+    echo "Retrying... ($(((retry_count + 1) * wait_time))/$timeout_seconds)"
     sleep $wait_time
     retry_count=$((retry_count + 1))
   done
