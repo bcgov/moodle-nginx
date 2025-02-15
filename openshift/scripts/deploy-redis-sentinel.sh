@@ -1,22 +1,22 @@
 #!/bin/bash
-set -e # Exit on error
+#set -e # Exit on error
+
+# Source the utility script
+source ./openshift/scripts/_utils.sh
 
 oc project $OC_PROJECT
 
 export REDIS_STS_NAME="$REDIS_NAME-node"
 export REDIS_STATS_NAME="$REDIS_NAME-stats"
 
-if [[ `oc describe configmap/$REDIS_STATS_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap NOT FOUND: $REDIS_STATS_NAME"
-else
-  echo "$REDIS_STATS_NAME ConfigMap FOUND: Cleaning resources..."
-  oc delete configmap/$REDIS_STATS_NAME
-  echo "DELETED ConfigMap: $REDIS_STATS_NAME"
-fi
-echo "Creating ConfigMap: $REDIS_STATS_NAME"
-oc create configmap $REDIS_STATS_NAME --from-file=./config/redis/redis-stats.php
+# Create or update the ConfigMap for Redis stats
+create_or_update_configmap "$REDIS_STATS_NAME" "./config/redis/redis-stats.php"
 
-helm repo add bitnami https://charts.bitnami.com/bitnami
+# Delete existing Service for Redis proxy if it exists
+delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
+
+# Create the ConfigMap for Redis proxy
+create_or_update_configmap "$REDIS_PROXY_NAME-config" "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
 # Create a temporary values file
 cat <<EOF > values.yaml
@@ -32,9 +32,6 @@ replicas:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: $REDIS_LIMIT_CPU
-      memory: $REDIS_LIMIT_MEMORY
 sentinel:
   enabled: true
   persistence:
@@ -48,7 +45,7 @@ auth:
 EOF
 
 # Create minimal file for updates (or it will fail)
-cat <<EOF > redis-upgrade.yaml
+cat <<EOF > upgrade.yaml
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -56,83 +53,20 @@ replicas:
     size: 50Mi
 EOF
 
-# Check if the Helm deployment exists
-if helm list -q | grep -q "^$REDIS_NAME$"; then
-  echo "Helm deployment found. Updating..."
-  # Removed: --set auth.password="$SECRET_REDIS_PASSWORD"
-  helm_upgrade_response=$(helm upgrade --reuse-values -f redis-upgrade.yaml $REDIS_NAME $REDIS_HELM_CHART)
+# Create or update the Helm deployment
+helm repo add bitnami https://charts.bitnami.com/bitnami
+create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" "values.yaml" "upgrade.yaml"
+wait_for "statefulset/$REDIS_STS_NAME"
 
-  # Output the response for debugging purposes
-  echo "1. $helm_upgrade_response"
-
-  # Check if the helm upgrade command failed
-  if [[ $? -ne 0 ]]; then
-    echo "Helm upgrade failed with the following output:"
-    echo "2. $helm_upgrade_response"
-    exit 1
-  fi
-
-  # Upgrade the Helm deployment with the new values
-  if [[ $helm_upgrade_response =~ "Error" ]]; then
-    echo "❌ Helm upgrade FAILED."
-    echo "3. $helm_upgrade_response"
-    exit 1
-  fi
-
-  if [[ `oc describe sts/$REDIS_STS_NAME 2>&1` =~ "NotFound" ]]; then
-    echo "Helm chart ($REDIS_NAME) exists, but StatefulSet ($REDIS_STS_NAME) was NOT FOUND."
-    exit 1
-  fi
-else
-  echo "Helm deployment ($REDIS_NAME) NOT FOUND. Beginning deployment..."
-  # Removed: --set auth.password="$SECRET_REDIS_PASSWORD"
-  helm install --values values.yaml $REDIS_NAME $REDIS_HELM_CHART
-fi
-
-# Clean up the temporary values file
-rm values.yaml
-rm redis-upgrade.yaml
-
-echo "Helm updates completed for $REDIS_NAME."
-
-sleep 10
-
-if [[ ! `oc describe configmap $REDIS_PROXY_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $REDIS_PROXY_NAME-config"
-  oc delete configmap $REDIS_PROXY_NAME-config
-fi
-
-if [[ ! `oc describe svc $REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "Service exists... Deleting: $REDIS_PROXY_NAME"
-  oc delete svc $REDIS_PROXY_NAME
-fi
-
-sleep 10
-
-echo "Creating configMap: $REDIS_PROXY_NAME-config"
-oc create configmap $REDIS_PROXY_NAME-config --from-file=config.json=./config/redis/sentinel_tunnel.remote.config.json
-
-sleep 10
-
-echo "Deploying $REDIS_PROXY_NAME..."
-if [[ `oc describe deployment/$REDIS_PROXY_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "deployment/$REDIS_PROXY_NAME NOT FOUND..."
-else
-  # If the proxy exists, delete it
-  echo "deployment/$REDIS_PROXY_NAME found... deleting..."
-  oc delete deployment/$REDIS_PROXY_NAME
-  sleep 20
-fi
+# Create a service for each redis pod
+create_redis_services "$REDIS_NAME" "$DEPLOY_NAMESPACE"
 
 # Deploy the Redis proxy
-oc process -f ./openshift/redis-proxy.yml \
+deploy_resource_from_template "./openshift/redis-proxy.yml" \
   -p DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
-  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
-  | oc create -f -
+  -p REDIS_PROXY_NAME=$REDIS_PROXY_NAME
+wait_for "deployment/$REDIS_PROXY_NAME"
 
-# Set best-effort resource limits for the deployment
-# echo "Setting best-effort resource limits for the deployment..."
-# oc set resources sts/$REDIS_STS_NAME --limits=cpu=0,memory=0 --requests=cpu=0,memory=0
-
+# Deploy Redis Insight
 echo "Deploying Redis Insight..."
 oc apply -f ./openshift/redis-insight.yml

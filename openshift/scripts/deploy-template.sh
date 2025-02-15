@@ -14,6 +14,8 @@ wait_for "deployment/maintenance-message"
 
 # Create / update web route
 envsubst < ./openshift/web-route.yml | oc apply -f -
+# Apply timeout to route
+# oc annotate route $APP-$WEB_DEPLOYMENT_NAME --overwrite haproxy.router.openshift.io/timeout=180s
 
 # Redirect traffic to maintenance-message
 echo "Redirecting traffic to maintenance-message..."
@@ -23,126 +25,46 @@ patch_route $APP-$WEB_DEPLOYMENT_NAME maintenance-message
 # Should probbaly call cron deployment for this
 manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 
-# Define HPA settings
-HPAS=(
-  "php deployment/$PHP_DEPLOYMENT_NAME 3 20 200m"
-  "redis-node sts/redis-node 6 20 110m"
-  "redis-proxy deployment/redis-proxy 3 20 3m"
-  "web deployment/$WEB_DEPLOYMENT_NAME 3 20 4m"
-)
-
-# Delete existing HPAs
-for HPA in "${HPAS[@]}"; do
-  NAME=$(echo $HPA | awk '{print $1}')
-  echo "Deleting existing HPA: $NAME"
-  oc delete hpa $NAME --ignore-not-found
-done
-
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
 
-# Scale [down] php to 1 replica
-oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=1
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s"
+# Scale [down] php to 0 replicas
+scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "0" "0"
+wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s" "down"
 
 # Scale web to 0 replicas
-oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=0
+scale_deployment "deployment" "$WEB_DEPLOYMENT_NAME" "0" "0"
 wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "60s" "down"
 
-echo "Delete cron jobs if they exists..."
-# Check if cron exists
-if oc get deployment $CRON_NAME; then
-  echo "$CRON_NAME Installation FOUND...Deleting..."
-  oc delete deployment $CRON_NAME
-fi
+echo "Delete jobs..."
+delete_resource_if_exists cronjob check-pod-logs
+delete_resource_if_exists deployment $CRON_NAME
+delete_resource_if_exists job moodle-upgrade
+delete_resource_if_exists job migrate-build-files
 
-# Check if the job: moodle-upgrade exists, if so, delete it
-if [[ `oc describe job moodle-upgrade 2>&1` =~ "NotFound" ]]; then
-  echo "moodle-upgrade job NOT FOUND..."
-else
-  echo "moodle-upgrade job found... deleting..."
-  oc delete job moodle-upgrade
-fi
+# Delete ConfigMaps
+delete_resource_if_exists configmap $CRON_NAME-config
 
-# Check if the job: migrate-build-files exists, if so, delete it
-if [[ `oc describe job migrate-build-files 2>&1` =~ "NotFound" ]]; then
-  echo "migrate-build-files job NOT FOUND..."
-else
-  echo "migrate-build-files job FOUND...Deleting..."
-  oc delete job/migrate-build-files
-fi
+# Create ConfigMaps
+create_or_update_configmap "$WEB_DEPLOYMENT_NAME-config" "default.conf=./config/nginx/fastcgi.conf"
+create_or_update_configmap "$WEB_DEPLOYMENT_NAME-nginx-root-config" "./config/nginx/nginx.conf"
+create_or_update_configmap "$APP-config" "config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php"
+create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./config/php/php-fpm.conf"
+create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
+create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh"
 
-# Check if the job: check-pod-logs exists, if so, delete it
-if [[ `oc describe cronjob check-pod-logs 2>&1` =~ "NotFound" ]]; then
-  echo "check-pod-logs cron job NOT FOUND..."
-else
-  echo "check-pod-logs cron job found... deleting..."
-  oc delete cronjob check-pod-logs
-fi
-
-# Create ConfigMaps (first delete, if necessary)
-if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-config"
-  oc delete configmap $WEB_DEPLOYMENT_NAME-config
-fi
-echo "Creating configMap: $WEB_DEPLOYMENT_NAME-config"
-oc create configmap $WEB_DEPLOYMENT_NAME-config --from-file=./config/nginx/default.conf
-
-if [[ ! `oc describe configmap $WEB_DEPLOYMENT_NAME-nginx-root-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $WEB_DEPLOYMENT_NAME-nginx-root-config"
-  oc delete configmap $WEB_DEPLOYMENT_NAME-nginx-root-config
-fi
-echo "Creating configMap: $WEB_DEPLOYMENT_NAME-nginx-root-config"
-oc create configmap $WEB_DEPLOYMENT_NAME-nginx-root-config --from-file=./config/nginx/nginx.conf
-
-if [[ ! `oc describe configmap $APP-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $APP-config"
-  oc delete configmap $APP-config
-fi
-echo "Creating configMap: $APP-config"
-oc create configmap $APP-config --from-file=config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php
-
-if [[ ! `oc describe configmap $CRON_NAME-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $CRON_NAME-config"
-  oc delete configmap $CRON_NAME-config
-fi
-
-if [[ ! `oc describe configmap $PHP_DEPLOYMENT_NAME-fpm-config 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: $PHP_DEPLOYMENT_NAME-fpm-config"
-  oc delete configmap $PHP_DEPLOYMENT_NAME-fpm-config
-fi
-
-echo "Creating configMap: $PHP_DEPLOYMENT_NAME-fpm-config"
-oc create configmap $PHP_DEPLOYMENT_NAME-fpm-config --from-file=zz-docker.conf=./config/php/php-fpm.conf
-
-echo "Creating configMap: $CRON_NAME-config"
-oc create configmap $CRON_NAME-config --from-file=config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php
-
-echo "Creating configMap: check-pod-logs-script"
-if [[ ! `oc describe configmap check-pod-logs-script 2>&1` =~ "NotFound" ]]; then
-  echo "ConfigMap exists... Deleting: check-pod-logs-script"
-  oc delete configmap check-pod-logs-script
-fi
-oc create configmap check-pod-logs-script \
-  --from-file=check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh \
-  --from-file=_utils.sh=./openshift/scripts/_utils.sh
+# Create cronjob to check pod logs for errors, and restart if necessary
 oc process -f ./openshift/cron-check-errors-template.yml \
   -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
   | oc apply -f -
 
-echo "Checking for: deployment/$WEB_DEPLOYMENT_NAME in $DEPLOY_NAMESPACE"
-
+# Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$WEB_DEPLOYMENT_NAME NOT FOUND..."
 else
   echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
   oc annotate --overwrite  deployment/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
 fi
-
-# Only use 1 redis replica for deployment / upgrade to avoid conflicts
-echo "Scale down $PHP_DEPLOYMENT_NAME to 0 replicas..."
-oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=0
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "60s" "down"
 
 echo "Deploy Template to OpenShift ..."
 oc process -f ./openshift/template.json \
@@ -164,7 +86,7 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
-echo "Rolling out $PHP_DEPLOYMENT_NAME..."
+scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
 wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "360s"
 
 echo "Create and run migrate-build-files job..."
@@ -190,10 +112,6 @@ do
   fi
 done
 
-echo "Scaling up php to 3 replicas..."
-oc scale deployment/$PHP_DEPLOYMENT_NAME --replicas=3
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "360s"
-
 echo "Purging caches..."
 oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' --wait
 
@@ -201,62 +119,10 @@ echo "Purging missing plugins..."
 plugin_purge=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run' --wait)
 echo "Result: $plugin_purge"
 
-# Scale web to 3 replicas
-oc scale deployment/$WEB_DEPLOYMENT_NAME --replicas=3
-wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
-
 # Right-sizing cluster, according to environment
-# bash ./openshift/scripts/right-sizing.sh
+bash ./openshift/scripts/right-sizing.sh
 
-# Create new HPAs
-for HPA in "${HPAS[@]}"; do
-  NAME=$(echo $HPA | awk '{print $1}')
-  TARGET=$(echo $HPA | awk '{print $2}')
-  MIN_REPLICAS=$(echo $HPA | awk '{print $3}')
-  MAX_REPLICAS=$(echo $HPA | awk '{print $4}')
-  AVG_VALUE=$(echo $HPA | awk '{print $5}')
-
-  echo "Creating HPA: $NAME"
-
-  # Determine the kind of the target resource
-  KIND="Deployment"
-  if [[ $TARGET == sts/* ]]; then
-    KIND="StatefulSet"
-    TARGET=${TARGET#sts/}
-  elif [[ $TARGET == deployment/* ]]; then
-    TARGET=${TARGET#deployment/}
-  fi
-
-  # Create a temporary template file
-  cat <<EOF > hpa.yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: $NAME
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: $KIND
-    name: $TARGET
-  minReplicas: $MIN_REPLICAS
-  maxReplicas: $MAX_REPLICAS
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageValue: $AVG_VALUE
-EOF
-
-  echo "Creating HPA from template:"
-  echo $(cat hpa.yaml)
-  oc create -f hpa.yaml
-
-  wait_for_deployment_without_errors "$TARGET"
-  wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "120s"
-done
-
+# Ensure that the Redis proxy is deployed and error-free
 wait_for_deployment_without_errors "deployment/redis-proxy"
 
 # Disable maintenance mode and verify output

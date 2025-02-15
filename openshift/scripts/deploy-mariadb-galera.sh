@@ -98,7 +98,7 @@ else
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
     --set persistence.size=5Gi \
-    --set resources.requests.cpu=50m \
+    --set resources.requests.cpu=400m \
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=0 \
     --set resources.limits.memory=0 \
@@ -133,7 +133,11 @@ fi
 # Function to check if a JSON path exists in the StatefulSet
 json_path_exists() {
   local path=$1
-  oc get statefulset $DB_DEPLOYMENT_NAME -o jsonpath="$path" &> /dev/null
+  if ! oc get statefulset $DB_DEPLOYMENT_NAME -o jsonpath="$path" &> /dev/null; then
+    echo "JSON path $path does not exist in the StatefulSet $DB_DEPLOYMENT_NAME"
+    return 1
+  fi
+  return 0
 }
 
 # Define the patches to add preStop hook to the StatefulSet
@@ -167,6 +171,8 @@ if oc get statefulset $DB_DEPLOYMENT_NAME &> /dev/null; then
 
   # Apply patches if there are any to apply
   if [ ${#patches_to_apply[@]} -gt 0 ]; then
+    echo "Applying patches to StatefulSet $DB_DEPLOYMENT_NAME..."
+    echo "Patches to apply: [${patches_to_apply[*]}]"
     oc patch statefulset $DB_DEPLOYMENT_NAME --type=json -p "[${patches_to_apply[*]}]"
   else
     echo "All patches already applied. No changes needed."

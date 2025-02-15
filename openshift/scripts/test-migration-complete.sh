@@ -4,7 +4,7 @@ echo "Verifying files in source and destination directories..."
 echo ""
 
 # Exclude directories that may cause permission issues
-EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig"
+EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig --exclude=.git"
 
 # Use rsync to copy files, excluding hidden files and symbolic links
 rsync -rcn --out-format="%n" --existing $EXCLUDES $src_dir/ $dest_dir/ | sort | uniq
@@ -64,7 +64,7 @@ else
 fi
 
 # Find files in the destination directory that don't have read, write, and execute permissions for the owner
-incorrect_permissions_files=$(find $dest_dir -mindepth 1 -type d ! -perm 755 -o -type f ! -perm 644)
+incorrect_permissions_files=$(find $dest_dir -mindepth 1 -type d ! -perm 755 -o -type f ! -perm 644 ! -path "*/.git/*")
 
 echo ""
 

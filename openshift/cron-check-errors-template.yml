@@ -13,6 +13,7 @@ objects:
       name: check-pod-logs
     spec:
       schedule: "*/5 * * * *" # Run every 5 minutes
+      concurrencyPolicy: Forbid
       jobTemplate:
         spec:
           template:
@@ -38,9 +39,14 @@ objects:
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts
+                    - name: file-temp-localcache
+                      mountPath: /tmp/logs
               restartPolicy: OnFailure
               volumes:
                 - name: script-volume
                   configMap:
                     name: check-pod-logs-script
                     defaultMode: 0755
+                - name: file-temp-localcache
+                  persistentVolumeClaim:
+                    claimName: file-temp-localcache

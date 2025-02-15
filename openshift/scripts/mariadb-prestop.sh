@@ -2,7 +2,7 @@
 
 # Set the waiting period before the pod is terminated
 # For failover testing purposes (can/should set to 0 in prod)
-WAIT_PERIOD=600  # in seconds
+WAIT_PERIOD=60  # in seconds
 
 # Function to gracefully stop MariaDB service
 graceful_shutdown() {
