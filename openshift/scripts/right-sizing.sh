@@ -26,7 +26,7 @@ do
   echo "$Deployment ($Type)"
   # Ignore if the type is 'job'
   if [[ "$Type" == "sts" || "$Type" == "deployment" ]]; then
-    set_resources "$Type" "$Deployment" "$CPURequest" "$CPULimit" "$MemRequest" "$MemLimit"
+    set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest"
   fi
 
   if [[ $PodCount -eq 0 ]]; then

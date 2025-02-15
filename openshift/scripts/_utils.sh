@@ -494,12 +494,33 @@ set_resources() {
   local type=$1
   local deployment=$2
   local cpu_request=$3
-  local cpu_limit=$4
-  local mem_request=$5
-  local mem_limit=$6
+  local mem_request=$4
+  local cpu_limit=null # removed from OS
+  local mem_limit=null # removed from OS
 
-  cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit}m,memory=${mem_limit}Mi --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
-  echo "Set: --limits=cpu=${cpu_limit}m,memory=${mem_limit}Mi --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
+  if cpu_limit -gt 0 && mem_limit -gt 0; then
+    cpu_limit="${cpu_limit}m"
+    mem_limit="${mem_limit}Mi"
+  else
+    cpu_limit=null
+    mem_limit=null
+  fi
+
+  if cpu_request -gt 0 && mem_request -gt 0; then
+    cpu_request="${cpu_request}m"
+    mem_request="${mem_request}Mi"
+  elif cpu_request -eq 0 && mem_request -eq 0; then
+    cpu_request='0'
+    mem_request='0'
+    cpu_limit='0'
+    mem_limit='0'
+  else
+    cpu_request=null
+    mem_request=null
+  fi
+
+  cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
+  echo "Set: --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request}m,memory=${mem_request}Mi"
   $cmd
 }
 
@@ -511,11 +532,16 @@ create_hpa() {
   local max_replicas=$4
   local avg_value=$5
 
-  if avg_value == "0" || avg_value == "0.0" || max_replicas -le min_replicas || min_replicas == "0"; then
+  # Ensure avg_value includes "m" at the end
+  if [[ ! $avg_value =~ m$ ]]; then
+    avg_value="${avg_value}m"
+  fi
+
+  if [[ $avg_value == "0m" || $avg_value == "0.0m" || $max_replicas -le $min_replicas || $min_replicas == "0" ]]; then
     return 1
   fi
 
-  echo "Creating HPA: $name"
+  echo "Creating HPA: $name to scale at $avg_value"
 
   # Determine the kind of the target resource
   local kind="Deployment"
