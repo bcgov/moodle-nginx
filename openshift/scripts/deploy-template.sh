@@ -8,21 +8,8 @@ test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
-# Scale maintenance-message to 1 replica
-oc scale deployment/maintenance-message --replicas=1
-wait_for "deployment/maintenance-message"
-
-# Create / update web route
-envsubst < ./openshift/web-route.yml | oc apply -f -
-# Apply timeout to route
-# oc annotate route $APP-$WEB_DEPLOYMENT_NAME --overwrite haproxy.router.openshift.io/timeout=180s
-
-# Redirect traffic to maintenance-message
-echo "Redirecting traffic to maintenance-message..."
-patch_route $APP-$WEB_DEPLOYMENT_NAME maintenance-message
-
 # Enable Moodle maintenance mode
-# Should probbaly call cron deployment for this
+# Note: Should maybe use cron for this [instead of php pod]
 manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
 
 # Ensure secrets are linked for pulling from Artifactory

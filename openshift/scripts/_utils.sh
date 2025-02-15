@@ -145,14 +145,15 @@ check_deployment_logs() {
   return 0
 }
 
-# Function to wait for all pods in a deployment or statefulset to be running and check for errors
+# Function to wait for all pods in a deployment
+# or statefulset to be running and check for errors
 wait_for_deployment_without_errors() {
-  local resource=$1
+  local resource=$1 # e.g. deployment/web
   local error_search_string=${2:-error}
   local error_handler=${3:-delete_pod}
-  local max_retries=10
+  local max_retries=100
   local retry_count=0
-  local wait_time=10
+  local wait_time=5
 
   # Split the resource into type and name
   local resource_type=${resource%%/*}
@@ -169,10 +170,10 @@ wait_for_deployment_without_errors() {
           echo "${resource_name} pod Failed. Retrieving logs..."
           oc logs $pod
           echo "Exiting..."
-          exit 1
+          return 1
         fi
         echo "Waiting for pod $pod to be running..."
-        sleep 10
+        sleep $wait_time
       done
 
       echo "$pod is running. Checking for errors..."
@@ -185,8 +186,8 @@ wait_for_deployment_without_errors() {
         retry_count=$((retry_count + 1))
 
         if [[ $retry_count -ge $max_retries ]]; then
-          echo "Error found in pod $pod after $max_retries retries. Exiting..."
-          exit 1
+          echo "Error still found in pod $pod after $max_retries retries. Exiting..."
+          return 1
         fi
       else
         break
@@ -195,6 +196,44 @@ wait_for_deployment_without_errors() {
   done
 
   echo "All pods in $resource are running and error-free."
+  return 0
+}
+
+# Function to deploy and enable maintenance mode
+enable_maintenance_mode() {
+  local deployment_name=$1
+  local route_timeout="30s"
+  local redirect_route_name="$APP-$WEB_DEPLOYMENT_NAME"
+
+  echo "Deploying maintenance mode..."
+
+  # Scale to 1 replica
+  scale_deployment deployment $redirect_route_name 1 1
+  # Create / update route
+  envsubst < ./openshift/web-route.yml | oc apply -f -
+  # Apply timeout to route (increase from default 30s)
+  oc annotate route $deployment_name --overwrite haproxy.router.openshift.io/timeout=$route_timeout
+  # Redirect traffic new route
+  echo "Redirecting traffic to $redirect_route_name..."
+  patch_route $deployment_name $redirect_route_name
+}
+
+# Function to disable maintenance mode
+disable_maintenance_mode() {
+  local deployment_name=$1
+  local redirect_route_name="maintenance-message"
+
+  echo "Deploying maintenance mode..."
+
+  # Scale to 1 replica
+  scale_deployment deployment $redirect_route_name 1 1
+  # Create / update route
+  envsubst < ./openshift/web-route.yml | oc apply -f -
+  # Apply timeout to route (increase from default 30s)
+  oc annotate route $deployment_name --overwrite haproxy.router.openshift.io/timeout=$route_timeout
+  # Redirect traffic new route
+  echo "Redirecting traffic to $redirect_route_name..."
+  patch_route $deployment_name $redirect_route_name
 }
 
 # Function to manage maintenance mode
@@ -211,8 +250,10 @@ manage_maintenance_mode() {
   local expected_output=""
 
   if [[ $action == "enable" ]]; then
+    enable_maintenance_mode $deployment_name
     expected_output="Your site is currently in CLI maintenance mode"
   else
+    disable_mainenance_mode $deployment_name
     expected_output="Maintenance mode has been disabled"
   fi
 
@@ -297,7 +338,9 @@ wait_for() {
       if [[ $job_status > 0 ]]; then
         echo "Job $resource_name has failed. Retrieving logs..."
         pod_name=$(oc get pods --selector=job-name=$resource_name -o jsonpath='{.items[0].metadata.name}')
-        oc logs $pod_name
+        error_log_text=$(oc logs $pod_name)
+        echo "Error log:"
+        echo "$error_log_text"
         echo "Exiting..."
         exit 1
       fi
@@ -405,11 +448,11 @@ scale_deployment() {
   local max_pods=$4
 
   if [[ "$type" == "sts" ]]; then
-    cmd="oc scale sts $deployment --replicas=$pod_count"
+    cmd="oc scale $type $deployment --replicas=$pod_count"
     echo "Executing: $cmd"
     $cmd
   elif [[ "$type" == "deployment" ]]; then
-    cmd="oc scale deployment/$deployment --replicas=$pod_count"
+    cmd="oc scale $type/$deployment --replicas=$pod_count"
     echo "Executing: $cmd"
     $cmd
 
@@ -433,6 +476,14 @@ scale_deployment() {
     echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
     oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingParams\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
   fi
+
+  # Wait for the deployment to be ready
+  if [[ wait_for_deployment_without_errors "$type/$deployment" ]]; then
+    return 0
+  fi
+
+  echo "Deployment $deployment failed to scale. Exiting..."
+  exit 1
 }
 
 # Function to create HorizontalPodAutoscaler

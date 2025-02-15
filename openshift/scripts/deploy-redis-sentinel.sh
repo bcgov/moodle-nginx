@@ -56,7 +56,7 @@ EOF
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" "values.yaml" "upgrade.yaml"
-wait_for "statefulset/$REDIS_NAME-node"
+wait_for "statefulset/$REDIS_NAME"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME" "$DEPLOY_NAMESPACE"
