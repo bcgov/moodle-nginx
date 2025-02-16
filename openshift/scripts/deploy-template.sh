@@ -22,7 +22,7 @@ if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s" "down"; then
   exit 1
 fi
 
-# Scale web to 0 replicas
+# Scale [down] web to 0 replicas
 scale_deployment "deployment" "$WEB_DEPLOYMENT_NAME" "0" "0"
 if ! wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "600s" "down"; then
   echo "Failed to scale $WEB_DEPLOYMENT_NAME to 0 replicas. Exiting..."
@@ -79,6 +79,7 @@ oc process -f ./openshift/template.json \
   -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
 oc apply -f -
 
+# Scale [up] php to 1 replica
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
 if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
   echo "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."

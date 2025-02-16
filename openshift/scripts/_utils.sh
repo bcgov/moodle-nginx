@@ -432,7 +432,7 @@ wait_for() {
       fi
 
       # Check pod status
-      oc_command="oc wait --for=condition=$condition pod -l $label_selector --timeout=$wait_time"
+      oc_command="oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s"
       output=$(oc_command 2>&1)
 
       echo "Executing: $oc_command"
