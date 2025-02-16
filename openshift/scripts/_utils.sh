@@ -391,11 +391,12 @@ wait_for() {
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
   local total_wait_time=$((timeout_seconds + wait_time))
 
-  # If timeout has been adjusted via parameter,
-  #  use the new value by adjusting max_retries
+  # If timeout has been adjusted via parameter
+  # use the new value by adjusting max_retries
   if [[ $timeout_seconds -ne $((max_retries * wait_time)) ]]; then
     max_retries=$((timeout_seconds / wait_time))
-    echo "Max retries set to $max_retries. Total wait time: $total_wait_time seconds."
+    echo "Timeout adjusted to $timeout. Total wait time: $total_wait_time seconds. Calculated timeout seconds: $timeout_seconds"
+    echo "Max retries set to $max_retries."
   fi
 
   echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
@@ -432,6 +433,8 @@ wait_for() {
 
       # Check pod status
       output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$wait_time 2>&1)
+
+      echo "Status: $output"
 
       if [[ $scale_direction == "up" ]]; then
         if echo "$output" | grep -q "condition met"; then

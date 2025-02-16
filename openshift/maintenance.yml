@@ -68,12 +68,9 @@ objects:
                   subPath: default.conf
               imagePullPolicy: Always
               resources:
-                limits:
-                  memory: '0'
-                  cpu: '0'
                 requests:
-                  memory: '0'
-                  cpu: '0'
+                  memory: 24Mi
+                  cpu: 10m
 parameters:
   - name: DEPLOY_NAMESPACE
     required: true

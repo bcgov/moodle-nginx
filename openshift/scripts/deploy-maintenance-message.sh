@@ -31,7 +31,7 @@ if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
 else
   echo "$DEPLOYMENT_SELECTOR Installation found...Scaling to 0..."
   oc scale $DEPLOYMENT_SELECTOR --replicas=0
-  wait_for "$DEPLOYMENT_SELECTOR" "ready" "20s" "down"
+  wait_for "$DEPLOYMENT_SELECTOR" "ready" "30s" "down"
 
   echo "Recreating $BUILD_NAME..."
   oc delete $DEPLOYMENT_SELECTOR -n $DEPLOY_NAMESPACE
