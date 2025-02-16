@@ -228,9 +228,18 @@ wait_for_deployment_without_errors() {
 
   for pod in $pods; do
     while true; do
+      # Get the pod status
+      pod_status=$(oc get pod $pod -o 'jsonpath={..status.phase}' 2>&1)
+
+      # Check if the pod is not found
+      if echo "$pod_status" | grep -q "NotFound"; then
+        echo "Pod $pod not found. Restarting the process..."
+        break
+      fi
+
       # Wait until the pod is in the "Running" state
-      while [[ $(oc get pod $pod -o 'jsonpath={..status.phase}') != "Running" ]]; do
-        if [[ $(oc get pod $pod -o 'jsonpath={..status.phase}') == "Failed" ]]; then
+      if [[ "$pod_status" != "Running" ]]; then
+        if [[ "$pod_status" == "Failed" ]]; then
           echo "${resource_name} pod Failed. Retrieving logs..."
           oc logs $pod
           echo "Exiting..."
@@ -238,23 +247,23 @@ wait_for_deployment_without_errors() {
         fi
         echo "Waiting for pod $pod to be running..."
         sleep $wait_time
-      done
-
-      echo "$pod is running. Checking for errors..."
-      if ! check_pod_logs $pod $error_search_string $error_handler; then
-        echo "Continuing..."
-        break
-      elif [[ $error_handler == "delete_pod" ]]; then
-        echo "Waiting for pod to restart..."
-        sleep $wait_time
-        retry_count=$((retry_count + 1))
-
-        if [[ $retry_count -ge $max_retries ]]; then
-          echo "Error still found in pod $pod after $max_retries retries. Exiting..."
-          return 1
-        fi
       else
-        break
+        echo "$pod is running. Checking for errors..."
+        if ! check_pod_logs $pod $error_search_string $error_handler; then
+          echo "Continuing..."
+          break
+        elif [[ $error_handler == "delete_pod" ]]; then
+          echo "Waiting for pod to restart..."
+          sleep $wait_time
+          retry_count=$((retry_count + 1))
+
+          if [[ $retry_count -ge $max_retries ]]; then
+            echo "Error still found in pod $pod after $max_retries retries. Exiting..."
+            return 1
+          fi
+        else
+          break
+        fi
       fi
     done
   done
