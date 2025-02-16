@@ -1,27 +1,15 @@
-apiVersion: v1
-kind: Template
+apiVersion: route.openshift.io/v1
+kind: Route
 metadata:
-  name: web-route-template
-objects:
-- apiVersion: route.openshift.io/v1
-  kind: Route
-  metadata:
-    name: ${APP}-${WEB_DEPLOYMENT_NAME}
-    annotations:
-      haproxy.router.openshift.io/timeout: 180s
-  spec:
-    to:
-      kind: Service
-      name: ${WEB_DEPLOYMENT_NAME}
-    host: ${APP_HOST_URL}
-    port:
-      targetPort: 8080
-    tls:
-      termination: edge
-parameters:
-- name: APP
-  description: Application name
-- name: WEB_DEPLOYMENT_NAME
-  description: Web deployment name
-- name: APP_HOST_URL
-  description: Application host URL
+  name: ${APP}-${WEB_DEPLOYMENT_NAME}
+  annotations:
+    haproxy.router.openshift.io/timeout: 180s
+spec:
+  to:
+    kind: Service
+    name: ${WEB_DEPLOYMENT_NAME}
+  host: ${APP_HOST_URL}
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge

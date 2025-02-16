@@ -31,7 +31,7 @@ if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
 else
   echo "$DEPLOYMENT_SELECTOR Installation found...Scaling to 0..."
   oc scale $DEPLOYMENT_SELECTOR --replicas=0
-  wait_for "$DEPLOYMENT_SELECTOR" "ready" "30s" "down"
+  wait_for "$DEPLOYMENT_SELECTOR" "ready" "90s" "down"
 
   echo "Recreating $BUILD_NAME..."
   oc delete $DEPLOYMENT_SELECTOR -n $DEPLOY_NAMESPACE
@@ -47,7 +47,12 @@ else
 fi
 
 # Wait for the deployment/to scale to 1
-wait_for "$DEPLOYMENT_SELECTOR"
+if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "500s"; then
+  # If maintenance deployment failed
+  # exit the deployment before changing the route
+  echo "$DEPLOYMENT_SELECTOR failed. Exiting..."
+  exit 1
+fi
 
 # Redirect traffic to maintenance-message
 patch_route $ROUTE_NAME $BUILD_NAME
