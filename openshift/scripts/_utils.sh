@@ -274,8 +274,8 @@ wait_for_deployment_without_errors() {
 
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
-  local route_name="$ROUTE_NAME"
-  local service_name="$BUILD_NAME"
+  local service_name=$1
+  local route_name=$2
   local route_timeout="60s"
 
   echo "Deploying maintenance mode: $route_name > $service_name"
@@ -333,7 +333,7 @@ manage_maintenance_mode() {
   local expected_output=""
 
   if [[ $action == "enable" ]]; then
-    enable_maintenance_mode
+    enable_maintenance_mode $deployment_name $host_name
     expected_output="Your site is currently in CLI maintenance mode"
   else
     disable_mainenance_mode $deployment_name
