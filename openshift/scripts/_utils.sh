@@ -315,7 +315,6 @@ manage_maintenance_mode() {
   local action=$1
   local deployment_name=$2
   local route_name=$3
-  local host_name=$4
 
   if [[ $action != "enable" && $action != "disable" ]]; then
     echo "Invalid action: $action. Use 'enable' or 'disable'."
@@ -326,10 +325,10 @@ manage_maintenance_mode() {
   local expected_output=""
 
   if [[ $action == "enable" ]]; then
-    enable_maintenance_mode $deployment_name $host_name
+    enable_maintenance_mode $deployment_name $route_name
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    disable_mainenance_mode $deployment_name
+    disable_maintenance_mode $deployment_name
     expected_output="Maintenance mode has been disabled"
   fi
 
