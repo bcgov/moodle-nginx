@@ -374,9 +374,9 @@ wait_for() {
   local condition=${2:-ready}
   local timeout=${3:-300s}
   local scale_direction=${4:-up}
-  local max_retries=60
+  local max_retries=30
   local retry_count=0
-  local wait_time=5
+  local wait_time=10
 
   # Extract resource type and name
   if [[ $resource == */* ]]; then
@@ -432,8 +432,10 @@ wait_for() {
       fi
 
       # Check pod status
-      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=$wait_time 2>&1)
+      oc_command="oc wait --for=condition=$condition pod -l $label_selector --timeout=$wait_time"
+      output=$(oc_command 2>&1)
 
+      echo "Executing: $oc_command"
       echo "Status: $output"
 
       if [[ $scale_direction == "up" ]]; then
