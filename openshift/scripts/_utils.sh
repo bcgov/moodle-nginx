@@ -287,7 +287,6 @@ enable_maintenance_mode() {
   # Create / update route
   deploy_resource_from_template ./openshift/web-route-template.yml \
     "APP=$APP" \
-    "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
     "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
     "APP_HOST_URL=$APP_HOST_URL"
 
