@@ -425,30 +425,34 @@ wait_for() {
       echo "Waiting for job $resource_name to complete..."
     else
       # Determine the appropriate label selector
-      local label_selector=""
-      if [[ $resource_type == "deployment" ]]; then
-        label_selector="deployment=$resource_name"
-      elif [[ $resource_type == "sts" || $resource_type == "statefulset" ]]; then
-        label_selector="app.kubernetes.io/name=$resource_name"
+      local label_selector="deployment=$resource_name"
+      local pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+
+      if [[ -z "$pods" ]]; then
+        label_selector="app=$resource_name"
+        pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
       fi
 
-      # Check pod status
-      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s 2>&1)
-
-      echo "Executing: oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s"
-      echo "Status: $output"
-
       if [[ $scale_direction == "up" ]]; then
-        if echo "$output" | grep -q "condition met"; then
-          echo "All pods with selector '$label_selector' are in '$condition' condition."
-          break
-        elif echo "$output" | grep -q "no matching resources found"; then
-          echo "No pods with selector '$label_selector' found. Retrying..."
+        if [[ -z "$pods" ]]; then
+          echo "No pods found for $resource. Retrying..."
+        else
+          for pod in $pods; do
+            output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
+            echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
+            echo "Status: $output"
+            if echo "$output" | grep -q "condition met"; then
+              echo "Pod $pod is in '$condition' condition."
+              break 2
+            fi
+          done
         fi
       elif [[ $scale_direction == "down" ]]; then
-        if echo "$output" | grep -q "no matching resources found"; then
-          echo "All pods with selector '$label_selector' have scaled down."
+        if [[ -z "$pods" ]]; then
+          echo "All pods for $resource have scaled down."
           break
+        else
+          echo "Pods still exist for $resource. Retrying..."
         fi
       fi
     fi
