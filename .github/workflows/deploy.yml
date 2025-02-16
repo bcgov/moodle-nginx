@@ -152,7 +152,6 @@ jobs:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
-          ROUTE_NAME: "moodle-web"
           APP: ${{ inputs.APP }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}

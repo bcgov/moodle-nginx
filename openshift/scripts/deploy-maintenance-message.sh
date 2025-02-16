@@ -1,6 +1,7 @@
 #!/bin/bash
 
 DEPLOYMENT_SELECTOR="deployment/$BUILD_NAME"
+ROUTE_NAME="moodle-web"
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh

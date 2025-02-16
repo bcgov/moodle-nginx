@@ -53,6 +53,7 @@ scale_deployment() {
   fi
 
   # Wait for the deployment to be ready
+  echo "Waiting for deployment to scale: $type/$deployment..."
   if wait_for_deployment_without_errors "$type/$deployment"; then
     return 0
   else
@@ -219,7 +220,7 @@ wait_for_deployment_without_errors() {
   local resource_name=${resource##*/}
 
   # Check if the resource exists
-  if ! resource_exists $resource_type $resource_name; then
+  if ! oc get $resource_type $resource_name &> /dev/null; then
     echo "❌ Error from server (NotFound): oc get $resource_type $resource_name not found"
     return 1
   fi
@@ -234,7 +235,7 @@ wait_for_deployment_without_errors() {
 
       # Check if the pod is not found
       if echo "$pod_status" | grep -q "NotFound"; then
-        echo "❌ Pod $pod not found. Restarting the process..."
+        echo "Pod $pod not found. Restarting the process..."
         break
       fi
 
@@ -244,7 +245,7 @@ wait_for_deployment_without_errors() {
           echo "❌ ${resource_name} pod Failed."
           # echo "Retrieving logs..."
           # oc logs $pod
-          echo "❌ Exiting..."
+          echo "Exiting..."
           return 1
         fi
         echo "Waiting for pod $pod to be running..."
@@ -539,7 +540,7 @@ validate_and_format_resource_value() {
   if [[ $value =~ ^[1-9]+$ ]]; then
     echo "${value}${unit}"
   elif [[ $value == "0" ]]; then
-    echo "'${value}'"
+    echo "'0'"
   else
     echo "null"
   fi
