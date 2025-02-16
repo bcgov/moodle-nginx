@@ -284,9 +284,6 @@ enable_maintenance_mode() {
   scale_deployment deployment $service_name 1 1
 
   # Create / update route
-  echo "Processing web-route-template..."
-  processed_template=$  (oc process -f ./openshift/web-route-template.yml -p APP=$APP -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME -p APP_HOST_URL=$APP_HOST_URL)
-
   deploy_resource_from_template ./openshift/web-route-template.yml \
     APP=$APP \
     DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
@@ -733,6 +730,7 @@ deploy_resource_from_template() {
   done
 
   # Execute the command
+  echo "Deploying resource from template: $template_file"
   echo "Executing: $process_cmd"
   eval $process_cmd | oc apply -f -
 }
