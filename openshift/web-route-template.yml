@@ -1,12 +1,14 @@
 apiVersion: v1
 kind: Template
 metadata:
-  name: web-route-template
+  name: ${APP}-${WEB_DEPLOYMENT_NAME}
+  namespace: ${DEPLOY_NAMESPACE}
 objects:
 - apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     name: ${APP}-${WEB_DEPLOYMENT_NAME}
+    namespace: ${DEPLOY_NAMESPACE}
     annotations:
       haproxy.router.openshift.io/timeout: 180s
   spec:

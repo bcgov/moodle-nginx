@@ -47,9 +47,9 @@ create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY
 create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh"
 
 # Create cronjob to check pod logs for errors, and restart if necessary
-oc process -f ./openshift/cron-check-errors-template.yml \
-  -p OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
-  | oc apply -f -
+deploy_resource_from_template ./openshift/cron-check-errors-template.yml \
+  OPENSHIFT_SERVER=$OPENSHIFT_SERVER
+
 
 # Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
@@ -60,24 +60,23 @@ else
 fi
 
 echo "Deploy Template to OpenShift ..."
-oc process -f ./openshift/template.json \
-  -p APP_NAME=$APP \
-  -p DB_HOST=$DB_HOST \
-  -p DB_USER=$DB_USER \
-  -p DB_NAME=$DB_NAME \
-  -p DB_PASSWORD=$DB_PASSWORD \
-  -p SITE_URL=$APP_HOST_URL \
-  -p BUILD_NAMESPACE=$BUILD_NAMESPACE \
-  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p IMAGE_REPO=$IMAGE_REPO \
-  -p WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-  -p WEB_IMAGE=$WEB_IMAGE \
-  -p CRON_NAME=$CRON_NAME \
-  -p PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
-  -p REDIS_HOST=$REDIS_HOST \
-  -p REDIS_PORT=$REDIS_PORT \
-  -p MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME | \
-oc apply -f -
+deploy_resource_from_template ./openshift/template.json \
+  APP_NAME=$APP \
+  DB_HOST=$DB_HOST \
+  DB_USER=$DB_USER \
+  DB_NAME=$DB_NAME \
+  DB_PASSWORD=$DB_PASSWORD \
+  SITE_URL=$APP_HOST_URL \
+  BUILD_NAMESPACE=$BUILD_NAMESPACE \
+  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  IMAGE_REPO=$IMAGE_REPO \
+  WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
+  WEB_IMAGE=$WEB_IMAGE \
+  CRON_NAME=$CRON_NAME \
+  PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
+  REDIS_HOST=$REDIS_HOST \
+  REDIS_PORT=$REDIS_PORT \
+  MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME
 
 # Scale [up] php to 1 replica
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
@@ -94,17 +93,16 @@ if ! wait_for "job/migrate-build-files" "complete" "800s"; then
 fi
 
 echo "Create and run Moodle upgrade job..."
-oc process -f ./openshift/moodle-upgrade.yml \
-  -p IMAGE_REPO=$IMAGE_REPO \
-  -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
-  | oc create -f -
+deploy_resource_from_template ./openshift/moodle-upgrade.yml \
+  IMAGE_REPO=$IMAGE_REPO \
+  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+  BUILD_NAME=$PHP_DEPLOYMENT_NAME
 if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
   echo "Failed to run Moodle upgrade job. Exiting..."
   exit 1
 fi
 
-# Wait for the "File copy complete." message
+# Wait for "File copy complete" message
 # Get the name of the pod created by the job
 pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
 oc logs -f $pod_name | while read line
