@@ -433,6 +433,11 @@ wait_for() {
         pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
       fi
 
+      if [[ -z "$pods" ]]; then
+        label_selector="app.kubernetes.io/name=$resource_name"
+        pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+      fi
+
       if [[ $scale_direction == "up" ]]; then
         if [[ -z "$pods" ]]; then
           echo "No pods found for $resource. Retrying..."
