@@ -220,7 +220,7 @@ wait_for_deployment_without_errors() {
 
   # Check if the resource exists
   if ! resource_exists $resource_type $resource_name; then
-    echo "Error from server (NotFound): ${resource_type}s.apps \"$resource_name\" not found"
+    echo "❌ Error from server (NotFound): oc get $resource_type $resource_name not found"
     return 1
   fi
 
@@ -234,24 +234,25 @@ wait_for_deployment_without_errors() {
 
       # Check if the pod is not found
       if echo "$pod_status" | grep -q "NotFound"; then
-        echo "Pod $pod not found. Restarting the process..."
+        echo "❌ Pod $pod not found. Restarting the process..."
         break
       fi
 
       # Wait until the pod is in the "Running" state
       if [[ "$pod_status" != "Running" ]]; then
         if [[ "$pod_status" == "Failed" ]]; then
-          echo "${resource_name} pod Failed. Retrieving logs..."
-          oc logs $pod
-          echo "Exiting..."
+          echo "❌ ${resource_name} pod Failed."
+          # echo "Retrieving logs..."
+          # oc logs $pod
+          echo "❌ Exiting..."
           return 1
         fi
         echo "Waiting for pod $pod to be running..."
         sleep $wait_time
       else
-        echo "$pod is running. Checking for errors..."
+        # echo "$pod is running. Checking for errors..."
         if ! check_pod_logs $pod $error_search_string $error_handler; then
-          echo "✔️ OK"
+          echo "✔️ $pod"
           break
         elif [[ $error_handler == "delete_pod" ]]; then
           echo "Waiting for pod to restart..."
@@ -299,13 +300,15 @@ enable_maintenance_mode() {
 disable_maintenance_mode() {
   local route_name="moodle-web"
   local service_name="web"
+  local maintenance_service_name="maintenance-message"
 
-  echo "Disabling maintenance mode..."
+  echo "Disabling $maintenance_service_name..."
 
   # Scale to 0
-  scale_deployment deployment/$route_name 0 0
-  # Redirect traffic back to aapplication
-  echo "Redirecting traffic to $service_name..."
+  scale_deployment deployment/$maintenance_service_name 0 0
+
+  # Redirect traffic back to application
+  echo "Redirecting traffic to: service/$service_name..."
   patch_route $route_name $service_name
 }
 
@@ -349,7 +352,7 @@ patch_route() {
   local route_name=$1
   local target_service=$2
 
-  echo "Patching route $route_name to target $target_service..."
+  echo "Patching route: $route_name > $target_service..."
   oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
   # Wait for the route change to take effect
@@ -360,11 +363,11 @@ patch_route() {
   while true; do
     current_target=$(oc get route $route_name -o jsonpath='{.spec.to.name}')
     if [[ "$current_target" == "$target_service" ]]; then
-      echo "Route $route_name successfully updated to $target_service."
+      echo "✔️ Route $route_name successfully updated to $target_service."
       break
     fi
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "Route update to $target_service failed after $((max_retries * wait_time)) seconds. Exiting..."
+      echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds. Exiting..."
       exit 1
     fi
     echo "Waiting for route $route_name to update to $target_service..."
@@ -552,6 +555,14 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
+  if $cpu_request == "'0'"; then
+    cpu_limit="'0'"
+  fi
+
+  if $mem_request == "'0'"; then
+    mem_limit="'0'"
+  fi
+
   cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
   echo "Set: --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
   $cmd
@@ -571,10 +582,11 @@ create_hpa() {
   fi
 
   if [[ $avg_value == "0m" || $avg_value == "0.0m" || $max_replicas -le $min_replicas || $min_replicas == "0" ]]; then
+    echo "Invalid HPA values. Exiting..."
     return 1
   fi
 
-  echo "Creating HPA: $name to scale at $avg_value"
+  echo "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
 
   # Determine the kind of the target resource
   local kind="Deployment"
@@ -612,7 +624,7 @@ EOF
   delete_resource_if_exists hpa $name
 
   echo "Creating HPA from template:"
-  echo $(cat hpa.yaml)
+  # echo $(cat hpa.yaml)
   oc create -f hpa.yaml
 
   wait_for_deployment_without_errors "$target"
