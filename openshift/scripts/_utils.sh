@@ -288,9 +288,9 @@ enable_maintenance_mode() {
 
   # Create / update route
   deploy_resource_from_template ./openshift/web-route-template.yml \
-    "APP=$APP" \
-    "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
-    "APP_HOST_URL=$APP_HOST_URL"
+    APP=$APP \
+    WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
+    APP_HOST_URL=$APP_HOST_URL
 
   # Redirect traffic
   echo "Redirecting traffic: $route_name > $service_name"

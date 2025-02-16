@@ -72,9 +72,9 @@ fi
 create_redis_services "$REDIS_NAME"
 
 # Deploy the Redis proxy
-deploy_resource_from_template "./openshift/redis-proxy.yml" \
-  "DEPLOY_IMAGE=$REDIS_PROXY_IMAGE" \
-  "REDIS_PROXY_NAME=$REDIS_PROXY_NAME"
+deploy_resource_from_template ./openshift/redis-proxy.yml \
+  DEPLOY_IMAGE=$REDIS_PROXY_IMAGE \
+  REDIS_PROXY_NAME=$REDIS_PROXY_NAME
 if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   echo "Failed to deploy Redis Proxy. Exiting..."
   exit 1
