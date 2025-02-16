@@ -13,7 +13,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 manage_maintenance_mode \
   "enable" \
   "$MAINTENANCE_SERVICE_NAME" \
-  "$ROUTE_NAME"
+  "$APP-$WEB_DEPLOYMENT_NAME"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
