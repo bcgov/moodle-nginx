@@ -284,7 +284,7 @@ enable_maintenance_mode() {
   echo "Deploying maintenance mode: $route_name > $service_name"
 
   # Scale to 1 replica
-  scale_deployment deployment $service_name 1 1
+  scale_deployment "deployment" "$service_name" 1 1
 
   # Create / update route
   deploy_resource_from_template ./openshift/web-route-template.yml \
@@ -306,7 +306,7 @@ disable_maintenance_mode() {
   echo "Disabling $maintenance_service_name..."
 
   # Scale to 0
-  scale_deployment deployment/$maintenance_service_name 0 0
+  scale_deployment "deployment" "$maintenance_service_name" 0 0
 
   # Redirect traffic back to application
   echo "Redirecting traffic to: service/$service_name..."
