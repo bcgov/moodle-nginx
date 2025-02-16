@@ -595,7 +595,6 @@ create_hpa() {
 
   # Determine the kind of the target resource
   local kind="Deployment"
-
   if [[ $target == sts/* ]]; then
     kind="StatefulSet"
     target=${target#sts/}
@@ -632,7 +631,7 @@ EOF
   # echo $(cat hpa.yaml)
   oc create -f hpa.yaml
 
-  wait_for_deployment_without_errors "$target"
+  wait_for_deployment_without_errors "$kind/$target"
 
   return 0
 }
