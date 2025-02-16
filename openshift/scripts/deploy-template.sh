@@ -10,7 +10,11 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
 # Note: Should maybe use cron for this [instead of php pod]
-manage_maintenance_mode "enable" $PHP_DEPLOYMENT_NAME
+manage_maintenance_mode \
+  "enable" \
+  "$PHP_DEPLOYMENT_NAME" \
+  "$ROUTE_NAME" \
+  "$APP_HOST_URL"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull

@@ -278,7 +278,7 @@ enable_maintenance_mode() {
   local service_name="$BUILD_NAME"
   local route_timeout="60s"
 
-  echo "Deploying maintenance mode..."
+  echo "Deploying maintenance mode: $route_name > $service_name"
 
   # Scale to 1 replica
   scale_deployment deployment $service_name 1 1
@@ -321,6 +321,8 @@ disable_maintenance_mode() {
 manage_maintenance_mode() {
   local action=$1
   local deployment_name=$2
+  local route_name=$3
+  local host_name=$4
 
   if [[ $action != "enable" && $action != "disable" ]]; then
     echo "Invalid action: $action. Use 'enable' or 'disable'."
