@@ -1,7 +1,7 @@
 kind: Template
 apiVersion: template.openshift.io/v1
 metadata:
-  name: cron-check-errors-template
+  name: check-pod-logs
 parameters:
   - name: OPENSHIFT_SERVER
     description: The OpenShift server URL

@@ -21,6 +21,9 @@ on:
       APP:
         required: true
         type: string
+      MOODLE_DEPLOYMENT_NAME:
+        required: true
+        type: string
       WEB_DEPLOYMENT_NAME:
         required: true
         type: string
@@ -219,6 +222,7 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           APP: ${{ inputs.APP }}
+          MOODLE_DEPLOYMENT_NAME: ${{ inputs.MOODLE_DEPLOYMENT_NAME }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}

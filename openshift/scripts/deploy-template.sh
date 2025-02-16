@@ -50,9 +50,8 @@ create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY
 create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh"
 
 # Create cronjob to check pod logs for errors, and restart if necessary
-deploy_resource_from_template ./openshift/cron-check-errors-template.yml \
+deploy_resource_from_template ./openshift/check-pod-logs.yml \
   OPENSHIFT_SERVER=$OPENSHIFT_SERVER
-
 
 # Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
