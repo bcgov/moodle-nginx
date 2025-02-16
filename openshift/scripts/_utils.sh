@@ -395,7 +395,7 @@ wait_for() {
     local resource_type=${resource%%/*}
     local resource_name=${resource##*/}
   else
-    echo "Invalid resource format: $resource. Expected format: <type>/<name>"
+    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>"
     exit 1
   fi
 
@@ -420,7 +420,6 @@ wait_for() {
       if [[ $job_status > 0 ]]; then
         echo "Job $resource_name has failed. Retrieving logs..."
         pod_name=$(oc get pods --selector=job-name=$resource_name -o jsonpath='{.items[0].metadata.name}')
-
         error_log_text=$(oc logs $pod_name)
         echo "Error log:"
         echo "$error_log_text"
@@ -430,7 +429,7 @@ wait_for() {
 
       job_status=$(oc get jobs $resource_name -o 'jsonpath={..status.succeeded}')
       if [[ $job_status > 0 ]]; then
-        echo "Job $resource_name has completed successfully."
+        echo "✔️ Job $resource_name has completed successfully."
         break
       fi
 
@@ -454,15 +453,21 @@ wait_for() {
         if [[ -z "$pods" ]]; then
           echo "No pods found for $resource. Retrying..."
         else
+          all_pods_ready=true
           for pod in $pods; do
             output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
             echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
             echo "Status: $output"
-            if echo "$output" | grep -q "condition met"; then
-              echo "✔️ Pod $pod is in '$condition' condition."
-              break 2
+            if ! echo "$output" | grep -q "condition met"; then
+              all_pods_ready=false
+              echo "Pod $pod is not in '$condition' condition. Retrying..."
+              break
             fi
           done
+          if $all_pods_ready; then
+            echo "✔️ All pods for $resource are in '$condition' condition."
+            break
+          fi
         fi
       elif [[ $scale_direction == "down" ]]; then
         if [[ -z "$pods" ]]; then
