@@ -408,6 +408,7 @@ wait_for() {
       if [[ $job_status > 0 ]]; then
         echo "Job $resource_name has failed. Retrieving logs..."
         pod_name=$(oc get pods --selector=job-name=$resource_name -o jsonpath='{.items[0].metadata.name}')
+
         error_log_text=$(oc logs $pod_name)
         echo "Error log:"
         echo "$error_log_text"
@@ -432,10 +433,9 @@ wait_for() {
       fi
 
       # Check pod status
-      oc_command="oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s"
-      output=$(oc_command 2>&1)
+      output=$(oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s 2>&1)
 
-      echo "Executing: $oc_command"
+      echo "Executing: oc wait --for=condition=$condition pod -l $label_selector --timeout=${wait_time}s"
       echo "Status: $output"
 
       if [[ $scale_direction == "up" ]]; then
