@@ -290,14 +290,6 @@ enable_maintenance_mode() {
     WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
     APP_HOST_URL=$APP_HOST_URL
 
-  # Print the processed template for debugging
-  echo "Processed template:"
-  echo "$processed_template"
-
-  # Apply the processed template
-  echo "Applying the processed template..."
-  echo "$processed_template" | oc apply -f -
-
   # Redirect traffic
   echo "Redirecting traffic: $route_name > $service_name"
   patch_route $route_name $service_name
@@ -391,6 +383,10 @@ wait_for() {
   local max_retries=30
   local retry_count=0
   local wait_time=10
+
+  # Wait to ensure the resource has had enough
+  # time to set the desired state
+  sleep 10
 
   # Extract resource type and name
   if [[ $resource == */* ]]; then

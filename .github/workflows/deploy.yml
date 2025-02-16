@@ -234,6 +234,7 @@ jobs:
           REDIS_PROXY_NAME: ${{ inputs.REDIS_PROXY_NAME }}
           PHP_DEPLOYMENT_NAME: ${{ inputs.PHP_DEPLOYMENT_NAME }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
+          MAINTENANCE_SERVICE_NAME: "maintenance-message"
           CRON_NAME: ${{ inputs.CRON_NAME }}
           CRON_IMAGE: ${{ inputs.CRON_IMAGE }}
           REDIS_NAME: ${{ inputs.REDIS_NAME }}

@@ -12,7 +12,7 @@ echo "Current namespace is $DEPLOY_NAMESPACE"
 # Note: Should maybe use cron for this [instead of php pod]
 manage_maintenance_mode \
   "enable" \
-  "$PHP_DEPLOYMENT_NAME" \
+  "$MAINTENANCE_SERVICE_NAME" \
   "$ROUTE_NAME" \
   "$APP_HOST_URL"
 
