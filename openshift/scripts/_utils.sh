@@ -163,19 +163,20 @@ check_deployment_logs() {
 
           # Wait for the pod to be fully restarted and stabilized
           echo "Waiting for pod $pod to restart and stabilize..."
+          sleep 10
           oc wait --for=condition=Ready pod/$pod --timeout=300s
           break
         fi
       done
 
       if [ $errors_detected -eq 0 ]; then
-        echo "OK"
+        echo "✔️ OK"
         break
       else
-        echo "Errors found: $total_errors."
+        echo "❌ Errors found: $total_errors."
         retry_count=$((retry_count + 1))
         if [ $retry_count -ge $max_retries ]; then
-          echo "Max retries reached. Exiting..."
+          echo "❌ Max retries reached. Exiting..."
           return 1
         fi
         echo "Waiting for pods to restart and stabilize..."
@@ -184,7 +185,7 @@ check_deployment_logs() {
     done
 
     if [ $total_errors -ne 0 ]; then
-      echo "Errors detected: $total_errors"
+      echo "❌ Errors detected: $total_errors"
     fi
   done
 
@@ -250,7 +251,7 @@ wait_for_deployment_without_errors() {
       else
         echo "$pod is running. Checking for errors..."
         if ! check_pod_logs $pod $error_search_string $error_handler; then
-          echo "Continuing..."
+          echo "✔️ OK"
           break
         elif [[ $error_handler == "delete_pod" ]]; then
           echo "Waiting for pod to restart..."
@@ -258,7 +259,7 @@ wait_for_deployment_without_errors() {
           retry_count=$((retry_count + 1))
 
           if [[ $retry_count -ge $max_retries ]]; then
-            echo "Error still found in pod $pod after $max_retries retries. Exiting..."
+            echo "❌ Error still found in pod $pod after $max_retries retries. Exiting..."
             return 1
           fi
         else
@@ -268,7 +269,7 @@ wait_for_deployment_without_errors() {
     done
   done
 
-  echo "All pods in $resource are running and error-free."
+  echo "✔️ All pods in $resource are running and error-free."
   return 0
 }
 
@@ -285,10 +286,10 @@ enable_maintenance_mode() {
 
   # Create / update route
   deploy_resource_from_template ./openshift/web-route-template.yml \
-    APP=$APP \
-    DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-    WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-    APP_HOST_URL=$APP_HOST_URL
+    "APP=$APP" \
+    "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
+    "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
+    "APP_HOST_URL=$APP_HOST_URL"
 
   # Redirect traffic
   echo "Redirecting traffic: $route_name > $service_name"
@@ -457,14 +458,14 @@ wait_for() {
             echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
             echo "Status: $output"
             if echo "$output" | grep -q "condition met"; then
-              echo "Pod $pod is in '$condition' condition."
+              echo "✔️ Pod $pod is in '$condition' condition."
               break 2
             fi
           done
         fi
       elif [[ $scale_direction == "down" ]]; then
         if [[ -z "$pods" ]]; then
-          echo "All pods for $resource have scaled down."
+          echo "✔️ All pods for $resource have scaled down."
           break
         else
           echo "Pods still exist for $resource. Retrying..."
@@ -473,7 +474,7 @@ wait_for() {
     fi
 
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
+      echo "❌ Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
       return 1
     fi
 

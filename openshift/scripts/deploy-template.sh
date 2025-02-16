@@ -52,7 +52,7 @@ create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshif
 
 # Create cronjob to check pod logs for errors, and restart if necessary
 deploy_resource_from_template ./openshift/cron-check-errors-template.yml \
-  OPENSHIFT_SERVER=$OPENSHIFT_SERVER
+  "OPENSHIFT_SERVER=$OPENSHIFT_SERVER"
 
 
 # Annotate the web deployment to trigger a restart if it already exists
@@ -65,22 +65,22 @@ fi
 
 echo "Deploy Template to OpenShift ..."
 deploy_resource_from_template ./openshift/template.json \
-  APP_NAME=$APP \
-  DB_HOST=$DB_HOST \
-  DB_USER=$DB_USER \
-  DB_NAME=$DB_NAME \
-  DB_PASSWORD=$DB_PASSWORD \
-  SITE_URL=$APP_HOST_URL \
-  BUILD_NAMESPACE=$BUILD_NAMESPACE \
-  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  IMAGE_REPO=$IMAGE_REPO \
-  WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-  WEB_IMAGE=$WEB_IMAGE \
-  CRON_NAME=$CRON_NAME \
-  PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME \
-  REDIS_HOST=$REDIS_HOST \
-  REDIS_PORT=$REDIS_PORT \
-  MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME
+  "APP_NAME=$APP" \
+  "DB_HOST=$DB_HOST" \
+  "DB_USER=$DB_USER" \
+  "DB_NAME=$DB_NAME" \
+  "DB_PASSWORD=$DB_PASSWORD" \
+  "SITE_URL=$APP_HOST_URL" \
+  "BUILD_NAMESPACE=$BUILD_NAMESPACE" \
+  "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
+  "IMAGE_REPO=$IMAGE_REPO" \
+  "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
+  "WEB_IMAGE=$WEB_IMAGE" \
+  "CRON_NAME=$CRON_NAME" \
+  "PHP_DEPLOYMENT_NAME=$PHP_DEPLOYMENT_NAME" \
+  "REDIS_HOST=$REDIS_HOST" \
+  "REDIS_PORT=$REDIS_PORT" \
+  "MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME"
 
 # Scale [up] php to 1 replica
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
@@ -98,9 +98,9 @@ fi
 
 echo "Create and run Moodle upgrade job..."
 deploy_resource_from_template ./openshift/moodle-upgrade.yml \
-  IMAGE_REPO=$IMAGE_REPO \
-  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  BUILD_NAME=$PHP_DEPLOYMENT_NAME
+  "IMAGE_REPO=$IMAGE_REPO" \
+  "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
+  "BUILD_NAME=$PHP_DEPLOYMENT_NAME"
 if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
   echo "Failed to run Moodle upgrade job. Exiting..."
   exit 1
