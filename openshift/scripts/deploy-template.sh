@@ -17,11 +17,17 @@ oc secrets link default artifactory-m950-learning --for=pull
 
 # Scale [down] php to 0 replicas
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "0" "0"
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s" "down"
+if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s" "down"; then
+  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 0 replicas. Exiting..."
+  exit 1
+fi
 
 # Scale web to 0 replicas
 scale_deployment "deployment" "$WEB_DEPLOYMENT_NAME" "0" "0"
-wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "60s" "down"
+if ! wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "600s" "down"; then
+  echo "Failed to scale $WEB_DEPLOYMENT_NAME to 0 replicas. Exiting..."
+  exit 1
+fi
 
 echo "Delete jobs..."
 delete_resource_if_exists cronjob check-pod-logs
@@ -74,11 +80,17 @@ oc process -f ./openshift/template.json \
 oc apply -f -
 
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
-wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "360s"
+if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
+  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."
+  exit 1
+fi
 
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
-wait_for "job/migrate-build-files" "complete" "800s"
+if ! wait_for "job/migrate-build-files" "complete" "800s"; then
+  echo "Failed to run migrate-build-files job. Exiting..."
+  exit 1
+fi
 
 echo "Create and run Moodle upgrade job..."
 oc process -f ./openshift/moodle-upgrade.yml \
@@ -86,7 +98,10 @@ oc process -f ./openshift/moodle-upgrade.yml \
   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   -p BUILD_NAME=$PHP_DEPLOYMENT_NAME \
   | oc create -f -
-wait_for "job/moodle-upgrade" "complete" "800s"
+if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
+  echo "Failed to run Moodle upgrade job. Exiting..."
+  exit 1
+fi
 
 # Wait for the "File copy complete." message
 # Get the name of the pod created by the job

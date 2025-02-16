@@ -44,7 +44,10 @@ else
   sleep 10
 
   oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1
-  wait_for "sts/$DB_DEPLOYMENT_NAME" "ready" "120s"
+  if ! wait_for "sts/$DB_DEPLOYMENT_NAME" "ready" "120s"; then
+    echo "Failed to scale $DB_DEPLOYMENT_NAME to 1 replica. Exiting..."
+    exit 1
+  fi
 fi
 
 echo "Checking if the database is online and contains expected Moodle data..."

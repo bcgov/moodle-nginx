@@ -63,7 +63,10 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "values.yaml" \
   "upgrade.yaml"
-wait_for "statefulset/$REDIS_NAME"
+if ! wait_for "statefulset/$REDIS_NAME"; then
+  echo "Failed to deploy Redis. Exiting..."
+  exit 1
+fi
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"
@@ -72,7 +75,10 @@ create_redis_services "$REDIS_NAME"
 deploy_resource_from_template "./openshift/redis-proxy.yml" \
   "DEPLOY_IMAGE=$REDIS_PROXY_IMAGE" \
   "REDIS_PROXY_NAME=$REDIS_PROXY_NAME"
-wait_for "deployment/$REDIS_PROXY_NAME"
+if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
+  echo "Failed to deploy Redis Proxy. Exiting..."
+  exit 1
+fi
 
 # Deploy Redis Insight
 echo "Deploying Redis Insight..."
