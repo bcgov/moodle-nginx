@@ -372,9 +372,9 @@ patch_route() {
 wait_for() {
   local resource=$1
   local condition=${2:-ready}
-  local timeout=${3:-120s}
+  local timeout=${3:-300s}
   local scale_direction=${4:-up}
-  local max_retries=24
+  local max_retries=60
   local retry_count=0
   local wait_time=5
 
