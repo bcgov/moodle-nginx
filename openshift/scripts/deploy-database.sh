@@ -93,7 +93,7 @@ until [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; do
   CURRENT_USER_COUNT=$(echo "$OUTPUT" | grep -oP '\d+')
 
   if [ $CURRENT_USER_COUNT -gt 0 ]; then
-    echo "Database is online and contains $CURRENT_USER_COUNT users."
+    echo "✔️ Database is online and contains $CURRENT_USER_COUNT users."
     echo "Resetting master to avoid repolication issues..."
     RESET=$(oc exec $DB_POD_NAME -- bash -c "mariadb -u root -e 'RESET MASTER;'" 2>&1)
     echo "Result: $RESET"
