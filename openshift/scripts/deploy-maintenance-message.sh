@@ -5,6 +5,17 @@ DEPLOYMENT_SELECTOR="deployment/$BUILD_NAME"
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Check if the utility script is sourced correctly
+if ! type deploy_resource_from_template &> /dev/null; then
+  echo "Error: deploy_resource_from_template function not found. Ensure _utils.sh is sourced correctly."
+  exit 1
+fi
+
+if ! type wait_for &> /dev/null; then
+  echo "Error: wait_for function not found. Ensure _utils.sh is sourced correctly."
+  exit 1
+fi
+
 # maintenance html page
 if [[ `oc describe configmap maintenance-page 2>&1` =~ "NotFound" ]]; then
   oc create configmap maintenance-page --from-file=./config/maintenance/index.html
