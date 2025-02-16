@@ -743,8 +743,7 @@ deploy_resource_from_template() {
     process_cmd+=" -p $param"
   done
 
-  # Execute the command
   echo "Deploying resource from template: $template_file"
-  echo "Executing: $process_cmd"
-  eval $process_cmd | oc apply -f -
+  echo "Executing: oc process -f $template_file ${params[@]}"
+  oc process -f $template_file "${params[@]}" | oc apply -f -
 }
