@@ -683,9 +683,16 @@ delete_resource_if_exists() {
   local resource_type=$1
   local resource_name=$2
 
-  if [[ ! `oc describe $resource_type $resource_name 2>&1` =~ "NotFound" ]]; then
+  echo "Checking if $resource_type exists: $resource_name"
+  oc_command="oc describe $resource_type $resource_name"
+  echo "Executing: $oc_command"
+  oc_output=$($oc_command 2>&1)
+
+  if [[ ! $oc_output =~ "NotFound" ]]; then
     echo "$resource_type exists... Deleting: $resource_name"
     oc delete $resource_type $resource_name
+  else
+    echo "$resource_type does not exist: $resource_name"
   fi
 }
 
