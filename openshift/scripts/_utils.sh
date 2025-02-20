@@ -539,7 +539,7 @@ validate_and_format_resource_value() {
   # Check if the value is a valid number
   if [[ $value =~ ^[1-9]+$ ]]; then
     echo "${value}${unit}"
-  elif [[ $value == "0" ]]; then
+  elif [[ $value == "0" || $value == 0 ]]; then
     echo "'0'"
   else
     echo "null"
@@ -561,11 +561,11 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  if $cpu_request == "'0'"; then
+  if [[ "$cpu_request" == "'0'" ]]; then
     cpu_limit="'0'"
   fi
 
-  if $mem_request == "'0'"; then
+  if [[ "$mem_request" == "'0'" ]]; then
     mem_limit="'0'"
   fi
 
