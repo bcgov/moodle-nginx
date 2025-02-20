@@ -552,8 +552,8 @@ set_resources() {
   local deployment=$2
   local cpu_request=$3
   local mem_request=$4
-  local cpu_limit=null # removed from OS
-  local mem_limit=null # removed from OS
+  local cpu_limit=$5
+  local mem_limit=$6
 
   # Validate and format resource values
   cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
@@ -561,16 +561,30 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  if [[ "$cpu_request" == "'0'" ]]; then
-    cpu_limit="'0'"
+  # Construct the oc set resources command
+  local cmd="oc set resources $type $deployment"
+  if [[ "$cpu_request" != "null" ]]; then
+    cmd+=" --requests=cpu=${cpu_request}"
+  else
+    cmd+=" --requests=cpu="
+  fi
+  if [[ "$mem_request" != "null" ]]; then
+    cmd+=",memory=${mem_request}"
+  else
+    cmd+=",memory="
+  fi
+  if [[ "$cpu_limit" != "null" ]]; then
+    cmd+=" --limits=cpu=${cpu_limit}"
+  else
+    cmd+=" --limits=cpu="
+  fi
+  if [[ "$mem_limit" != "null" ]]; then
+    cmd+=",memory=${mem_limit}"
+  else
+    cmd+=",memory="
   fi
 
-  if [[ "$mem_request" == "'0'" ]]; then
-    mem_limit="'0'"
-  fi
-
-  cmd="oc set resources $type $deployment --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
-  echo "Set: --limits=cpu=${cpu_limit},memory=${mem_limit} --requests=cpu=${cpu_request},memory=${mem_request}"
+  echo "Set: --requests=cpu=${cpu_request},memory=${mem_request} --limits=cpu=${cpu_limit},memory=${mem_limit}"
   $cmd
 }
 
