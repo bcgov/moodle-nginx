@@ -22,6 +22,9 @@ objects:
            - name: moodle-data
              persistentVolumeClaim:
                claimName: moodle-data
+           - name: file-temp-localcache
+             persistentVolumeClaim:
+               claimName: file-temp-localcache
            - name: cron-config
              configMap:
                name: cron-config
@@ -68,6 +71,8 @@ objects:
                - name: cron-config
                  mountPath: /var/www/html/config.php
                  subPath: config.php
+               - name: file-temp-localcache
+                 mountPath: /tmp/localcache
              command:
                - bash
                - "-c"

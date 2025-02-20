@@ -127,7 +127,7 @@ check_deployment_logs() {
   eval "declare -A deployments="${1#*=}
   local max_retries=15
   local retry_count=0
-  local wait_time=20
+  local wait_time=60
 
   for deployment in "${!deployments[@]}"; do
     local error_search_strings=${deployments[$deployment]:-"error"}
@@ -164,7 +164,7 @@ check_deployment_logs() {
 
           # Wait for the pod to be fully restarted and stabilized
           echo "Waiting for pod $pod to restart and stabilize..."
-          sleep 10
+          sleep $wait_time
           oc wait --for=condition=Ready pod/$pod --timeout=300s
           break
         fi

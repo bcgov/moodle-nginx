@@ -24,7 +24,7 @@ if check_timestamp; then
   php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run
 
   echo "Ensuring database encoding is utf8..."
-  php /var/www/html/admin/cli/mysql_collation.php --collation=utf8mb4_unicode_ci
+  php /var/www/html/admin/cli/mysql_collation.php --collation=utf8mb4_unicode_ci  > /dev/null
 
   echo "Running Moodle upgrades..."
   php /var/www/html/admin/cli/upgrade.php --non-interactive
