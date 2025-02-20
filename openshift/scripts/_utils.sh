@@ -93,17 +93,15 @@ check_pod_logs() {
     for error_search_string in "${error_strings[@]}"; do
       # echo "Searching for error string: $error_search_string"
       if echo "$LOGS" | grep -q "$error_search_string"; then
-        # Capture the matched error line
-        ERROR_LINE=$(echo "$LOGS" | grep -m 1 "$error_search_string")
-
-        echo " - Error detected:"
-        echo " - $ERROR_LINE."
-
-        log_error_to_file "$pod" "$container" "$ERROR_LINE" "$log_file"
-
-        # Call the appropriate error handling function
-        $error_handler $pod
-        return 0
+        # Check if the connection was reestablished
+        if echo "$logs" | grep -q "$error_search_string" && echo "$logs" | grep -q "Success"; then
+          echo "Connection was lost but reestablished. No need to restart the pod."
+          return 0
+        else
+          echo "Error found in pod logs: $error_search_string"
+          # Call the appropriate error handling function
+          $error_handler $pod
+        fi
       fi
     done
 
