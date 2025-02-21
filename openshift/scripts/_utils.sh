@@ -553,6 +553,12 @@ set_resources() {
   local cpu_limit=$5
   local mem_limit=$6
 
+  echo "Setting resources for $type/$deployment..."
+  echo "CPU Request: $cpu_request"
+  echo "Memory Request: $mem_request"
+  echo "CPU Limit: $cpu_limit"
+  echo "Memory Limit: $mem_limit"
+
   # Validate and format resource values
   cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
   mem_request=$(validate_and_format_resource_value "$mem_request" "Mi")
@@ -561,22 +567,22 @@ set_resources() {
 
   # Construct the oc set resources command
   local cmd="oc set resources $type $deployment"
-  if [[ "$cpu_request" != "null" ]]; then
+  if [[ "$cpu_request" != "null" && "$cpu_request" != 0 ]]; then
     cmd+=" --requests=cpu=${cpu_request}"
   else
     cmd+=" --requests=cpu="
   fi
-  if [[ "$mem_request" != "null" ]]; then
+  if [[ "$mem_request" != "null" && "$mem_request" != 0 ]]; then
     cmd+=",memory=${mem_request}"
   else
     cmd+=",memory="
   fi
-  if [[ "$cpu_limit" != "null" ]]; then
+  if [[ "$cpu_limit" != "null" && "$cpu_limit" != 0 ]]; then
     cmd+=" --limits=cpu=${cpu_limit}"
   else
     cmd+=" --limits=cpu="
   fi
-  if [[ "$mem_limit" != "null" ]]; then
+  if [[ "$mem_limit" != "null" && "$mem_limit" != 0 ]]; then
     cmd+=",memory=${mem_limit}"
   else
     cmd+=",memory="
