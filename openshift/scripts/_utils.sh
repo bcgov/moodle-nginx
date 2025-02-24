@@ -83,8 +83,6 @@ check_pod_logs() {
   # echo "Container array: ${container_array[@]}"
 
   for container in "${container_array[@]}"; do
-    echo " - $container"
-
     # Check for the specific error messages in the logs
     LOGS=$(oc logs $pod -c $container)
     # echo "Logs for pod: $pod, container: $container"
@@ -286,9 +284,9 @@ enable_maintenance_mode() {
 
   # Create / update route
   deploy_resource_from_template ./openshift/web-route-template.yml \
-    APP=$APP \
-    WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME \
-    APP_HOST_URL=$APP_HOST_URL
+    "APP=$APP" \
+    "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
+    "APP_HOST_URL=$APP_HOST_URL"
 
   # Redirect traffic
   echo "Redirecting traffic: $route_name > $service_name"
@@ -334,7 +332,7 @@ manage_maintenance_mode() {
   fi
 
   echo "${action^} maintenance mode..."
-  maintenance_output=$(oc exec deployment/$deployment_name -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action")
+  maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action")
 
   if echo "$maintenance_output" | grep -q "$expected_output"; then
     echo "Maintenance mode has been successfully ${action}d."
