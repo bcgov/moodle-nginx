@@ -1,7 +1,7 @@
 # Deploy MariaDB Galera to OpenShift
 
 # Set the number of replicas for the MariaDB Galera deployment
-DB_REPLICAS=5
+DB_REPLICAS=7
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
@@ -52,6 +52,9 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
+    --set replicaCount=$DB_REPLICAS \
+    --set persistence.size=3Gi \
+    --set resources.requests.cpu=100m \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
@@ -98,7 +101,7 @@ else
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
     --set persistence.size=3Gi \
-    --set resources.requests.cpu=40m \
+    --set resources.requests.cpu=100m \
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=null \
     --set resources.limits.memory=null \
