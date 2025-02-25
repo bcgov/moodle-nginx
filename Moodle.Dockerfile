@@ -62,13 +62,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     rsync \
-    memcached \
-    libmemcached-dev \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
-
-RUN yes '' | pecl install -f memcached-3.3.0 \
-  && docker-php-ext-enable memcached
 
 RUN mkdir -p $MOODLE_APP_DIR
 
