@@ -7,12 +7,14 @@ objects:
     kind: Route
     metadata:
       name: ${APP}-${WEB_DEPLOYMENT_NAME}
+      namespace: ${DEPLOY_NAMESPACE}
       annotations:
         haproxy.router.openshift.io/timeout: 180s
     spec:
       to:
         kind: Service
         name: ${WEB_DEPLOYMENT_NAME}
+        weight: 100
       host: ${APP_HOST_URL}
       port:
         targetPort: 8080
@@ -25,3 +27,5 @@ parameters:
     description: Web deployment name
   - name: APP_HOST_URL
     description: Application host URL
+  - name: DEPLOY_NAMESPACE
+    description: Deployment namespace
