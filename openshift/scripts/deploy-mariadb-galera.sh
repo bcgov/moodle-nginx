@@ -52,9 +52,6 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
-    --set replicaCount=$DB_REPLICAS \
-    --set persistence.size=3Gi \
-    --set resources.requests.cpu=100m \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
@@ -67,16 +64,6 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     echo "$helm_upgrade_response"
     exit 1
   fi
-
-  # helm upgrade $DB_DEPLOYMENT_NAME \
-  #   oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-  #   --set rootUser.password=$DB_PASSWORD \
-  #   --set galera.mariabackup.password=$DB_PASSWORD
-  #   -f ./config/mariadb/galera-values.yaml
-  # --set db.password=$DB_PASSWORD \
-  # --set db.user=$DB_USER \
-  # --set db.name=$DB_NAME \
-  # --set galera.mariabackup.forcePassword=true
 
 else
   echo "Helm deployment $DB_DEPLOYMENT_NAME NOT FOUND. Beginning deployment..."
