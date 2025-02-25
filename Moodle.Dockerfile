@@ -63,7 +63,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     rsync \
     memcached \
     libmemcached-dev \
-    php-memcached \
+    php8.1-memcached \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 

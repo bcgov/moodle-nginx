@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     rsync \
     memcached \
     libmemcached-dev \
-    php-memcached
+    php8.1-memcached
 
 RUN apt-get upgrade -y
 RUN apt-get autoremove -y
