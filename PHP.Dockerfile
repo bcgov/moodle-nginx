@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     memcached \
     libmemcached-dev
 
-RUN yes '' | pecl install -f memcached-3.2.0 \
+RUN yes '' | pecl install -f memcached-3.3.0 \
   && docker-php-ext-enable memcached
 
 RUN apt-get upgrade -y
