@@ -45,6 +45,9 @@ on:
       DB_DEPLOYMENT_NAME:
         required: true
         type: string
+      DB_REPLICAS:
+        required: true
+        type: string
       CRON_IMAGE:
         required: true
         type: string
@@ -189,6 +192,7 @@ jobs:
         env:
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           DB_IMAGE: ${{ inputs.DB_IMAGE }}
+          DB_REPLICAS: ${{ inputs.DB_REPLICAS }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}

@@ -1,8 +1,5 @@
 # Deploy MariaDB Galera to OpenShift
 
-# Set the number of replicas for the MariaDB Galera deployment
-DB_REPLICAS=7
-
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
