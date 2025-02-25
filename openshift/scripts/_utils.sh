@@ -760,6 +760,23 @@ deploy_resource_from_template() {
   done
 
   echo "Deploying resource from template: $template_file"
-  echo "Executing: oc process -f $template_file ${params[@]}"
-  oc process -f $template_file "${params[@]}" | oc apply -f -
+  echo "Executing: $process_cmd"
+
+  # Process the template and print the output for debugging
+  local processed_template
+  processed_template=$(eval $process_cmd)
+  echo "Processed template:"
+  echo "$processed_template"
+
+  # Extract the deployment name from the processed template
+  local deployment_name=$(echo "$processed_template" | jq -r '.items[] | select(.kind == "Deployment") | .metadata.name')
+
+  # Delete the existing deployment if it exists
+  if oc get deployment "$deployment_name" &> /dev/null; then
+    echo "Deleting existing deployment: $deployment_name"
+    oc delete deployment "$deployment_name"
+  fi
+
+  # Apply the processed template
+  echo "$processed_template" | oc apply -f -
 }
