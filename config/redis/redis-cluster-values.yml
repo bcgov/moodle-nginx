@@ -19,7 +19,7 @@ replica:
   replicaCount: 6
   persistence:
     enabled: true
-    size: 100Mi
+    size: 200Mi
   autoscaling:
     enabled: true
     minReplicas: 6
@@ -36,7 +36,7 @@ sentinel:
   automateClusterRecovery: true
   persistence:
     enabled: false
-    size: 100Mi
+    size: 20Mi
   resources:
     requests:
       memory: 32Mi

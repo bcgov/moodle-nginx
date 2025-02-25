@@ -30,6 +30,7 @@ $CFG->session_redis_database = 0; // Optional, default is db 0.
 $CFG->session_redis_acquire_lock_timeout = 120;
 $CFG->session_redis_lock_expire = 7200;
 $CFG->session_redis_serializer_use_igbinary = true;
+$CFG->session_redis_compressor = 'gzip';
 
 // localcachedir should be on LOCAL fast storage
 $CFG->localcachedir = '/tmp/localcache';

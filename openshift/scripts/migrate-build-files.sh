@@ -28,6 +28,9 @@ echo "Deleting shared Moodle files... in 5...4...3..."
 
 sleep 5
 
+echo "Copy moodledata/muc/config.php..."
+cp /var/www/moodledata/muc/config.php /tmp/moodle.config.php
+
 # Use find with -not -name to exclude directories from the file count
 initial_count=$(find ${dest_dir} -not -name '.*' | wc -l)
 echo "Initial file count: $initial_count"
@@ -66,6 +69,9 @@ echo "Copying files..."
 # Copy all files, including hidden ones, preserving directory structure
 # rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
 rsync -a --no-perms --no-owner --omit-dir-times --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ${src_dir}/ ${dest_dir}/
+
+echo "Restore moodledata/muc/config.php..."
+cp /tmp/moodle.config.php /var/www/moodledata/muc/config.php
 
 # Create the timestamp file
 echo "Creating timestamp file..."
