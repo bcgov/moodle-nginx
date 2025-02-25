@@ -61,6 +61,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     rsync \
+    memcached \
+    libmemcached-dev \
+    php-memcached \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 

@@ -25,7 +25,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     libonig-dev \
-    rsync
+    rsync \
+    memcached \
+    libmemcached-dev \
+    php-memcached
 
 RUN apt-get upgrade -y
 RUN apt-get autoremove -y

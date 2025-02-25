@@ -214,6 +214,10 @@ jobs:
           REDIS_LIMIT_MEMORY: ${{ inputs.REDIS_LIMIT_MEMORY }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
 
+      - name: Deploy Memcached
+        if: success()
+        run: bash ./openshift/scripts/deploy-memcached.sh
+
       - name: Deploy Moodle Template and Run Upgrades
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh

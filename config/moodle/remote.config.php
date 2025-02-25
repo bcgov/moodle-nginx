@@ -20,6 +20,12 @@ $CFG->moodleappdir    = '/var/www/html';
 $CFG->prefix    = '';
 $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
+$CFG->debug = 0;
+$CFG->langstringcache = 1;
+$CFG->cachejs = 1;
+$CFG->themedesignermode = 0;
+$CFG->enablecssoptimiser = 1;
+
 // $CFG->session_redis_host = 'redis';
 $CFG->session_redis_host = $_SERVER['REDIS_HOST'];
 // $CFG->session_redis_auth = $_SERVER['REDIS_PASSWORD'];

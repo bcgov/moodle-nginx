@@ -2,6 +2,9 @@ global:
   redis:
     password: ""
 redis:
+  persistence:
+    enabled: true
+    size: 200Mi
   resources:
     requests:
       memory: 32Mi
@@ -50,4 +53,4 @@ auth:
   usePasswordFileFromSecret: false
 image:
   pullPolicy: Always
-  debug: true
+  debug: false

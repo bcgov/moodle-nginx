@@ -714,7 +714,7 @@ create_or_update_helm_deployment() {
       exit 1
     fi
 
-    # Upgrade the Helm deployment with the new values
+    # Check the Helm deployment for errors
     if [[ $helm_upgrade_response =~ "Error" ]]; then
       echo "❌ Helm upgrade FAILED."
       echo "3. $helm_upgrade_response"
