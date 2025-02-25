@@ -763,7 +763,7 @@ deploy_resource_from_template() {
   # Construct the oc process command with parameters
   local process_cmd="oc process -f $template_file"
   for param in "${params[@]}"; do
-    process_cmd+=" -p $param"
+    process_cmd+=" -p \"$param\""
   done
 
   echo "Deploying resource from template: $template_file"
