@@ -565,28 +565,35 @@ set_resources() {
 
   # Construct the oc set resources command
   local cmd="oc set resources $type $deployment"
-  if [[ "$cpu_request" != "null" && "$cpu_request" != 0 ]]; then
+  local requests_set=false
+  local limits_set=false
+
+  if [[ "$cpu_request" != "null" ]]; then
     cmd+=" --requests=cpu=${cpu_request}"
-  else
-    cmd+=" --requests=cpu="
+    requests_set=true
   fi
-  if [[ "$mem_request" != "null" && "$mem_request" != 0 ]]; then
-    cmd+=",memory=${mem_request}"
-  else
-    cmd+=",memory="
+  if [[ "$mem_request" != "null" ]]; then
+    if $requests_set; then
+      cmd+=",memory=${mem_request}"
+    else
+      cmd+=" --requests=memory=${mem_request}"
+    fi
+    requests_set=true
   fi
-  if [[ "$cpu_limit" != "null" && "$cpu_limit" != 0 ]]; then
+  if [[ "$cpu_limit" != "null" ]]; then
     cmd+=" --limits=cpu=${cpu_limit}"
-  else
-    cmd+=" --limits=cpu="
+    limits_set=true
   fi
-  if [[ "$mem_limit" != "null" && "$mem_limit" != 0 ]]; then
-    cmd+=",memory=${mem_limit}"
-  else
-    cmd+=",memory="
+  if [[ "$mem_limit" != "null" ]]; then
+    if $limits_set; then
+      cmd+=",memory=${mem_limit}"
+    else
+      cmd+=" --limits=memory=${mem_limit}"
+    fi
+    limits_set=true
   fi
 
-  echo "Set: --requests=cpu=${cpu_request},memory=${mem_request} --limits=cpu=${cpu_limit},memory=${mem_limit}"
+  echo "Set: $cmd"
   $cmd
 }
 
@@ -765,8 +772,8 @@ deploy_resource_from_template() {
   # Process the template and print the output for debugging
   local processed_template
   processed_template=$(eval $process_cmd)
-  echo "Processed template:"
-  echo "$processed_template"
+  # echo "Processed template:"
+  # echo "$processed_template"
 
   # Extract the deployment name from the processed template
   local deployment_name=$(echo "$processed_template" | jq -r '.items[] | select(.kind == "Deployment") | .metadata.name')
