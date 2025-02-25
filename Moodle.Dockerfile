@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     dos2unix \
     git \
     zlib1g-dev \
+    libssl-dev \
     libpng-dev \
     libxml2-dev \
     libzip-dev \
@@ -63,9 +64,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     rsync \
     memcached \
     libmemcached-dev \
-    php8.1-memcached \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
+RUN yes '' | pecl install -f memcached-3.3.0 \
+  && docker-php-ext-enable memcached
 
 RUN mkdir -p $MOODLE_APP_DIR
 

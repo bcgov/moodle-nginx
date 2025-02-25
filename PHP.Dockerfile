@@ -16,6 +16,7 @@ RUN echo "Building PHP version: $DOCKER_FROM_IMAGE for $PHP_INI_ENVIRONMENT envi
 RUN apt-get update && apt-get install --no-install-recommends -y \
     dos2unix \
     zlib1g-dev \
+    libssl-dev \
     libpng-dev \
     libxml2-dev \
     libzip-dev \
@@ -27,8 +28,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libonig-dev \
     rsync \
     memcached \
-    libmemcached-dev \
-    php8.1-memcached
+    libmemcached-dev
+
+RUN yes '' | pecl install -f memcached-3.2.0 \
+  && docker-php-ext-enable memcached
 
 RUN apt-get upgrade -y
 RUN apt-get autoremove -y
