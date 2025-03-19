@@ -43,7 +43,7 @@
         ],
         "resources": {
           "requests": {
-            "storage": "10Gi"
+            "storage": "12Gi"
           }
         }
       }
@@ -474,8 +474,12 @@
                     "name": "moodle-shared"
                   },
                   {
-                    "name": "local",
-                    "mountPath": "/var/local"
+                    "name": "localcachedir",
+                    "mountPath": "/mnt/ramdisk/localcachedir"
+                  },
+                  {
+                    "name": "localrequestdir",
+                    "mountPath": "/mnt/ramdisk/requests"
                   },
                   {
                     "name": "${APP_NAME}-env",

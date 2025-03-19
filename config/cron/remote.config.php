@@ -102,18 +102,13 @@ $CFG->admin     = 'admin';
 $CFG->directorypermissions = 0777;
 
 // localcachedir should be on LOCAL fast storage
-// $CFG->localcachedir = '/tmp/localcache';
-$CFG->localcachedir = '/var/local/cache';
+$CFG->localcachedir = '/mnt/ramdisk/localcachedir';
 // localrequestdir should be on LOCAL fast storage
-// $CFG->localrequestdir = '/tmp/requests';
-$CFG->localrequestdir = '/var/local/requests';
-// $CFG->backuptempdir = '/var/www/moodledata/temp/backup';
-$CFG->backuptempdir = '/var/local/backuptemp';
+$CFG->localrequestdir = '/mnt/ramdisk/requests';
+$CFG->backuptempdir = '/tmp/backuptemp';
 // cachedir should be on SHARED storage
-// $CFG->cachedir = '/var/www/moodledata/cache';
 $CFG->cachedir = '/var/shared/cache';
 // tempdir should be on SHARED storage
-// $CFG->tempdir = '/var/www/moodledata/temp';
 $CFG->tempdir = '/var/shared/temp';
 
 $CFG->sslproxy = ( stristr($CFG->wwwroot, "gov.bc.ca") || stristr($CFG->wwwroot, "apps-crc.testing") ) ? true : false; // Only use in OCP environments

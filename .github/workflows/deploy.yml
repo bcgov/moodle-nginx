@@ -220,7 +220,7 @@ jobs:
 
       - name: Deploy Memcached
         if: success()
-        run: bash ./openshift/scripts/deploy-memcached.sh
+        run: # [removed in favour of Redis] # bash ./openshift/scripts/deploy-memcached.sh
 
       - name: Deploy Moodle Template and Run Upgrades
         if: success()
