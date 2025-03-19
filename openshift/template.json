@@ -402,13 +402,23 @@
               {
                 "name": "localcachedir",
                 "emptyDir": {
-                  "medium": "Memory"
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                },
+                "hostPath": {
+                  "path": "/mnt/ramdisk/localcachedir",
+                  "type": "DirectoryOrCreate"
                 }
               },
               {
                 "name": "requestcachedir",
                 "emptyDir": {
-                  "medium": "Memory"
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                },
+                "hostPath": {
+                  "path": "/mnt/ramdisk/requests",
+                  "type": "DirectoryOrCreate"
                 }
               }
             ]
@@ -599,13 +609,23 @@
               {
                 "name": "localcachedir",
                 "emptyDir": {
-                  "medium": "Memory"
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                },
+                "hostPath": {
+                  "path": "/mnt/ramdisk/localcachedir",
+                  "type": "DirectoryOrCreate"
                 }
               },
               {
                 "name": "requestcachedir",
                 "emptyDir": {
-                  "medium": "Memory"
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                },
+                "hostPath": {
+                  "path": "/mnt/ramdisk/requests",
+                  "type": "DirectoryOrCreate"
                 }
               },
               {
