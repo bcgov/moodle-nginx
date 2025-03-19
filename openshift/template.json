@@ -485,7 +485,7 @@
                     "mountPath": "/mnt/ramdisk/localcachedir"
                   },
                   {
-                    "name": "localrequestdir",
+                    "name": "requestcachedir",
                     "mountPath": "/mnt/ramdisk/requests"
                   },
                   {
