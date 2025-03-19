@@ -504,7 +504,8 @@ mariadbConfiguration: |-
   query_cache_type=1
   query_cache_limit=4M
   query_cache_size=256M
-  max_connections=25000
+  max_connections=250000
+  max_user_connections=100
   thread_cache_size=50
   open_files_limit=65535
   table_definition_cache=4096
@@ -561,7 +562,7 @@ mariadbConfiguration: |-
   [mariadb]
   plugin_load_add=auth_pam
   extra_port = 8385
-  extra_max_connections = 1000
+  extra_max_connections = 10000
 
   ## Data-at-Rest Encryption
   ## Use extraVolumes and extraVolumeMounts to mount /encryption filesystem

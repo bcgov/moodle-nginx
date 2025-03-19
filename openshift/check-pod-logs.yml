@@ -39,7 +39,7 @@ objects:
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts
-                    - name: file-temp-localcache
+                    - name: moodle-shared
                       mountPath: /tmp/logs
               restartPolicy: OnFailure
               volumes:
@@ -47,6 +47,6 @@ objects:
                   configMap:
                     name: check-pod-logs-script
                     defaultMode: 0755
-                - name: file-temp-localcache
+                - name: moodle-shared
                   persistentVolumeClaim:
-                    claimName: file-temp-localcache
+                    claimName: moodle-shared

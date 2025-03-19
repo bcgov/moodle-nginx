@@ -29,7 +29,7 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: true
-    size: 200Mi
+    size: 500Mi
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -55,7 +55,7 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: true
-    size: 200Mi
+    size: 500Mi
 EOF
 
 # Create or update the Helm deployment

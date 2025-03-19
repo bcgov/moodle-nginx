@@ -238,8 +238,18 @@
                     "name": "file-backup-data"
                   },
                   {
-                    "mountPath": "/tmp/localcache",
-                    "name": "file-temp-localcache"
+                    "name": "file-temp-localcache",
+                    "persistentVolumeClaim": {
+                      "claimName": "file-temp-localcache",
+                      "defaultMode": 755
+                    }
+                  },
+                  {
+                    "name": "moodle-shared",
+                    "persistentVolumeClaim": {
+                      "claimName": "moodle-shared",
+                      "defaultMode": 755
+                    }
                   },
                   {
                     "name": "${APP_NAME}-env",
@@ -251,9 +261,6 @@
                   "requests": {
                     "memory": "${PHP_MEMORY_REQUEST}",
                     "cpu": "${PHP_CPU_REQUEST}"
-                  },
-                  "limits": {
-                    "cpu": "${PHP_CPU_LIMIT}"
                   }
                 },
                 "env": [
@@ -369,9 +376,9 @@
                 }
               },
               {
-                "name": "file-temp-localcache",
+                "name": "moodle-shared",
                 "persistentVolumeClaim": {
-                  "claimName": "file-temp-localcache",
+                  "claimName": "moodle-shared",
                   "defaultMode": 755
                 }
               },
@@ -392,6 +399,13 @@
                       "path": "./.env"
                     }
                   ]
+                }
+              },
+              {
+                "name": "local",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
                 }
               }
             ]
@@ -458,8 +472,12 @@
                     "name": "file-backup-data"
                   },
                   {
-                    "mountPath": "/tmp/localcache",
-                    "name": "file-temp-localcache"
+                    "mountPath": "/var/shared",
+                    "name": "moodle-shared"
+                  },
+                  {
+                    "name": "local",
+                    "mountPath": "/var/local"
                   },
                   {
                     "name": "${APP_NAME}-env",
@@ -561,6 +579,13 @@
                 "name": "file-backup-data",
                 "persistentVolumeClaim": {
                   "claimName": "file-backup-data",
+                  "defaultMode": 755
+                }
+              },
+              {
+                "name": "moodle-shared",
+                "persistentVolumeClaim": {
+                  "claimName": "moodle-shared",
                   "defaultMode": 755
                 }
               },
@@ -689,9 +714,6 @@
                   "requests": {
                     "memory": "${CRON_MEMORY_REQUEST}",
                     "cpu": "${WEB_CPU_REQUEST}"
-                  },
-                  "limits": {
-                    "cpu": "${WEB_CPU_LIMIT}"
                   }
                 }
               }
@@ -856,7 +878,7 @@
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Limit CPU",
       "name": "PHP_CPU_LIMIT",
-      "value": "2"
+      "value": "null"
     },
     {
       "description": "Requested amount of memory for the CRON container.",
@@ -874,13 +896,13 @@
       "description": "Requested amount of CPU for the CRON container.",
       "displayName": "CRON CPU Request",
       "name": "WEB_CPU_REQUEST",
-      "value": "10m"
+      "value": "50m"
     },
     {
       "description": "Maximum amount of CPU the WEB container can use.",
       "displayName": "WEB CPU Limit",
       "name": "WEB_CPU_LIMIT",
-      "value": "20m"
+      "value": "null"
     },
     {
       "description": "Database password.",

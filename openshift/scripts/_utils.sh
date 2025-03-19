@@ -773,8 +773,8 @@ deploy_resource_from_template() {
   # Process the template and print the output for debugging
   local processed_template
   processed_template=$(eval $process_cmd)
-  echo "Processed template:"
-  echo "$processed_template"
+  # echo "Processed template:"
+  # echo "$processed_template"
 
   # Extract the deployment name from the processed template
   local deployment_name=$(echo "$processed_template" | jq -r '.items[] | select(.kind == "Deployment") | .metadata.name')

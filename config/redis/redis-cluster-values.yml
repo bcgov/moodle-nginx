@@ -4,48 +4,40 @@ global:
 redis:
   persistence:
     enabled: true
-    size: 200Mi
+    size: 600Mi
   resources:
     requests:
-      memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 80m
+      memory: 128Mi
+      cpu: 100m
 updateJob:
   resources:
     requests:
       memory: 32Mi
-      cpu: 5m
-    limits:
       cpu: 10m
 replica:
-  replicaCount: 6
+  replicaCount: 5
   persistence:
-    enabled: true
-    size: 200Mi
+    enabled: false
+    size: 0Mi
   autoscaling:
     enabled: true
     minReplicas: 5
-    maxReplicas: 20
+    maxReplicas: 10
     targetCPUUtilizationPercentage: 60
   resources:
     requests:
       memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 80m
+      cpu: 100m
 sentinel:
   enabled: true
   automateClusterRecovery: true
   persistence:
     enabled: false
-    size: 20Mi
+    size: 0Mi
   resources:
     requests:
       memory: 32Mi
-      cpu: 10m
-    limits:
-      cpu: 80m
+      cpu: 5m
 auth:
   enabled: false
   sentinel: false

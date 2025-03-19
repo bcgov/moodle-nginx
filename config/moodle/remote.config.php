@@ -39,20 +39,29 @@ $CFG->session_redis_serializer_use_igbinary = true;
 $CFG->session_redis_compressor = 'gzip';
 
 // localcachedir should be on LOCAL fast storage
-$CFG->localcachedir = '/tmp/localcache';
+// $CFG->localcachedir = '/tmp/localcache';
+// $CFG->localcachedir = '/var/local/cache';
+$CFG->localcachedir = '/mnt/ramdisk/localcachedir';
 // localrequestdir should be on LOCAL fast storage
-$CFG->localrequestdir = '/tmp/requests';
-$CFG->backuptempdir = '/var/www/moodledata/temp/backup';
+// $CFG->localrequestdir = '/tmp/requests';
+// $CFG->localrequestdir = '/var/local/requests';
+$CFG->localrequestdir = '/mnt/ramdisk/requests';
+// $CFG->backuptempdir = '/var/www/moodledata/temp/backup';
+$CFG->backuptempdir = '/tmp/backuptemp';
 // cachedir should be on SHARED storage
-$CFG->cachedir = '/var/www/moodledata/cache';
+// $CFG->cachedir = '/var/www/moodledata/cache';
+$CFG->cachedir = '/var/shared/cache';
 // tempdir should be on SHARED storage
-$CFG->tempdir = '/var/www/moodledata/temp';
+// $CFG->tempdir = '/var/www/moodledata/temp';
+$CFG->tempdir = '/var/shared/temp';
 
 $CFG->dboptions =  array (
   'dbpersist' => 0,
   'dbport' => '3306',
   'dbsocket' => '',
   'dbcollation' => 'utf8mb4_unicode_ci',
+  'logslow'  => 5,
+  'logerrors'  => true,
 );
 
 $CFG->dataroot  = '/var/www/moodledata';
@@ -72,7 +81,7 @@ if (php_sapi_name() == "cli") {
     $CFG->wwwroot = $protocol.$_SERVER['HTTP_HOST'].$moodle_dir;
 }
 
-$CFG->directorypermissions = 0777;
+$CFG->directorypermissions = 02777;
 
 $CFG->sslproxy = ( stristr($CFG->wwwroot, "gov.bc.ca") || stristr($CFG->wwwroot, "apps-crc.testing") ) ? true : false; // Only use in OCP environments
 

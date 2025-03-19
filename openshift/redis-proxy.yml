@@ -54,12 +54,9 @@ objects:
                 - containerPort: 6379
                   protocol: TCP
               resources:
-                limits:
-                  memory: 32Mi
-                  cpu: 8m
                 requests:
                   memory: 16Mi
-                  cpu: 2m
+                  cpu: 50m
 
 parameters:
   - name: DEPLOY_IMAGE

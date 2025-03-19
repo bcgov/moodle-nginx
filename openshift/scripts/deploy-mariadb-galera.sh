@@ -89,8 +89,9 @@ else
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=null \
     --set resources.limits.memory=null \
-    --set readinessProbe.enabled=false \
-    --set livenessProbe.enabled=false \
+    --set readinessProbe.enabled=true \
+    --set livenessProbe.enabled=true \
+    --set startupProbe.enabled=true \
     --set galera.mariabackup.password=$DB_PASSWORD \
     --set galera.mariabackup.forcePassword=true \
     --set extraVolumes[0].name=prestop-script \
