@@ -87,7 +87,7 @@
       "kind": "PersistentVolumeClaim",
       "apiVersion": "v1",
       "metadata": {
-        "name": "file-temp-localcache"
+        "name": "moodle-shared"
       },
       "spec": {
         "accessModes": [
@@ -95,7 +95,7 @@
         ],
         "resources": {
           "requests": {
-            "storage": "1Gi"
+            "storage": "100Mi"
           }
         },
         "storageClassName": "netapp-file-standard"
@@ -238,18 +238,16 @@
                     "name": "file-backup-data"
                   },
                   {
-                    "name": "file-temp-localcache",
-                    "persistentVolumeClaim": {
-                      "claimName": "file-temp-localcache",
-                      "defaultMode": 755
-                    }
+                    "name": "localcachedir",
+                    "mountPath": "/mnt/ramdisk/localcachedir"
+                  },
+                  {
+                    "name": "requestcachedir",
+                    "mountPath": "/mnt/ramdisk/requests"
                   },
                   {
                     "name": "moodle-shared",
-                    "persistentVolumeClaim": {
-                      "claimName": "moodle-shared",
-                      "defaultMode": 755
-                    }
+                    "mountPath": "/var/shared"
                   },
                   {
                     "name": "${APP_NAME}-env",
@@ -590,10 +588,15 @@
                 }
               },
               {
-                "name": "file-temp-localcache",
-                "persistentVolumeClaim": {
-                  "claimName": "file-temp-localcache",
-                  "defaultMode": 755
+                "name": "localcachedir",
+                "emptyDir": {
+                  "medium": "Memory"
+                }
+              },
+              {
+                "name": "requestcachedir",
+                "emptyDir": {
+                  "medium": "Memory"
                 }
               },
               {

@@ -1,11 +1,11 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB),CPU Scale Value
-php,deployment,3,20,1,1024,100,0,128,0,400
-mariadb-galera,sts,4,4,4,3072,100,0,256,0,0
+php,deployment,5,20,1,1024,100,0,128,0,400
+mariadb-galera,sts,5,4,4,3072,100,0,256,0,0
 redis-node,sts,5,5,12,3072,100,0,32,0,100
-redis-proxy,deployment,3,5,0,0,50,0,4,0,50
+redis-proxy,deployment,5,5,0,0,50,0,4,0,50
 web,deployment,3,3,0,0,50,0,128,0,3
 cron,deployment,1,1,0,0,0,0,0,0,0
-moodle-db-backup-storage,deployment,1,1,1,15360,0,0,0,0,0
+moodle-db-backup-storage,deployment,0,1,1,15360,0,0,0,0,0
 maintenance-message,deployment,0,1,0,0,50,0,0,0,0
 redis-insight,deployment,1,1,0,0,0,0,0,0,0
 check-pod-logs,cronjob,0,1,0,0,0,0,0,0,0
