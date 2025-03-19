@@ -400,10 +400,15 @@
                 }
               },
               {
-                "name": "local",
+                "name": "localcachedir",
                 "emptyDir": {
-                  "medium": "Memory",
-                  "sizeLimit": "1Gi"
+                  "medium": "Memory"
+                }
+              },
+              {
+                "name": "requestcachedir",
+                "emptyDir": {
+                  "medium": "Memory"
                 }
               }
             ]

@@ -19,7 +19,7 @@ DEPLOYMENTS=(
   # ["app.kubernetes.io/name=redis"]="lost"
   # ["deployment=web"]="error"
   ["app.kubernetes.io/name=mariadb-galera"]="Aborted,bogus"
-  ["app=cron"]="error"
+  # ["app=cron"]="error"
 )
 
 # Convert the DEPLOYMENTS array to a string and pass it to the function

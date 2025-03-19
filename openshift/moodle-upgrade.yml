@@ -39,6 +39,12 @@ objects:
                  - key: .env
                    path: ./.env
                defaultMode: 420
+           - name: localcachedir
+             emptyDir:
+                medium: Memory
+           - name: requestcachedir
+             emptyDir:
+                medium: Memory
          containers:
            - name: moodle-upgrade-job
              image: ${IMAGE_REPO}${BUILD_NAME}:${DEPLOY_NAMESPACE}
@@ -72,7 +78,11 @@ objects:
                  mountPath: /var/www/html/config.php
                  subPath: config.php
                - name: moodle-shared
-                 mountPath: /var/localcache
+                 mountPath: /var/shared
+               - name: localcachedir
+                 mountPath: /mnt/ramdisk/localcachedir
+               - name: localrequestdir
+                 mountPath: /mnt/ramdisk/requests
              command:
                - bash
                - "-c"
