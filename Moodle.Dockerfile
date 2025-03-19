@@ -115,7 +115,7 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
   # git clone --recurse-submodules --jobs 8 --branch $CERTIFICATE_BRANCH_VERSION --single-branch $CERTIFICATE_URL $CERTIFICATE_DIR
 # Add commands for site upgrades / migrations
 
-COPY ./config/moodle/plugins/cache/stores/redisfile $MOODLE_APP_DIR/cache/stores/redisfile
+# COPY ./config/moodle/plugins/cache/stores/redisfile $MOODLE_APP_DIR/cache/stores/redisfile
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
