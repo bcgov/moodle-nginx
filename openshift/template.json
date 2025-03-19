@@ -404,10 +404,6 @@
                 "emptyDir": {
                   "medium": "Memory",
                   "sizeLimit": "1Gi"
-                },
-                "hostPath": {
-                  "path": "/mnt/ramdisk/localcachedir",
-                  "type": "DirectoryOrCreate"
                 }
               },
               {
@@ -415,10 +411,6 @@
                 "emptyDir": {
                   "medium": "Memory",
                   "sizeLimit": "1Gi"
-                },
-                "hostPath": {
-                  "path": "/mnt/ramdisk/requests",
-                  "type": "DirectoryOrCreate"
                 }
               }
             ]
@@ -611,10 +603,6 @@
                 "emptyDir": {
                   "medium": "Memory",
                   "sizeLimit": "1Gi"
-                },
-                "hostPath": {
-                  "path": "/mnt/ramdisk/localcachedir",
-                  "type": "DirectoryOrCreate"
                 }
               },
               {
@@ -622,10 +610,6 @@
                 "emptyDir": {
                   "medium": "Memory",
                   "sizeLimit": "1Gi"
-                },
-                "hostPath": {
-                  "path": "/mnt/ramdisk/requests",
-                  "type": "DirectoryOrCreate"
                 }
               },
               {
