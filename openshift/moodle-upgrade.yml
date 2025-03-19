@@ -42,7 +42,7 @@ objects:
            - name: localcachedir
              emptyDir:
                 medium: Memory
-           - name: requestcachedir
+           - name: localrequestdir
              emptyDir:
                 medium: Memory
          containers:
