@@ -87,7 +87,7 @@
       "kind": "PersistentVolumeClaim",
       "apiVersion": "v1",
       "metadata": {
-        "name": "moodle-shared"
+        "name": "${APP_NAME}-shared"
       },
       "spec": {
         "accessModes": [
@@ -246,7 +246,7 @@
                     "mountPath": "/mnt/ramdisk/requests"
                   },
                   {
-                    "name": "moodle-shared",
+                    "name": "${APP_NAME}-shared",
                     "mountPath": "/var/shared"
                   },
                   {
@@ -374,9 +374,9 @@
                 }
               },
               {
-                "name": "moodle-shared",
+                "name": "${APP_NAME}-shared",
                 "persistentVolumeClaim": {
-                  "claimName": "moodle-shared",
+                  "claimName": "${APP_NAME}-shared",
                   "defaultMode": 755
                 }
               },
@@ -471,7 +471,7 @@
                   },
                   {
                     "mountPath": "/var/shared",
-                    "name": "moodle-shared"
+                    "name": "${APP_NAME}-shared"
                   },
                   {
                     "name": "localcachedir",
@@ -585,9 +585,9 @@
                 }
               },
               {
-                "name": "moodle-shared",
+                "name": "${APP_NAME}-shared",
                 "persistentVolumeClaim": {
-                  "claimName": "moodle-shared",
+                  "claimName": "${APP_NAME}-shared",
                   "defaultMode": 755
                 }
               },
