@@ -1,7 +1,7 @@
 <?php  // Moodle configuration file
 
-error_reporting(E_ALL | E_STRICT);
-ini_set('display_errors', 1);
+@error_reporting(E_ALL | E_STRICT);
+@ini_set('display_errors', 1);
 
 unset($CFG);
 global $CFG;
@@ -20,7 +20,8 @@ $CFG->moodleappdir    = '/var/www/html';
 $CFG->prefix    = '';
 $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
-$CFG->debug = 0;
+$CFG->debug = (E_ALL | E_STRICT);
+$CFG->debugdisplay = 1;
 $CFG->langstringcache = 1;
 $CFG->cachejs = 1;
 $CFG->themedesignermode = 0;
@@ -38,8 +39,8 @@ $CFG->session_redis_lock_expire = 7200;
 $CFG->session_redis_serializer_use_igbinary = true;
 $CFG->session_redis_compressor = 'gzip';
 
-// localcachedir should be on LOCAL fast storage
-$CFG->localcachedir = '/mnt/ramdisk/localcachedir';
+// filecache should be on LOCAL fast storage
+$CFG->filecache = '/mnt/ramdisk/filecache';
 // localrequestdir should be on LOCAL fast storage
 $CFG->localrequestdir = '/mnt/ramdisk/requests';
 $CFG->backuptempdir = '/tmp/backuptemp';
@@ -81,7 +82,7 @@ $CFG->sslproxy = ( stristr($CFG->wwwroot, "gov.bc.ca") || stristr($CFG->wwwroot,
 $CFG->getremoteaddrconf = 0;
 
 function loadTestCacheDisk($size_in_mb = 1, $num_files = 1) {
-  $base_dir = '/mnt/ramdisk/localcachedir/';
+  $base_dir = '/mnt/ramdisk/filecache/';
   $data = str_repeat('A', 1024 * 1024 * $size_in_mb); // Adjust size based on parameter
 
   echo 'Testing Disk Cache for '.$base_dir.'... <br>';

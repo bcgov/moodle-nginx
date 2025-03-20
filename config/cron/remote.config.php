@@ -6,7 +6,7 @@ $CFG = new stdClass();
 $_ENV['debug_load_test_cache_disk_msg'] = '';
 
 function loadTestCacheDisk($size_in_mb = 1, $num_files = 1) {
-  $base_dir = '/mnt/ramdisk/localcachedir/';
+  $base_dir = '/mnt/ramdisk/filecache/';
   $data = str_repeat('A', 1024 * 1024 * $size_in_mb); // Adjust size based on parameter
 
   // Check if the directory exists
@@ -101,8 +101,8 @@ $CFG->admin     = 'admin';
 
 $CFG->directorypermissions = 0777;
 
-// localcachedir should be on LOCAL fast storage
-$CFG->localcachedir = '/mnt/ramdisk/localcachedir';
+// filecache should be on LOCAL fast storage
+$CFG->filecache = '/mnt/ramdisk/filecache';
 // localrequestdir should be on LOCAL fast storage
 $CFG->localrequestdir = '/mnt/ramdisk/requests';
 $CFG->backuptempdir = '/tmp/backuptemp';

@@ -39,7 +39,7 @@ objects:
                  - key: .env
                    path: ./.env
                defaultMode: 420
-           - name: localcachedir
+           - name: filecache
              emptyDir:
                 medium: Memory
            - name: localrequestdir
@@ -79,8 +79,8 @@ objects:
                  subPath: config.php
                - name: moodle-shared
                  mountPath: /var/shared
-               - name: localcachedir
-                 mountPath: /mnt/ramdisk/localcachedir
+               - name: filecache
+                 mountPath: /mnt/ramdisk/filecache
                - name: localrequestdir
                  mountPath: /mnt/ramdisk/requests
              command:
