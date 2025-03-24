@@ -702,7 +702,8 @@ create_or_update_helm_deployment() {
 
   if helm list -q | grep -q "^$redis_name$"; then
     echo "Helm deployment found. Updating..."
-    helm_upgrade_response=$(helm upgrade --reuse-values -f $upgrade_file $redis_name $redis_helm_chart)
+    helm_repo_update_response=$(helm repo update 2>&1)
+    helm_upgrade_response=$(helm upgrade --reuse-values -f $upgrade_file $redis_name $redis_helm_chart 2>&1)
 
     # Output the response for debugging purposes
     echo "1. $helm_upgrade_response"
@@ -746,6 +747,7 @@ delete_resource_if_exists() {
   oc_command="oc describe $resource_type $resource_name"
   echo "Executing: $oc_command"
   oc_output=$($oc_command 2>&1)
+  echo "Result: $oc_output"
 
   if [[ ! $oc_output =~ "NotFound" ]]; then
     echo "$resource_type exists... Deleting: $resource_name"

@@ -84,7 +84,7 @@ else
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
-    --set persistence.size=3Gi \
+    --set persistence.size=6Gi \
     --set resources.requests.cpu=100m \
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=null \

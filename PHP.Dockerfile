@@ -58,8 +58,11 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
     mbstring
 
 RUN pecl install -o -f redis \
+  && pecl install -o -f igbinary \
+  && docker-php-ext-install -j$(nproc) /usr/src/redis \
+  && docker-php-ext-enable igbinary \
   && docker-php-ext-enable redis \
-  xmlrpc  \
+    xmlrpc  \
   && rm -rf /tmp/pear
 
 RUN wget --progress=dot:giga -O /usr/local/bin/php-fpm-healthcheck \

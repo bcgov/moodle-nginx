@@ -73,6 +73,8 @@ sentinel:
     # pullSecrets:
     #   - myRegistryKeySecretName
   masterSet: mymaster
+  externalAccess:
+    enabled: false
   initialCheckTimeout: 15
   quorum: 2
   downAfterMilliseconds: 60000

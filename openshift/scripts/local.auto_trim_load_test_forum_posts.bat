@@ -1,11 +1,15 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set command_to_run=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; DELETE FROM forum_posts WHERE message LIKE 'I am the test plan reply message';"
+set command_to_run=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; DELETE FROM `forum_posts` WHERE message LIKE 'I am the test plan reply message';"
 set command_to_test_completion=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; SELECT COUNT(*) FROM forum_posts WHERE message LIKE 'I am the test plan reply message';"
+set command_to_delete_logs=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; DELETE FROM `logstore_standard_log` WHERE 1;"
+
+set command_to_optimize_forum_posts=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; OPTIMIZE TABLE `forum_posts`;"
+set command_to_optimize_log=oc rsh mariadb-galera-0 mysql -u root -p"%MOODLE_MYSQL_ROOT_PASSWORD%" -e "USE `moodle`; OPTIMIZE TABLE `logstore_standard_log`;"
 
 set loop_count=0
-set loop_time=120
+set loop_time=60
 
 :: Loop indefinitely
 :loop
@@ -48,11 +52,15 @@ set loop_time=120
   echo Records found: !count!
 
   if "!count!"=="0" (
-    echo No results found. Exiting loop.
-    goto end
+    echo No results found.
+    @REM echo Exiting loop.
+    @REM goto end
+    echo Waiting for %loop_time% seconds...
+    timeout /t %loop_time% >nul
+    goto loop
   )
 
-  echo Deleting records...
+  echo Deleting forum posts...
   set error_output=
   for /f "tokens=*" %%a in ('%command_to_run% 2^>^&1') do (
     echo %%a | findstr /c:"Unauthorized" >nul
@@ -68,6 +76,29 @@ set loop_time=120
   if defined error_output (
     echo Error: !error_output!
   )
+
+  @REM echo Optimizing `forum_posts`...
+  @REM %command_to_optimize_forum_posts%
+
+  echo Deleting logs...
+  set error_output=
+  for /f "tokens=*" %%a in ('%command_to_delete_logs% 2^>^&1') do (
+    echo %%a | findstr /c:"Unauthorized" >nul
+    if not errorlevel 1 (
+      set error_output=%%a
+    )
+    echo %%a | findstr /c:"Error" >nul
+    if not errorlevel 1 (
+      set error_output=%%a
+    )
+  )
+
+  if defined error_output (
+    echo Error: !error_output!
+  )
+
+  @REM echo Optimizing `logstore_standard_log`...
+  @REM %command_to_optimize_log%
 
   echo Waiting for %loop_time% seconds...
   timeout /t %loop_time% >nul

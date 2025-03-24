@@ -16,9 +16,9 @@ declare -A DEPLOYMENTS
 DEPLOYMENTS=(
   ["deployment=php"]="error,critical"
   ["app=redis-proxy"]="err:"
+  ["app.kubernetes.io/name=mariadb-galera"]="Aborted,bogus"
   # ["app.kubernetes.io/name=redis"]="lost"
   # ["deployment=web"]="error"
-  ["app.kubernetes.io/name=mariadb-galera"]="Aborted,bogus"
   # ["app=cron"]="error"
 )
 

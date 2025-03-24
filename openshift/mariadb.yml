@@ -14,7 +14,7 @@ spec:
   volumeClaimTemplate:
     resources:
       requests:
-        storage: 3Gi
+        storage: 6Gi
     accessModes:
       - ReadWriteOnce
   myCnf: |

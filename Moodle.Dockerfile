@@ -86,6 +86,9 @@ COPY ./config/php/info.php "$MOODLE_APP_DIR/info/info.php"
 # Add PHP config check (security)
 COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 
+# Add favicon
+COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
+
 # Add all plugin folders to a list, so we can clean them up later
 # RUN echo $DATAFLOWS_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
     # echo $TRIGGER_DIR > $MOODLE_APP_DIR/plugin-folders.txt && \

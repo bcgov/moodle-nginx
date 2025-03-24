@@ -1,5 +1,24 @@
-replicas:
-  replicaCount: 6
+redis:
   persistence:
-    enabled: true
-    size: 50Mi
+    enabled: false
+    size: 600Mi
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+replicas:
+  replicaCount: 5
+  persistence:
+    enabled: false
+sentinel:
+  enabled: true
+  externalAccess:
+    enabled: false
+  automateClusterRecovery: true
+  persistence:
+    enabled: false
+    size: 0Mi
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 5m

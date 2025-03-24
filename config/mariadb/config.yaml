@@ -229,7 +229,7 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 3Gi
+          storage: 6Gi
 # Delete the
 # pvc's  for i in 0 1 2; do kubectl delete pvc datadir-db-$i; done
 # https://kubernetes.io/docs/tasks/run-application/run-replicated-stateful-application/

@@ -28,8 +28,7 @@ global:
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
-    enabled: true
-    size: 500Mi
+    enabled: false
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -40,7 +39,7 @@ replicas:
 sentinel:
   enabled: true
   persistence:
-    enabled: true
+    enabled: false
     size: 5Mi
 auth:
   enabled: false
@@ -51,12 +50,57 @@ EOF
 
 # Create minimal file for updates (or it will fail)
 cat <<EOF > upgrade.yaml
+redis:
+  persistence:
+    enabled: false
+    size: 600Mi
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
-    enabled: true
-    size: 500Mi
+    enabled: false
+sentinel:
+  enabled: true
+  externalAccess:
+    enabled: false
+  automateClusterRecovery: true
+  persistence:
+    enabled: false
+    size: 0Mi
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 5m
 EOF
+
+# Scale down the Redis deployment if it exists
+if [[ `oc describe statefulset/$REDIS_NAME 2>&1` =~ "NotFound" ]]; then
+  echo "Redis StatefulSet NOT FOUND... Creating new deployment..."
+else
+  echo "Redis StatefulSet found. Scaling down..."
+  scale_deployment "statefulset" "$REDIS_NAME" "0" "0"
+  if ! wait_for "statefulset/$REDIS_NAME" "ready" "120s" "down"; then
+    echo "Failed to scale $REDIS_NAME to 0 replicas. Exiting..."
+    exit 1
+  fi
+fi
+
+# Delete existing PVCs for Redis if they exist
+# Loop through a list of PVC's, by incrementing the index
+pvc_name="redis-data-redis-node-"
+for i in $(seq 0 $((REDIS_REPLICAS - 1))); do
+  indexed_pvc_name="${pvc_name}-${i}"
+  delete_resource_if_exists "pvc" "$indexed_pvc_name"
+  if [[ `oc describe pvc/$indexed_pvc_name 2>&1` =~ "NotFound" ]]; then
+    echo "PVC $indexed_pvc_name NOT FOUND..."
+  else
+    echo "Deleting PVC $indexed_pvc_name..."
+    oc delete pvc $indexed_pvc_name
+  fi
+done
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
@@ -67,6 +111,8 @@ if ! wait_for "statefulset/$REDIS_NAME"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
 fi
+
+scale_deployment "statefulset" "$REDIS_NAME" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"

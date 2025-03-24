@@ -3,7 +3,7 @@ global:
     password: ""
 redis:
   persistence:
-    enabled: true
+    enabled: false
     size: 600Mi
   resources:
     requests:
@@ -20,9 +20,9 @@ replica:
     enabled: false
     size: 0Mi
   autoscaling:
-    enabled: true
+    enabled: false
     minReplicas: 5
-    maxReplicas: 10
+    maxReplicas: 5
     targetCPUUtilizationPercentage: 60
   resources:
     requests:
@@ -30,6 +30,9 @@ replica:
       cpu: 100m
 sentinel:
   enabled: true
+  usePassword: false
+  externalAccess:
+    enabled: false
   automateClusterRecovery: true
   persistence:
     enabled: false
@@ -42,6 +45,7 @@ auth:
   enabled: false
   sentinel: false
   password: ""
+  usePassword: false
   usePasswordFileFromSecret: false
 image:
   pullPolicy: Always

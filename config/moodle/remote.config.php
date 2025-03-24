@@ -22,6 +22,8 @@ $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
 $CFG->debug = (E_ALL | E_STRICT);
 $CFG->debugdisplay = 1;
+$CFG->debugsessionlock = 30; // Time in seconds
+
 $CFG->langstringcache = 1;
 $CFG->cachejs = 1;
 $CFG->themedesignermode = 0;
@@ -64,7 +66,11 @@ $CFG->admin     = 'admin';
 
 $CFG->xsendfile = 'X-Accel-Redirect';
 $CFG->xsendfilealiases = array(
-    '/dataroot/' => $CFG->dataroot
+    '/dataroot/' => $CFG->dataroot,
+    '/filedir/' => $CFG->dataroot.'/filedir',
+    '/localcachedir/' => $CFG->filecache,
+    '/tempdir/' => $CFG->tempdir,
+    '/cachedir/' => $CFG->cachedir,
 );
 
 if (php_sapi_name() == "cli") {
