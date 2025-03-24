@@ -59,8 +59,9 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
 
 RUN pecl install -o -f redis \
   && pecl install -o -f igbinary \
-  && docker-php-ext-enable igbinary \
   && docker-php-ext-enable redis \
+  && docker-php-ext-enable igbinary \
+    igbinary \
     xmlrpc  \
   && rm -rf /tmp/pear
 
