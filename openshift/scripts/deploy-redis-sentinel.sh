@@ -89,18 +89,19 @@ else
 fi
 
 # Delete existing PVCs for Redis if they exist
+# Removed sectin due to using Memory for Redis rateher than PVC
 # Loop through a list of PVC's, by incrementing the index
-pvc_name="redis-data-redis-node-"
-for i in $(seq 0 $((REDIS_REPLICAS - 1))); do
-  indexed_pvc_name="${pvc_name}-${i}"
-  delete_resource_if_exists "pvc" "$indexed_pvc_name"
-  if [[ `oc describe pvc/$indexed_pvc_name 2>&1` =~ "NotFound" ]]; then
-    echo "PVC $indexed_pvc_name NOT FOUND..."
-  else
-    echo "Deleting PVC $indexed_pvc_name..."
-    oc delete pvc $indexed_pvc_name
-  fi
-done
+# pvc_name="redis-data-redis-node-"
+# for i in $(seq 0 $((REDIS_REPLICAS - 1))); do
+#   indexed_pvc_name="${pvc_name}-${i}"
+#   delete_resource_if_exists "pvc" "$indexed_pvc_name"
+#   if [[ `oc describe pvc/$indexed_pvc_name 2>&1` =~ "NotFound" ]]; then
+#     echo "PVC $indexed_pvc_name NOT FOUND..."
+#   else
+#     echo "Deleting PVC $indexed_pvc_name..."
+#     oc delete pvc $indexed_pvc_name
+#   fi
+# done
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
@@ -112,7 +113,7 @@ if ! wait_for "statefulset/$REDIS_NAME"; then
   exit 1
 fi
 
-scale_deployment "statefulset" "$REDIS_NAME" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
+scale_deployment "statefulset" "$REDIS_NAME-node" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"
