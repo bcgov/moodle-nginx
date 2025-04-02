@@ -22,7 +22,7 @@ $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
 $CFG->debug = (E_ALL | E_STRICT);
 $CFG->debugdisplay = 1;
-$CFG->debugsessionlock = 30; // Time in seconds
+$CFG->debugsessionlock = 10; // Time in seconds
 
 $CFG->langstringcache = 1;
 $CFG->cachejs = 1;
@@ -146,15 +146,15 @@ if (isset($_REQUEST['TEST_CACHE_DISK'])) {
 
 require_once(__DIR__ . '/lib/setup.php');
 
-if ($_ENV['debug_load_test_cache_disk_msg'] != '') {
-  echo $_ENV['debug_load_test_cache_disk_msg'];
+if (@$_ENV['debug_load_test_cache_disk_msg'] != '') {
+    echo $_ENV['debug_load_test_cache_disk_msg'];
 }
 
 if (isset($_REQUEST['debug'])) {
-  echo '<p><strong>$_SERVER</strong></p>',
-    '<pre>', print_r($_SERVER), '</pre>',
-    '<p><strong>$CFG</strong></p>',
-    '<pre>', print_r($CFG), '</pre>';
+    echo '<p><strong>$_SERVER</strong></p>',
+      '<pre>', print_r($_SERVER), '</pre>',
+      '<p><strong>$CFG</strong></p>',
+      '<pre>', print_r($CFG), '</pre>';
 }
 
 // There is no php closing tag in this file,

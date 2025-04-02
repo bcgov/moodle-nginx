@@ -117,8 +117,8 @@ $CFG->getremoteaddrconf = 0;
 
 require_once(__DIR__ . '/lib/setup.php');
 
-if ($_ENV['debug_load_test_cache_disk_msg'] != '') {
-  echo $_ENV['debug_load_test_cache_disk_msg'];
+if (@$_ENV['debug_load_test_cache_disk_msg'] != '') {
+    echo $_ENV['debug_load_test_cache_disk_msg'];
 }
 
 // There is no php closing tag in this file,

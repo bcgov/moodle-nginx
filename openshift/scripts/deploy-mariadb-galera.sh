@@ -30,7 +30,6 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # First schedule PVC volumes for deletion (second and third of three - leave first [#0] for data replication)
   # data-mariadb-galera-0 (delete: data-mariadb-galera-1, data-mariadb-galera-2)
   echo "Deleting $DB_DEPLOYMENT_NAME replica PVCs..."
-
   # Gather related PVC names from OpenShift
   PVC_LIST=$(oc get pvc -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep "data-$DB_DEPLOYMENT_NAME-")
 
@@ -108,6 +107,10 @@ else
     --timeout 20m0s
     #-f ./config/mariadb/galera-values.yaml
 fi
+
+# Ensure we're using custom config for the database
+echo "Creating ConfigMap mariadb-galera-configuration..."
+oc create configmap mariadb-galera-configuration --from-file=./config/mariadb/my.cnf --dry-run=client -o yaml | oc apply -f -
 
 # Create or update the ConfigMap from the prestop.sh script
 if oc get configmap ${DB_DEPLOYMENT_NAME}-prestop-script &> /dev/null; then

@@ -53,11 +53,11 @@ cat <<EOF > upgrade.yaml
 redis:
   persistence:
     enabled: false
-    size: 600Mi
+    size: 0Mi
   resources:
     requests:
-      memory: 128Mi
-      cpu: 100m
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:

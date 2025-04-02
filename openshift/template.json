@@ -199,7 +199,7 @@
                       "command": [
                         "/bin/sh",
                         "-c",
-                        "kill -SIGQUIT 1"
+                        "sleep 10 && kill -SIGQUIT 1"
                       ]
                     }
                   }
