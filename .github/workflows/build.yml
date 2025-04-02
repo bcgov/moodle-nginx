@@ -264,8 +264,18 @@ jobs:
       - name: Lighthouse
         id: lighthouse
         run: |
-          # sleep 120 # Wait for the deployment to be ready
-          `echo "LHRESULT=$(node config/lighthouse/lighthouse-auth.js)" >> $GITHUB_OUTPUT`
+          # sleep 240 # Wait for the deployment to be ready
+          set +e
+          OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Lighthouse script failed with error:"
+            echo "$OUTPUT"
+            echo "LHRESULT=$(echo "$OUTPUT" | head -n 1)" >> $GITHUB_OUTPUT
+            exit $EXIT_CODE
+          else
+            echo "LHRESULT=$OUTPUT" >> $GITHUB_OUTPUT
+          fi
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
           USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}

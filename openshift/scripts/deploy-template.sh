@@ -80,13 +80,6 @@ deploy_resource_from_template ./openshift/template.json \
   "REDIS_PORT=$REDIS_PORT" \
   "MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME"
 
-# Scale [up] php to 1 replica
-scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
-if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
-  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."
-  exit 1
-fi
-
 echo "Create and run migrate-build-files job..."
 oc process -f ./openshift/migrate-build-files.yml | oc create -f -
 if ! wait_for "job/migrate-build-files" "complete" "800s"; then
@@ -94,26 +87,54 @@ if ! wait_for "job/migrate-build-files" "complete" "800s"; then
   exit 1
 fi
 
-echo "Create and run Moodle upgrade job..."
-deploy_resource_from_template ./openshift/moodle-upgrade.yml \
-  IMAGE_REPO=$IMAGE_REPO \
-  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-  BUILD_NAME=$PHP_DEPLOYMENT_NAME
-if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
-  echo "Failed to run Moodle upgrade job. Exiting..."
+while true; do
+  # Ensure that the Redis proxy is deployed and error-free
+  wait_for_deployment_without_errors "deployment/redis-proxy"
+
+  echo "Create and run Moodle upgrade job..."
+  deploy_resource_from_template ./openshift/moodle-upgrade.yml \
+    IMAGE_REPO=$IMAGE_REPO \
+    DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
+    BUILD_NAME=$PHP_DEPLOYMENT_NAME
+  if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
+    echo "Failed to run Moodle upgrade job. Exiting..."
+    exit 1
+  fi
+
+  # Wait for "File copy complete" message
+  # Get the name of the pod created by the job
+  pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
+  error_detected=false
+  oc logs -f $pod_name | while read line; do
+    if [[ $line == *"Exception"* || $line == *"read error on connection to redis-proxy"* ]]; then
+      echo "Error detected during Moodle upgrade: $line"
+      error_detected=true
+      pkill -P $$ oc
+    fi
+    if [[ $line == *"Maintenance mode has been disabled and the site is running normally again"* ]]; then
+      echo $line
+      pkill -P $$ oc
+    fi
+  done
+
+  if $error_detected; then
+    echo "Restarting Redis proxy and retrying Moodle upgrade..."
+    wait_for_deployment_without_errors "deployment/redis-proxy"
+    continue
+  fi
+
+  # If no errors were detected, break out of the loop
+  break
+done
+
+# Scale [up] php to 1 replica
+scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
+if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
+  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."
   exit 1
 fi
 
-# Wait for "File copy complete" message
-# Get the name of the pod created by the job
-pod_name=$(oc get pods --selector=job-name=moodle-upgrade -o jsonpath='{.items[0].metadata.name}')
-oc logs -f $pod_name | while read line
-do
-  echo $line
-  if [[ $line == *"Maintenance mode has been disabled and the site is running normally again"* ]]; then
-    pkill -P $$ oc
-  fi
-done
+sleep 60
 
 echo "Purging caches..."
 oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' --wait
@@ -124,9 +145,6 @@ echo "Result: $plugin_purge"
 
 # Right-sizing cluster, according to environment
 bash ./openshift/scripts/right-sizing.sh
-
-# Ensure that the Redis proxy is deployed and error-free
-wait_for_deployment_without_errors "deployment/redis-proxy"
 
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"

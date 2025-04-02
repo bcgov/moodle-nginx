@@ -747,7 +747,7 @@ delete_resource_if_exists() {
   oc_command="oc describe $resource_type $resource_name"
   echo "Executing: $oc_command"
   oc_output=$($oc_command 2>&1)
-  echo "Result: $oc_output"
+  // echo "Result: $oc_output"
 
   if [[ ! $oc_output =~ "NotFound" ]]; then
     echo "$resource_type exists... Deleting: $resource_name"

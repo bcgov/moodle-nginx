@@ -23,17 +23,23 @@ source ./openshift/scripts/_utils.sh
 # based on those values
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue
 do
-  # Ignore if the type is 'job'
+  echo "Right-sizing: $Type/$Deployment"
+
+  # Ignore if the type is not statefulset or deployemnt (mainly ignores jobs)
   if [[ "$Type" == "sts" || "$Type" == "deployment" ]]; then
     set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest"
   fi
-
-  echo "Right-sizing: $Type/$Deployment"
 
   if [[ $PodCount -eq 0 ]]; then
     echo "Skipping optional / temporary resource... no pods required to be running."
   else
     scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"
-    create_hpa "$Deployment" "$Type/$Deployment" "$PodCount" "$MaxPods" "$CPUScaleValue"
+
+    # Check if MaxPods is greater than PodCount before creating the HPA
+    if [[ $MaxPods -gt $PodCount ]]; then
+      create_hpa "$Deployment" "$Type/$Deployment" "$PodCount" "$MaxPods" "$CPUScaleValue"
+    else
+      echo "Skipping HPA creation for $Type/$Deployment: MaxPods ($MaxPods) is not greater than PodCount ($PodCount)."
+    fi
   fi
 done
