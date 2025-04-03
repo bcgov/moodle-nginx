@@ -47,12 +47,14 @@ scale_deployment() {
       cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
       echo "Executing: $cmd"
       # $cmd
-    fi
 
-    # Patch the deployment
-    echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
-    oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"$max_unavailable\"}}}}"
+      # Patch the deployment
+      echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+      oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"$max_unavailable\"}}}}"
+    fi
   fi
+
+  seep 20
 
   # Wait for the deployment to be ready
   echo "Waiting for deployment to scale ($pod_count/$max_pods): $type/$deployment..."

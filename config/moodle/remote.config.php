@@ -1,7 +1,7 @@
 <?php  // Moodle configuration file
 
 @error_reporting(E_ALL | E_STRICT);
-@ini_set('display_errors', 1);
+@ini_set('display_errors', 0);
 
 unset($CFG);
 global $CFG;
@@ -20,8 +20,8 @@ $CFG->moodleappdir    = '/var/www/html';
 $CFG->prefix    = '';
 $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
-$CFG->debug = (E_ALL | E_STRICT);
-$CFG->debugdisplay = 1;
+// $CFG->debug = (E_ALL | E_STRICT);
+$CFG->debugdisplay = 0;
 $CFG->debugsessionlock = 10; // Time in seconds
 
 $CFG->langstringcache = 1;

@@ -882,7 +882,7 @@
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Request CPU",
       "name": "PHP_CPU_REQUEST",
-      "value": "50m"
+      "value": "400m"
     },
     {
       "description": "Requested amount of memory for the PHP container.",

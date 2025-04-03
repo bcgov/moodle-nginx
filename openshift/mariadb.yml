@@ -26,5 +26,5 @@ spec:
     max_allowed_packet=1024M
   resources:
     requests:
-      cpu: 50m
+      cpu: 150m
       memory: 256Mi
