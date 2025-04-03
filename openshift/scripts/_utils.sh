@@ -816,3 +816,62 @@ deploy_resource_from_template() {
   # Apply the processed template
   echo "$processed_template" | oc apply -f -
 }
+
+check_logs_for_pattern() {
+  local pod_name=$1
+  local namespace=$2
+  local pattern=$3
+
+  local logs=$(oc logs $pod_name -n $namespace 2>&1)
+  if echo "$logs" | grep -q "$pattern"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+wait_for_galera_sync() {
+  local sts_name=$1
+  local namespace=$2
+  local max_retries=${3:-30}
+  local wait_time=${4:-10}
+  local retry_count=0
+
+  echo "Waiting for MariaDB Galera cluster ($sts_name) to sync in namespace $namespace..."
+
+  while true; do
+    # Check if the statefulset exists
+    if ! oc get sts $sts_name -n $namespace &> /dev/null; then
+      echo "❌ StatefulSet $sts_name not found in namespace $namespace. Exiting..."
+      return 1
+    fi
+
+    # Get the name of the first pod in the statefulset
+    local first_pod="${sts_name}-0"
+    if ! oc get pod $first_pod -n $namespace &> /dev/null; then
+      echo "❌ Pod $first_pod not found. Retrying..."
+      sleep $wait_time
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for pod $first_pod to be created. Exiting..."
+        return 1
+      fi
+      continue
+    fi
+
+    # Check the logs of the first pod for the sync condition
+    if check_logs_for_pattern $first_pod $namespace "members(5):"; then
+      echo "✔️ MariaDB Galera cluster is synced. All members are running."
+      return 0
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for MariaDB Galera cluster to sync. Exiting..."
+      return 1
+    fi
+
+    sleep $wait_time
+  done
+}
