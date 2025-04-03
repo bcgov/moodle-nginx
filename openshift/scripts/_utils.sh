@@ -327,6 +327,9 @@ manage_maintenance_mode() {
 
   local script_action="--$action"
   local expected_output=""
+  local max_retries=5
+  local retry_count=0
+  local wait_time=10
 
   if [[ $action == "enable" ]]; then
     enable_maintenance_mode $deployment_name $route_name
@@ -337,16 +340,30 @@ manage_maintenance_mode() {
   fi
 
   echo "${action^} maintenance mode..."
-  maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action")
 
-  if echo "$maintenance_output" | grep -q "$expected_output"; then
-    echo "Maintenance mode has been successfully ${action}d."
-  elif echo "$maintenance_output" | grep -q "Error"; then
-    echo "Failed to ${action} maintenance mode. Error message: $maintenance_output"
-    exit 1
-  else
-    echo "$maintenance_output"
-  fi
+  while true; do
+    maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
+
+    if echo "$maintenance_output" | grep -q "$expected_output"; then
+      echo "Maintenance mode has been successfully ${action}d."
+      break
+    elif echo "$maintenance_output" | grep -q "Exception"; then
+      echo "Error detected: $maintenance_output"
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Failed to ${action} maintenance mode after $max_retries attempts. Exiting..."
+        exit 1
+      fi
+      echo "Retrying to ${action} maintenance mode in $wait_time seconds... (Attempt $retry_count/$max_retries)"
+      sleep $wait_time
+    elif echo "$maintenance_output" | grep -q "Error"; then
+      echo "Failed to ${action} maintenance mode. Error message: $maintenance_output"
+      exit 1
+    else
+      echo "$maintenance_output"
+      break
+    fi
+  done
 }
 
 # Function to patch route and verify changes
