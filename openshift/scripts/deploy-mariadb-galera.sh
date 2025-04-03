@@ -202,7 +202,7 @@ fi
 echo "Checking if the database is online and contains expected Moodle data..."
 ATTEMPTS=0
 WAIT_TIME=10
-MAX_ATTEMPTS=30 # wait up to 5 minutes
+MAX_ATTEMPTS=60 # wait up to 5 minutes
 
 # Get the name of the first pod in the StatefulSet
 DB_POD_NAME=""

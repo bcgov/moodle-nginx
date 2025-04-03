@@ -27,11 +27,11 @@ scale_deployment() {
   if [[ "$type" == "sts" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
     echo "Executing: $cmd"
-    $cmd
+    # $cmd
   elif [[ "$type" == "deployment" ]]; then
     cmd="oc scale $type/$deployment --replicas=$pod_count"
     echo "Executing: $cmd"
-    $cmd
+    # $cmd
 
     # Remove existing autoscaler if it exists
     if oc get hpa $deployment &> /dev/null; then
@@ -44,7 +44,7 @@ scale_deployment() {
     if [[ $diff -gt 0 ]]; then
       cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
       echo "Executing: $cmd"
-      $cmd
+      # $cmd
     fi
 
     # Patch the deployment
@@ -747,7 +747,7 @@ delete_resource_if_exists() {
   oc_command="oc describe $resource_type $resource_name"
   echo "Executing: $oc_command"
   oc_output=$($oc_command 2>&1)
-  // echo "Result: $oc_output"
+  # echo "Result: $oc_output"
 
   if [[ ! $oc_output =~ "NotFound" ]]; then
     echo "$resource_type exists... Deleting: $resource_name"
