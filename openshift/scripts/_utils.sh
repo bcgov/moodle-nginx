@@ -327,9 +327,6 @@ manage_maintenance_mode() {
 
   local script_action="--$action"
   local expected_output=""
-  local max_retries=5
-  local retry_count=0
-  local wait_time=10
 
   if [[ $action == "enable" ]]; then
     enable_maintenance_mode $deployment_name $route_name
@@ -340,30 +337,16 @@ manage_maintenance_mode() {
   fi
 
   echo "${action^} maintenance mode..."
+  maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action")
 
-  while true; do
-    maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
-
-    if echo "$maintenance_output" | grep -q "$expected_output"; then
-      echo "Maintenance mode has been successfully ${action}d."
-      break
-    elif echo "$maintenance_output" | grep -q "Exception"; then
-      echo "Error detected: $maintenance_output"
-      retry_count=$((retry_count + 1))
-      if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Failed to ${action} maintenance mode after $max_retries attempts. Exiting..."
-        exit 1
-      fi
-      echo "Retrying to ${action} maintenance mode in $wait_time seconds... (Attempt $retry_count/$max_retries)"
-      sleep $wait_time
-    elif echo "$maintenance_output" | grep -q "Error"; then
-      echo "Failed to ${action} maintenance mode. Error message: $maintenance_output"
-      exit 1
-    else
-      echo "$maintenance_output"
-      break
-    fi
-  done
+  if echo "$maintenance_output" | grep -q "$expected_output"; then
+    echo "Maintenance mode has been successfully ${action}d."
+  elif echo "$maintenance_output" | grep -q "Error"; then
+    echo "Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    exit 1
+  else
+    echo "$maintenance_output"
+  fi
 }
 
 # Function to patch route and verify changes
@@ -395,7 +378,110 @@ patch_route() {
   done
 }
 
-# Function to wait for deployment pods to be ready or scaled to zero
+# Function to handle job-specific logic
+handle_job_status() {
+  local job_name=$1
+  local max_retries=$2
+  local retry_count=$3
+  local wait_time=$4
+
+  while true; do
+    # Check if the job has failed
+    local job_failed=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
+    if [[ $job_failed -gt 0 ]]; then
+      echo "❌ Job $job_name has failed. Retrieving logs..."
+      local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
+      local error_log_text=$(oc logs $pod_name)
+      echo "Error log:"
+      echo "$error_log_text"
+      return 1
+    fi
+
+    # Check if the job has succeeded
+    local job_succeeded=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
+    if [[ $job_succeeded -gt 0 ]]; then
+      echo "✔️ Job $job_name has completed successfully."
+      return 0
+    fi
+
+    # Retry logic
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for job $job_name to complete. Exiting..."
+      return 1
+    fi
+
+    echo "Waiting for job $job_name to complete... (Retry $retry_count/$max_retries)"
+    sleep $wait_time
+    retry_count=$((retry_count + 1))
+  done
+}
+
+# Function to handle deployment-specific logic
+handle_deployment_status() {
+  local resource_name=$1
+  local condition=$2
+  local scale_direction=$3
+  local max_retries=$4
+  local retry_count=$5
+  local wait_time=$6
+
+  while true; do
+    # Determine the appropriate label selector
+    local label_selector="deployment=$resource_name"
+    local pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      label_selector="app=$resource_name"
+      pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+    fi
+
+    if [[ -z "$pods" ]]; then
+      label_selector="app.kubernetes.io/name=$resource_name"
+      pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+    fi
+
+    if [[ $scale_direction == "up" ]]; then
+      if [[ -z "$pods" ]]; then
+        echo "No pods found for $resource_name. Retrying..."
+      else
+        local all_pods_ready=true
+        for pod in $pods; do
+          local output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
+          echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
+          echo "Status: $output"
+          if ! echo "$output" | grep -q "condition met"; then
+            all_pods_ready=false
+            echo "Pod $pod is not in '$condition' condition. Retrying..."
+            break
+          fi
+        done
+        if $all_pods_ready; then
+          echo "✔️ All pods for $resource_name are in '$condition' condition."
+          return 0
+        fi
+      fi
+    elif [[ $scale_direction == "down" ]]; then
+      if [[ -z "$pods" ]]; then
+        echo "✔️ All pods for $resource_name have scaled down."
+        return 0
+      else
+        echo "Pods still exist for $resource_name. Retrying..."
+      fi
+    fi
+
+    # Retry logic
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
+      return 1
+    fi
+
+    echo "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
+    sleep $wait_time
+    retry_count=$((retry_count + 1))
+  done
+}
+
+# Wait for a resource to deploy (or scale-down)
 wait_for() {
   local resource=$1
   local condition=${2:-ready}
@@ -405,8 +491,7 @@ wait_for() {
   local retry_count=0
   local wait_time=10
 
-  # Wait to ensure the resource has had enough
-  # time to set the desired state
+  # Wait to ensure the resource has had enough time to set the desired state
   sleep 10
 
   # Extract resource type and name
@@ -415,100 +500,20 @@ wait_for() {
     local resource_name=${resource##*/}
   else
     echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>"
-    exit 1
+    return 1
   fi
 
   # Convert timeout to seconds for calculation
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
-  local total_wait_time=$((timeout_seconds + wait_time))
-
-  # If timeout has been adjusted via parameter
-  # use the new value by adjusting max_retries
-  if [[ $timeout_seconds -ne $((max_retries * wait_time)) ]]; then
-    max_retries=$((timeout_seconds / wait_time))
-    echo "Timeout adjusted to $timeout. Total wait time: $total_wait_time seconds. Calculated timeout seconds: $timeout_seconds"
-    echo "Max retries set to $max_retries."
-  fi
+  max_retries=$((timeout_seconds / wait_time))
 
   echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
-  while true; do
-    if [[ $resource_type == "job" ]]; then
-      # Check job status
-      job_status=$(oc get jobs $resource_name -o 'jsonpath={..status.failed}')
-      if [[ $job_status > 0 ]]; then
-        echo "Job $resource_name has failed. Retrieving logs..."
-        pod_name=$(oc get pods --selector=job-name=$resource_name -o jsonpath='{.items[0].metadata.name}')
-        error_log_text=$(oc logs $pod_name)
-        echo "Error log:"
-        echo "$error_log_text"
-        echo "Exiting..."
-        exit 1
-      fi
-
-      job_status=$(oc get jobs $resource_name -o 'jsonpath={..status.succeeded}')
-      if [[ $job_status > 0 ]]; then
-        echo "✔️ Job $resource_name has completed successfully."
-        break
-      fi
-
-      echo "Waiting for job $resource_name to complete..."
-    else
-      # Determine the appropriate label selector
-      local label_selector="deployment=$resource_name"
-      local pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
-
-      if [[ -z "$pods" ]]; then
-        label_selector="app=$resource_name"
-        pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
-      fi
-
-      if [[ -z "$pods" ]]; then
-        label_selector="app.kubernetes.io/name=$resource_name"
-        pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
-      fi
-
-      if [[ $scale_direction == "up" ]]; then
-        if [[ -z "$pods" ]]; then
-          echo "No pods found for $resource. Retrying..."
-        else
-          all_pods_ready=true
-          for pod in $pods; do
-            output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
-            echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
-            echo "Status: $output"
-            if ! echo "$output" | grep -q "condition met"; then
-              all_pods_ready=false
-              echo "Pod $pod is not in '$condition' condition. Retrying..."
-              break
-            fi
-          done
-          if $all_pods_ready; then
-            echo "✔️ All pods for $resource are in '$condition' condition."
-            break
-          fi
-        fi
-      elif [[ $scale_direction == "down" ]]; then
-        if [[ -z "$pods" ]]; then
-          echo "✔️ All pods for $resource have scaled down."
-          break
-        else
-          echo "Pods still exist for $resource. Retrying..."
-        fi
-      fi
-    fi
-
-    if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
-      return 1
-    fi
-
-    echo "Retrying... ($(((retry_count + 1) * wait_time))/$timeout_seconds)"
-    sleep $wait_time
-    retry_count=$((retry_count + 1))
-  done
-
-  return 0
+  if [[ $resource_type == "job" ]]; then
+    handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+  else
+    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time"
+  fi
 }
 
 check_timestamp() {
