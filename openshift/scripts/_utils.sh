@@ -29,15 +29,17 @@ scale_deployment() {
     echo "Executing: $cmd"
     # $cmd
   elif [[ "$type" == "deployment" ]]; then
-    cmd="oc scale $type/$deployment --replicas=$pod_count"
-    echo "Executing: $cmd"
-    # $cmd
-
     # Remove existing autoscaler if it exists
     if oc get hpa $deployment &> /dev/null; then
       echo "Removing existing HorizontalPodAutoscaler for $deployment"
       delete_resource_if_exists hpa $deployment
     fi
+
+    sleep 10
+
+    cmd="oc scale $type/$deployment --replicas=$pod_count"
+    echo "Executing: $cmd"
+    # $cmd
 
     # Add HorizontalPodAutoscaler if MaxPods > PodCount
     local diff=$((max_pods - pod_count))
@@ -53,7 +55,7 @@ scale_deployment() {
   fi
 
   # Wait for the deployment to be ready
-  echo "Waiting for deployment to scale: $type/$deployment..."
+  echo "Waiting for deployment to scale ($pod_count/$max_pods): $type/$deployment..."
   if wait_for_deployment_without_errors "$type/$deployment"; then
     return 0
   else
