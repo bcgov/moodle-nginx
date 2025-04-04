@@ -27,7 +27,7 @@ scale_deployment() {
   if [[ "$type" == "sts" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
     echo "Executing: $cmd"
-    # $cmd
+    $cmd
   elif [[ "$type" == "deployment" ]]; then
     # Remove existing autoscaler if it exists
     if oc get hpa $deployment &> /dev/null; then
@@ -39,14 +39,14 @@ scale_deployment() {
 
     cmd="oc scale $type/$deployment --replicas=$pod_count"
     echo "Executing: $cmd"
-    # $cmd
+    $cmd
 
     # Add HorizontalPodAutoscaler if MaxPods > PodCount
     local diff=$((max_pods - pod_count))
     if [[ $diff -gt 0 ]]; then
       cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
       echo "Executing: $cmd"
-      # $cmd
+      $cmd
 
       # Patch the deployment
       echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
