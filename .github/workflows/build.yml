@@ -264,7 +264,7 @@ jobs:
       - name: Lighthouse
         id: lighthouse
         run: |
-          sleep 120 # Wait for the deployment to be ready
+          sleep 300 # Wait for the deployment to be ready
           set +e
           OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
           EXIT_CODE=$?

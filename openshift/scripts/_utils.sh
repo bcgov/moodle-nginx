@@ -54,7 +54,7 @@ scale_deployment() {
     fi
   fi
 
-  seep 20
+  sleep 20
 
   # Wait for the deployment to be ready
   echo "Waiting for deployment to scale ($pod_count/$max_pods): $type/$deployment..."
@@ -94,7 +94,7 @@ check_pod_logs() {
 
     for error_search_string in "${error_strings[@]}"; do
       # echo "Searching for error string: $error_search_string"
-      if echo "$LOGS" | grep -q "$error_search_string"; then
+      if echo "$LOGS" | grep -q "$error_search_string" > /dev/null 2>&1; then
         # Check if the connection was reestablished
         if echo "$logs" | grep -q "$error_search_string" && echo "$logs" | grep -q "Success"; then
           echo "Connection was lost but reestablished. No need to restart the pod."
