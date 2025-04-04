@@ -205,6 +205,37 @@ resource_exists() {
   fi
 }
 
+# Wait for deployment to scale down [to 0 replicas]
+wait_for_scale_down() {
+  local resource=$1 # e.g., deployment/php
+  local max_retries=${2:-30}
+  local wait_time=${3:-10}
+  local retry_count=0
+
+  echo "Waiting for $resource to scale down to 0 replicas..."
+
+  while true; do
+    # Get the list of pods for the resource
+    local pods=$(oc get pods --selector=deployment=${resource##*/} -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      echo "✔️ All pods for $resource have been terminated."
+      return 0
+    else
+      echo "Pods still exist for $resource: $pods. Retrying..."
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for $resource to scale down. Exiting..."
+      return 1
+    fi
+
+    sleep $wait_time
+  done
+}
+
 # Function to wait for all pods in a deployment
 # or statefulset to be running and check for errors
 wait_for_deployment_without_errors() {
@@ -225,6 +256,14 @@ wait_for_deployment_without_errors() {
     return 1
   fi
 
+  # Get the desired replica count
+  local desired_replicas=$(oc get $resource_type $resource_name -o jsonpath='{.spec.replicas}')
+  if [[ "$desired_replicas" == "0" ]]; then
+    # Delegate to the scale-down function
+    wait_for_scale_down "$resource" $max_retries $wait_time
+    return $?
+  fi
+
   # Get the list of pods created for the resource
   local pods=$(oc get pods --selector=${resource_type}=${resource_name} -o jsonpath='{.items[*].metadata.name}')
 
@@ -243,15 +282,13 @@ wait_for_deployment_without_errors() {
       if [[ "$pod_status" != "Running" ]]; then
         if [[ "$pod_status" == "Failed" ]]; then
           echo "❌ ${resource_name} pod Failed."
-          # echo "Retrieving logs..."
-          # oc logs $pod
           echo "Exiting..."
           return 1
         fi
         echo "Waiting for pod $pod to be running..."
         sleep $wait_time
       else
-        # echo "$pod is running. Checking for errors..."
+        # Check for errors in the pod logs
         if ! check_pod_logs $pod $error_search_string $error_handler; then
           echo "✔️ $pod"
           break
