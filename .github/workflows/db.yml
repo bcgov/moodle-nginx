@@ -7,7 +7,7 @@ concurrency:
 on:
   workflow_call:
     inputs:
-      DB_IMAGE:
+      IMAGE_NAME:
         required: true
         type: string
       IMAGE_REBUILD_TIME_LIMIT:
@@ -51,7 +51,7 @@ jobs:
 
       - name: Check Env Vars
         run: |
-          echo Building and pushing DB_IMAGE: ${{ env.DB_IMAGE }}
+          echo Building and pushing IMAGE_NAME: ${{ env.IMAGE_NAME }}
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
@@ -66,7 +66,7 @@ jobs:
         run: |
           # Define variables
           ARTIFACTORY_URL="${{ secrets.ARTIFACTORY_URL }}"
-          IMAGE_NAME="${{ inputs.DB_IMAGE }}"
+          IMAGE_NAME="${{ inputs.IMAGE_NAME }}"
           IMAGE_REBUILD_TIME_LIMIT=${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
 
           # Query Artifactory for the image metadata
@@ -102,6 +102,6 @@ jobs:
       - name: 🛠️ Pull latest DB base image then push to Artifactory
         if: env.SKIP_BUILD == 'NO'
         run: |
-          docker pull ${{ env.DB_IMAGE }}
-          docker tag ${{ env.DB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.DB_IMAGE }}
+          docker pull ${{ env.IMAGE_NAME }}
+          docker tag ${{ env.IMAGE_NAME }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.IMAGE_NAME }}
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.IMAGE_NAME }}
