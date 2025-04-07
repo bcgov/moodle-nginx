@@ -132,7 +132,6 @@ jobs:
     secrets: inherit
     with:
       IMAGE_NAME: "mariadb:10"
-      IMAGE_REBUILD_TIME_LIMIT: "86400"
 
   php:
     name: 🔨 PHP
