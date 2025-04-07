@@ -129,7 +129,6 @@ jobs:
     needs: [checkEnv]
     uses: ./.github/workflows/db.yml
     secrets: inherit
-    # if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     with:
       IMAGE_NAME: ${{ needs.checkEnv.outputs.DB_IMAGE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
