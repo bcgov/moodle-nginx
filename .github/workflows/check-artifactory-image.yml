@@ -1,0 +1,67 @@
+name: 🔍 Check Image in Artifactory
+
+on:
+  workflow_call:
+    inputs:
+      IMAGE_NAME:
+        description: "The name of the image to check in Artifactory"
+        required: true
+        type: string
+      IMAGE_REBUILD_TIME_LIMIT:
+        description: "The maximum allowable time (in seconds) since the last build"
+        required: true
+        type: number
+    secrets:
+      ARTIFACTORY_URL:
+        required: true
+      ARTIFACTORY_USER:
+        required: true
+      ARTIFACTORY_PASSWORD:
+        required: true
+
+jobs:
+  check-image:
+    runs-on: ubuntu-22.04
+    outputs:
+      skip_build: ${{ steps.check.outputs.skip_build }}
+    steps:
+      - name: Check Image in Artifactory
+        id: check
+        run: |
+          # Define variables
+          ARTIFACTORY_URL="${{ secrets.ARTIFACTORY_URL }}"
+          IMAGE_NAME="${{ inputs.IMAGE_NAME }}"
+          IMAGE_REBUILD_TIME_LIMIT=${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
+
+          # Query Artifactory for the image metadata
+          RESPONSE=$(curl -s -u "${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_PASSWORD }}" \
+            -X GET "${ARTIFACTORY_URL}/artifactory/api/storage/${IMAGE_NAME}")
+
+          # Check if the image exists
+          if echo "$RESPONSE" | grep -q '"errors"'; then
+            echo "Image not found in Artifactory. Proceeding with build."
+            echo "skip_build=NO" >> $GITHUB_ENV
+            echo "skip_build=NO" >> $GITHUB_OUTPUT
+          else
+            # Extract the last modified timestamp
+            LAST_MODIFIED=$(echo "$RESPONSE" | jq -r '.lastModified')
+            echo "Image found in Artifactory. Last modified: $LAST_MODIFIED"
+
+            # Convert the last modified timestamp to seconds since epoch
+            LAST_MODIFIED_EPOCH=$(date -d "$LAST_MODIFIED" +%s)
+            CURRENT_TIMESTAMP=$(date +%s)
+
+            # Calculate the time difference
+            TIME_DIFF=$((CURRENT_TIMESTAMP - LAST_MODIFIED_EPOCH))
+
+            # Determine whether to skip the build
+            if [ "$TIME_DIFF" -lt "$IMAGE_REBUILD_TIME_LIMIT" ]; then
+              echo "Image was recently built. Skipping build."
+              echo "skip_build=YES" >> $GITHUB_ENV
+              echo "skip_build=YES" >> $GITHUB_OUTPUT
+            else
+              echo "Image is outdated. Proceeding with build."
+              echo "skip_build=NO" >> $GITHUB_ENV
+              echo "skip_build=NO" >> $GITHUB_OUTPUT
+            fi
+          fi
