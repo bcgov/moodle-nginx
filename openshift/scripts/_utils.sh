@@ -556,19 +556,19 @@ wait_for() {
 check_timestamp() {
   local file_to_test=${1:-/var/www/html/index.php}
   local default_rerun_block_seconds=0 # Default to never blocking reruns
-  local rerun_block_seconds=${REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
+  local rerun_block_seconds=${IMAGE_REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
 
   echo "Checking last time maintenance script was run..."
 
   # Check if the environment variable is set and valid
   if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
-    echo "Invalid REBUILD_TIME_LIMIT value ($REBUILD_TIME_LIMIT). Using default value."
+    echo "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
     rerun_block_seconds=$default_rerun_block_seconds
   fi
 
   # If the value is 0, do not enforce the time limit
   if [ "$rerun_block_seconds" -eq 0 ]; then
-    echo "REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
+    echo "IMAGE_REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
     return 0
   fi
 
