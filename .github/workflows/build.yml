@@ -126,12 +126,13 @@ jobs:
   # Build Images and deploy to JFrog
   db:
     name: 🔨 DB
-    needs: [checkEnv]
+    # needs: [checkEnv]
+    # if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/db.yml
     secrets: inherit
     with:
-      IMAGE_NAME: ${{ needs.checkEnv.outputs.DB_IMAGE }}
-      IMAGE_REBUILD_TIME_LIMIT: "${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}"
+      IMAGE_NAME: "mariadb:10"
+      IMAGE_REBUILD_TIME_LIMIT: "86400"
 
   php:
     name: 🔨 PHP
