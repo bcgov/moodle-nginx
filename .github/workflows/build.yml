@@ -279,7 +279,10 @@ jobs:
             # Exit with the same error code
             exit $EXIT_CODE
           else
-            echo "LHRESULT=$OUTPUT" >> $GITHUB_OUTPUT
+            # Write the full output to GITHUB_OUTPUT using EOF
+            echo "LHRESULT<<EOF" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
