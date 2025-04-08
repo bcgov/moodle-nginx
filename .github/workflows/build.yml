@@ -56,7 +56,6 @@ jobs:
       APP: ${{ env.APP }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
       BRANCH: ${{ env.BRANCH }}
-      IMAGE_REBUILD_TIME_LIMIT: "${{ env.IMAGE_REBUILD_TIME_LIMIT }}"
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ env.OPENSHIFT_SERVER }}
       DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
@@ -198,7 +197,6 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
-      IMAGE_REBUILD_TIME_LIMIT: "${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}"
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}
       APP: ${{ needs.checkEnv.outputs.APP }}

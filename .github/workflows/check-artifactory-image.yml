@@ -7,10 +7,6 @@ on:
         description: "The name of the image to check in Artifactory"
         required: true
         type: string
-      IMAGE_REBUILD_TIME_LIMIT:
-        description: "The maximum allowable time (in seconds) since the last build"
-        required: true
-        type: number
     secrets:
       ARTIFACTORY_URL:
         required: true
@@ -31,7 +27,7 @@ jobs:
           # Define variables
           ARTIFACTORY_URL="${{ secrets.ARTIFACTORY_URL }}"
           IMAGE_NAME="${{ inputs.IMAGE_NAME }}"
-          IMAGE_REBUILD_TIME_LIMIT=${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
+          IMAGE_REBUILD_TIME_LIMIT=86400 # 24 hours in seconds
 
           # Query Artifactory for the image metadata
           RESPONSE=$(curl -s -u "${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_PASSWORD }}" \

@@ -554,6 +554,7 @@ wait_for() {
 }
 
 check_timestamp() {
+  IMAGE_REBUILD_TIME_LIMIT=${IMAGE_REBUILD_TIME_LIMIT:-86400} # Default to 24 hours
   local file_to_test=${1:-/var/www/html/index.php}
   local default_rerun_block_seconds=0 # Default to never blocking reruns
   local rerun_block_seconds=${IMAGE_REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
