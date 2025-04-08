@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+const fetch = require('node-fetch');
 const {URL} = require('url');
 const options = {
   // chromeFlags: ['--headless'],
@@ -6,6 +7,23 @@ const options = {
 };
 const site_url = 'moodle-e66ac2-dev.apps.silver.devops.gov.bc.ca'
 const testURL = 'https://' + site_url + '/login/index.php'
+
+async function waitForServer(url, timeout = 60000, interval = 5000) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        console.log(`✔️ Server is ready: ${url}`);
+        return true;
+      }
+    } catch (error) {
+      console.log(`Waiting for server to be ready: ${url}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  throw new Error(`❌ Server did not become ready within ${timeout / 1000} seconds: ${url}`);
+}
 
 async function runLighthouse(url, options, config = null) {
   const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
@@ -42,8 +60,9 @@ async function runLighthouse(url, options, config = null) {
   const lighthouse = (await import('lighthouse')).default;
   const fs = (await import('fs')).default;
   const fsp = (await import('fs')).promises;
+  const timeoutMs = 900000; // 15 minutes
 
-  await page.goto(url, { waitUntil: 'networkidle0' }); // Use the APP_HOST_URL environment variable
+  await page.goto(url, { waitUntil: 'networkidle0', timeout: timeoutMs });
 
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
@@ -217,7 +236,15 @@ async function runLighthouse(url, options, config = null) {
 }
 
 async function runTests() {
-  const report = await runLighthouse(testURL, options);
+  try {
+    console.log(`Checking if server is ready: ${testURL}`);
+    await waitForServer(testURL, 60000, 5000); // Wait up to 60 seconds, checking every 5 seconds
+    console.log(`Starting Lighthouse test for: ${testURL}`);
+    const report = await runLighthouse(testURL, options);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1); // Exit with failure if the server is not ready
+  }
 }
 
 runTests();
