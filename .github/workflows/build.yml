@@ -259,7 +259,7 @@ jobs:
       - name: Lighthouse
         id: lighthouse
         run: |
-          sleep 300 # Wait for the deployment to be ready
+          # sleep 300 # Wait for the deployment to be ready
           set +e
           OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
           EXIT_CODE=$?
@@ -272,7 +272,9 @@ jobs:
             ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
 
             # Write the sanitized error message to GITHUB_OUTPUT
-            echo "LHRESULT=$ERROR_MESSAGE" >> $GITHUB_OUTPUT
+            echo "LHRESULT<<EOF" >> $GITHUB_OUTPUT
+            echo "$ERROR_MESSAGE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
 
             # Exit with the same error code
             exit $EXIT_CODE

@@ -913,3 +913,46 @@ wait_for_galera_sync() {
     sleep $wait_time
   done
 }
+
+wait_for_redis_sync() {
+  local redis_name=$1
+  local namespace=$2
+  local max_retries=${3:-30}
+  local wait_time=${4:-10}
+  local retry_count=0
+
+  echo "Waiting for Redis nodes to sync (checking logs for 'Background AOF rewrite finished successfully')..."
+
+  while true; do
+    local all_synced=true
+
+    # Get the list of Redis pods
+    local pods=$(oc get pods -n $namespace --selector=statefulset=$redis_name -o jsonpath='{.items[*].metadata.name}')
+
+    for pod in $pods; do
+      # Fetch the logs for the current pod
+      local logs=$(oc logs $pod -n $namespace 2>&1)
+
+      # Check if the required message is present in the logs
+      if ! echo "$logs" | grep -q "Background AOF rewrite finished successfully"; then
+        echo "Pod $pod is not yet synced. Retrying..."
+        all_synced=false
+        break
+      fi
+    done
+
+    if $all_synced; then
+      echo "✔️ All Redis nodes are synced and ready."
+      return 0
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for Redis nodes to sync. Exiting..."
+      return 1
+    fi
+
+    sleep $wait_time
+  done
+}

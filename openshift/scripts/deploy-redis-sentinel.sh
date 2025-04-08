@@ -88,21 +88,6 @@ else
   fi
 fi
 
-# Delete existing PVCs for Redis if they exist
-# Removed sectin due to using Memory for Redis rateher than PVC
-# Loop through a list of PVC's, by incrementing the index
-# pvc_name="redis-data-redis-node-"
-# for i in $(seq 0 $((REDIS_REPLICAS - 1))); do
-#   indexed_pvc_name="${pvc_name}-${i}"
-#   delete_resource_if_exists "pvc" "$indexed_pvc_name"
-#   if [[ `oc describe pvc/$indexed_pvc_name 2>&1` =~ "NotFound" ]]; then
-#     echo "PVC $indexed_pvc_name NOT FOUND..."
-#   else
-#     echo "Deleting PVC $indexed_pvc_name..."
-#     oc delete pvc $indexed_pvc_name
-#   fi
-# done
-
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
@@ -117,6 +102,12 @@ scale_deployment "statefulset" "$REDIS_NAME-node" "$REDIS_REPLICAS" "$REDIS_REPL
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"
+
+# Wait for Redis nodes to sync
+if ! wait_for_redis_sync "$REDIS_NAME-node" "$OC_PROJECT" 60 10; then
+  echo "Redis nodes failed to sync. Exiting..."
+  exit 1
+fi
 
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
