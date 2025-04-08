@@ -126,8 +126,8 @@ jobs:
   # Build Images and deploy to JFrog
   db:
     name: 🔨 DB
-    # needs: [checkEnv]
-    # if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
+    needs: [checkEnv]
+    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/db.yml
     secrets: inherit
     with:
