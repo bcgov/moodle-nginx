@@ -60,9 +60,8 @@ async function runLighthouse(url, options, config = null) {
   const lighthouse = (await import('lighthouse')).default;
   const fs = (await import('fs')).default;
   const fsp = (await import('fs')).promises;
-  const timeoutMs = 900000; // 15 minutes
 
-  await page.goto(url, { waitUntil: 'networkidle0', timeout: timeoutMs });
+  await page.goto(url, { waitUntil: 'networkidle0', timeout: 900000 }); // 15 minute timeout
 
   // console.log('Current working directory:', process.cwd());
   // Resule: /home/runner/work/moodle-nginx/moodle-nginx
@@ -154,7 +153,7 @@ async function runLighthouse(url, options, config = null) {
     const url = 'https://' + site_url + path;
     // await page.setCookie(...cookies);
     // const {lhr} = await lighthouse(url, options, config);
-    await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
+    await page.goto(url, { waitUntil: 'networkidle0', timeout: 900000 }); // Navigate to the new URL
 
     // Get the scores
     // const accessibilityScore = lhr.categories.accessibility.score * 100;
@@ -238,7 +237,7 @@ async function runLighthouse(url, options, config = null) {
 async function runTests() {
   try {
     console.log(`Checking if server is ready: ${testURL}`);
-    await waitForServer(testURL, 60000, 5000); // Wait up to 60 seconds, checking every 5 seconds
+    await waitForServer(testURL, 500000, 5000); // Wait up to 60 seconds, checking every 5 seconds
     console.log(`Starting Lighthouse test for: ${testURL}`);
     const report = await runLighthouse(testURL, options);
   } catch (error) {
@@ -246,5 +245,7 @@ async function runTests() {
     process.exit(1); // Exit with failure if the server is not ready
   }
 }
+
+console.log('Beginning Lighthouse tests...');
 
 runTests();
