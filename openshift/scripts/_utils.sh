@@ -899,8 +899,10 @@ wait_for_galera_sync() {
 
     # Check the logs of the first pod for the sync condition
     if check_logs_for_pattern $first_pod $namespace "members(5):"; then
-      echo "✔️ MariaDB Galera cluster is synced. All members are running."
-      return 0
+      if check_logs_for_pattern $first_pod $namespace "ready for connections"; then
+        echo "✔️ MariaDB Galera cluster is synced. All members are running."
+        return 0
+      fi
     fi
 
     # Retry logic
@@ -909,6 +911,8 @@ wait_for_galera_sync() {
       echo "❌ Timeout waiting for MariaDB Galera cluster to sync. Exiting..."
       return 1
     fi
+
+    echo "Waiting for sync..."
 
     sleep $wait_time
   done
