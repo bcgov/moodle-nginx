@@ -808,12 +808,9 @@ delete_resource_if_exists() {
   local resource_name=$2
 
   echo "Checking if $resource_type exists: $resource_name"
-  oc_command="oc describe $resource_type $resource_name"
-  echo "Executing: $oc_command"
-  oc_output=$($oc_command 2>&1)
-  # echo "Result: $oc_output"
 
-  if [[ ! $oc_output =~ "NotFound" ]]; then
+  # Use oc get to check if the resource exists
+  if oc get $resource_type $resource_name &> /dev/null; then
     echo "$resource_type exists... Deleting: $resource_name"
     oc delete $resource_type $resource_name
   else
@@ -968,23 +965,45 @@ wait_for_redis_proxy_ready() {
   local wait_time=${4:-10}
   local retry_count=0
 
-  echo "Waiting for Redis Proxy to be ready..."
+  echo "Waiting for Redis Proxy to be ready and functional..."
 
   while true; do
-    local logs=$(oc logs deployment/$redis_proxy_name -n $namespace 2>&1)
+    # Check if all pods for the Redis Proxy are ready
+    local pods_ready=true
+    local pods=$(oc get pods -n $namespace -l app=$redis_proxy_name -o jsonpath='{.items[*].metadata.name}')
+    for pod in $pods; do
+      if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
+        echo "Pod $pod is not ready. Retrying..."
+        pods_ready=false
+        break
+      fi
+    done
 
-    if echo "$logs" | grep -q "listening on port"; then
-      echo "✔️ Redis Proxy is ready."
+    if ! $pods_ready; then
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for Redis Proxy pods to be ready. Exiting..."
+        return 1
+      fi
+      sleep $wait_time
+      continue
+    fi
+
+    # Check Redis Proxy connectivity
+    echo "Checking Redis Proxy connectivity..."
+    if redis-cli -h $redis_proxy_name -p 6379 PING | grep -q "PONG"; then
+      echo "✔️ Redis Proxy is fully functional and responding to commands."
       return 0
+    else
+      echo "Redis Proxy is not responding to PING. Retrying..."
     fi
 
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for Redis Proxy to be ready. Exiting..."
+      echo "❌ Timeout waiting for Redis Proxy to be fully functional. Exiting..."
       return 1
     fi
 
-    echo "Retrying in $wait_time seconds..."
     sleep $wait_time
   done
 }

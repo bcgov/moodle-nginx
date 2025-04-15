@@ -122,9 +122,10 @@ fi
 echo "Deploying Redis Insight..."
 oc apply -f ./openshift/redis-insight.yml
 
-echo "Waiting for Redis Proxy to be ready..."
+# Verify Redis Proxy is ready and functional
+echo "Waiting for Redis Proxy to be ready and functional..."
 if ! wait_for_redis_proxy_ready "$REDIS_PROXY_NAME" "$OC_PROJECT" 60 10; then
-  echo "❌ Redis Proxy failed to become ready. Exiting..."
+  echo "❌ Redis Proxy failed to become ready and functional. Exiting..."
   exit 1
 fi
-echo "✔️ Redis Proxy is ready."
+echo "✔️ Redis Proxy is fully functional."
