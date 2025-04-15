@@ -187,6 +187,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-mariadb-galera.sh
         env:
+          OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           DB_IMAGE: ${{ inputs.DB_IMAGE }}
           DB_REPLICAS: ${{ inputs.DB_REPLICAS }}
