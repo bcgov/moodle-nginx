@@ -960,3 +960,31 @@ wait_for_redis_sync() {
     sleep $wait_time
   done
 }
+
+wait_for_redis_proxy_ready() {
+  local redis_proxy_name=$1
+  local namespace=$2
+  local max_retries=${3:-30}
+  local wait_time=${4:-10}
+  local retry_count=0
+
+  echo "Waiting for Redis Proxy to be ready..."
+
+  while true; do
+    local logs=$(oc logs deployment/$redis_proxy_name -n $namespace 2>&1)
+
+    if echo "$logs" | grep -q "listening on port"; then
+      echo "✔️ Redis Proxy is ready."
+      return 0
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for Redis Proxy to be ready. Exiting..."
+      return 1
+    fi
+
+    echo "Retrying in $wait_time seconds..."
+    sleep $wait_time
+  done
+}
