@@ -13,6 +13,12 @@ echo "Starting Moodle upgrade job..."
 
 cd /
 
+# Ensure IMAGE_REBUILD_TIME_LIMIT is set and valid
+if [[ -z "$IMAGE_REBUILD_TIME_LIMIT" || ! "$IMAGE_REBUILD_TIME_LIMIT" =~ ^[0-9]+$ ]]; then
+  echo "IMAGE_REBUILD_TIME_LIMIT is unset or invalid. Defaulting to run the upgrade."
+  IMAGE_REBUILD_TIME_LIMIT=0
+fi
+
 # Check if the script has been run within the time limit
 if check_timestamp; then
   echo "Running file maintenance and migration processes..."
@@ -32,7 +38,7 @@ if check_timestamp; then
   echo "Run PHP config check..."
   php /var/www/html/info/phpconfigcheck.php
 else
-  echo "Skipping Moodle upgrade as it has been run within $REBUILD_TIME_LIMIT seconds."
+  echo "Skipping Moodle upgrade as it has been run within $IMAGE_REBUILD_TIME_LIMIT seconds."
 fi
 
 echo "Purging cache..."
