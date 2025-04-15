@@ -965,45 +965,58 @@ wait_for_redis_proxy_ready() {
   local wait_time=${4:-10}
   local retry_count=0
 
-  echo "Waiting for Redis Proxy to be ready and functional..."
+  echo "Waiting for all Redis Proxy pods to be ready and functional..."
 
   while true; do
-    # Check if all pods for the Redis Proxy are ready
-    local pods_ready=true
+    local all_pods_ready=true
+
+    # Get the list of Redis Proxy pods
     local pods=$(oc get pods -n $namespace -l app=$redis_proxy_name -o jsonpath='{.items[*].metadata.name}')
+
     for pod in $pods; do
+      echo "Checking pod $pod for readiness..."
+
+      # Check if the pod is in the "Ready" condition
       if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
         echo "Pod $pod is not ready. Retrying..."
-        pods_ready=false
-        break
+        all_pods_ready=false
+        continue
       fi
+
+      # Test Redis Proxy connectivity from the pod
+      local pod_retry_count=0
+      while true; do
+        echo "Testing Redis Proxy connectivity from pod $pod (Attempt $((pod_retry_count + 1))/$max_retries)..."
+        if oc exec -n $namespace $pod -- redis-cli -h localhost -p 6379 PING | grep -q "PONG"; then
+          echo "✔️ Pod $pod is ready and responding to PING."
+          break
+        else
+          echo "❌ Pod $pod is not responding to PING. Retrying..."
+          pod_retry_count=$((pod_retry_count + 1))
+          if [[ $pod_retry_count -ge $max_retries ]]; then
+            echo "❌ Pod $pod failed to respond to PING after $max_retries attempts. Restarting the pod..."
+            oc delete pod $pod -n $namespace
+            all_pods_ready=false
+            break
+          fi
+          sleep $wait_time
+        fi
+      done
     done
 
-    if ! $pods_ready; then
-      retry_count=$((retry_count + 1))
-      if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Timeout waiting for Redis Proxy pods to be ready. Exiting..."
-        return 1
-      fi
-      sleep $wait_time
-      continue
-    fi
-
-    # Check Redis Proxy connectivity
-    echo "Checking Redis Proxy connectivity..."
-    if redis-cli -h $redis_proxy_name -p 6379 PING | grep -q "PONG"; then
-      echo "✔️ Redis Proxy is fully functional and responding to commands."
+    if $all_pods_ready; then
+      echo "✔️ All Redis Proxy pods are ready and functional."
       return 0
-    else
-      echo "Redis Proxy is not responding to PING. Retrying..."
     fi
 
+    # Retry logic for the entire set of pods
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for Redis Proxy to be fully functional. Exiting..."
+      echo "❌ Timeout waiting for all Redis Proxy pods to be ready and functional. Exiting..."
       return 1
     fi
 
+    echo "Retrying in $wait_time seconds..."
     sleep $wait_time
   done
 }
