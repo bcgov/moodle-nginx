@@ -10,15 +10,17 @@ const testURL = 'https://' + site_url + '/login/index.php'
 
 async function waitForServer(url, timeout = 60000, interval = 5000) {
   const startTime = Date.now();
+  console.log(`Waiting for server to be ready: ${url}`);
   while (Date.now() - startTime < timeout) {
     try {
       const response = await fetch(url);
+      console.log(`Response status: ${response.status}`);
       if (response.ok) {
         console.log(`✔️ Server is ready: ${url}`);
         return true;
       }
     } catch (error) {
-      console.log(`Waiting for server to be ready: ${url}`);
+      console.log(`Waiting for server to be ready: ${url} (retrying in ${interval / 1000} seconds)`);
     }
     await new Promise(resolve => setTimeout(resolve, interval));
   }
