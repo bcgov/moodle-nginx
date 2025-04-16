@@ -66,12 +66,6 @@ scale_deployment() {
   fi
 }
 
-check_pod_logs_action() {
-  local pod=$1
-  local namespace=$2
-  check_pod_logs $pod "$error_search_string" "$error_handler"
-}
-
 # Function to check logs for a single pod
 check_pod_logs() {
   local pod=$1
@@ -270,15 +264,8 @@ wait_for_deployment_without_errors() {
     return 0
   fi
 
-  # Define the action to check pod logs for errors
-  check_pod_logs_action() {
-    local pod=$1
-    local namespace=$2
-    check_pod_logs $pod "$error_search_string" "$error_handler"
-  }
-
   # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" check_pod_logs_action $max_retries $wait_time; then
+  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs $error_search_string $error_handler" $max_retries $wait_time; then
     echo "❌ Errors detected in pods for $resource. Exiting..."
     return 1
   fi
@@ -1008,48 +995,8 @@ wait_for_redis_proxy_ready() {
   echo "Waiting for all Redis Proxy pods to be ready and functional..."
 
   while true; do
-    local all_pods_ready=true
-
-    # Re-check the list of Redis Proxy pods on each loop
-    local pods=$(oc get pods -n $namespace -l app=$redis_proxy_name -o jsonpath='{.items[*].metadata.name}')
-
-    if [[ -z "$pods" ]]; then
-      echo "❌ No pods found for Redis Proxy. Retrying..."
-      all_pods_ready=false
-      retry_count=$((retry_count + 1))
-      if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Timeout waiting for Redis Proxy pods to be ready. Exiting..."
-        return 1
-      fi
-      sleep $wait_time
-      continue
-    fi
-
-    for pod in $pods; do
-      echo "Checking pod $pod for readiness..."
-
-      # Check if the pod is in the "Ready" condition
-      if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
-        echo "Pod $pod is not ready. Retrying..."
-        all_pods_ready=false
-        continue
-      fi
-
-      # Test Redis Proxy connectivity from the pod
-      local pod_retry_count=0
-      while true; do
-        # Send command fundtion: test_redis_proxy_connectivity
-        # to Redis Proxy pods
-        handle_pods_in_resource "redis-proxy" "$DEPLOY_NAMESPACE" test_redis_proxy_connectivity 30 10
-      done
-
-      # Break out of the loop if the pod was deleted
-      if ! oc get pod $pod -n $namespace &> /dev/null; then
-        continue
-      fi
-    done
-
-    if $all_pods_ready; then
+    # Use handle_pods_in_resource to process all Redis Proxy pods
+    if handle_pods_in_resource "$redis_proxy_name" "$namespace" test_redis_proxy_connectivity $max_retries $wait_time; then
       echo "✔️ All Redis Proxy pods are ready and functional."
       return 0
     fi
@@ -1061,7 +1008,7 @@ wait_for_redis_proxy_ready() {
       return 1
     fi
 
-    echo "Retrying in $wait_time seconds..."
+    echo "Retrying in $wait_time seconds... (Attempt $retry_count/$max_retries)"
     sleep $wait_time
   done
 }
