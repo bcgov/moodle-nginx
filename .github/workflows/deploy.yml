@@ -9,6 +9,9 @@ env:
 on:
   workflow_call:
     inputs:
+      IMAGE_REBUILD_TIME_LIMIT:
+        required: true
+        type: string
       DEPLOY_ENVIRONMENT:
         required: true
         type: string
@@ -229,6 +232,7 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           APP: ${{ inputs.APP }}
+          IMAGE_REBUILD_TIME_LIMIT: ${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
           MOODLE_DEPLOYMENT_NAME: ${{ inputs.MOODLE_DEPLOYMENT_NAME }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}

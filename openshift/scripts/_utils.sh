@@ -616,6 +616,18 @@ check_timestamp() {
   local rerun_hours=$((rerun_minutes / 60))
   local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
 
+  echo "Last modified time: $last_modified_minutes minutes ago"
+  echo "Rerun block time: $rerun_minutes minutes"
+  echo "Rerun block time: $rerun_hours hours"
+  echo "Current time: $(date +%Y-%m-%dT%H:%M:%S)"
+  echo "Current time (epoch): $(date +%s)"
+  echo "Last modified time (epoch): $(stat -c %Y $file_to_test)"
+  echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%Y-%m-%dT%H:%M:%S)"
+  echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%s)"
+  echo "Difference: $(( $(date +%s) - $(stat -c %Y $file_to_test) )) seconds"
+  echo "Difference in hours: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 3600 )) hours"
+  echo "Difference in minutes: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 )) minutes"
+
   # Check if the script has been run within the past hour
   if [ -f "$file_to_test" ]; then
     if [ "$last_modified_minutes" -lt "$rerun_minutes" ]; then
@@ -997,6 +1009,20 @@ wait_for_redis_sync() {
   done
 }
 
+test_redis_proxy_connectivity() {
+  local pod=$1
+  local namespace=$2
+
+  echo "Testing Redis Proxy connectivity from pod: $pod"
+  if oc exec -n $namespace $pod -- redis-cli -h localhost -p 6379 PING | grep -q "PONG"; then
+    echo "✔️ Pod $pod is responding to PING."
+    return 0
+  else
+    echo "❌ Pod $pod is not responding to PING."
+    return 1
+  fi
+}
+
 wait_for_redis_proxy_ready() {
   local redis_proxy_name=$1
   local namespace=$2
@@ -1009,8 +1035,20 @@ wait_for_redis_proxy_ready() {
   while true; do
     local all_pods_ready=true
 
-    # Get the list of Redis Proxy pods
+    # Re-check the list of Redis Proxy pods on each loop
     local pods=$(oc get pods -n $namespace -l app=$redis_proxy_name -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      echo "❌ No pods found for Redis Proxy. Retrying..."
+      all_pods_ready=false
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for Redis Proxy pods to be ready. Exiting..."
+        return 1
+      fi
+      sleep $wait_time
+      continue
+    fi
 
     for pod in $pods; do
       echo "Checking pod $pod for readiness..."
@@ -1025,22 +1063,15 @@ wait_for_redis_proxy_ready() {
       # Test Redis Proxy connectivity from the pod
       local pod_retry_count=0
       while true; do
-        echo "Testing Redis Proxy connectivity from pod $pod (Attempt $((pod_retry_count + 1))/$max_retries)..."
-        if oc exec -n $namespace $pod -- redis-cli -h localhost -p 6379 PING | grep -q "PONG"; then
-          echo "✔️ Pod $pod is ready and responding to PING."
-          break
-        else
-          echo "❌ Pod $pod is not responding to PING. Retrying..."
-          pod_retry_count=$((pod_retry_count + 1))
-          if [[ $pod_retry_count -ge $max_retries ]]; then
-            echo "❌ Pod $pod failed to respond to PING after $max_retries attempts. Restarting the pod..."
-            oc delete pod $pod -n $namespace
-            all_pods_ready=false
-            break
-          fi
-          sleep $wait_time
-        fi
+        # Send command fundtion: test_redis_proxy_connectivity
+        # to Redis Proxy pods
+        handle_pods_in_resource "redis-proxy" "$DEPLOY_NAMESPACE" test_redis_proxy_connectivity 30 10
       done
+
+      # Break out of the loop if the pod was deleted
+      if ! oc get pod $pod -n $namespace &> /dev/null; then
+        continue
+      fi
     done
 
     if $all_pods_ready; then
@@ -1052,6 +1083,75 @@ wait_for_redis_proxy_ready() {
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
       echo "❌ Timeout waiting for all Redis Proxy pods to be ready and functional. Exiting..."
+      return 1
+    fi
+
+    echo "Retrying in $wait_time seconds..."
+    sleep $wait_time
+  done
+}
+
+handle_pods_in_resource() {
+  local resource_name=$1
+  local namespace=$2
+  local action=$3
+  local max_retries=${4:-30}
+  local wait_time=${5:-10}
+  local retry_count=0
+
+  echo "Handling pods for resource: $resource_name in namespace: $namespace"
+
+  while true; do
+    # Get the list of pods for the resource
+    local pods=$(oc get pods -n $namespace -l app=$resource_name -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      echo "❌ No pods found for resource: $resource_name. Retrying..."
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for pods in resource: $resource_name. Exiting..."
+        return 1
+      fi
+      sleep $wait_time
+      continue
+    fi
+
+    local all_pods_handled=true
+
+    for pod in $pods; do
+      echo "Processing pod: $pod"
+
+      # Check if the pod is in the "Ready" condition
+      if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
+        echo "Pod $pod is not ready. Retrying..."
+        all_pods_handled=false
+        continue
+      fi
+
+      # Execute the user-defined action on the pod
+      if ! $action $pod $namespace; then
+        echo "❌ Action failed for pod: $pod. Retrying..."
+        all_pods_handled=false
+        continue
+      fi
+
+      # Check if the pod still exists
+      if ! oc get pod $pod -n $namespace &> /dev/null; then
+        echo "❌ Pod $pod has been deleted. Moving to the next pod..."
+        all_pods_handled=false
+        continue
+      fi
+    done
+
+    if $all_pods_handled; then
+      echo "✔️ All pods for resource: $resource_name have been successfully handled."
+      return 0
+    fi
+
+    # Retry logic for the entire resource
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for all pods in resource: $resource_name to be handled. Exiting..."
       return 1
     fi
 
