@@ -1024,8 +1024,20 @@ handle_pods_in_resource() {
   echo "Handling pods for resource: $resource_name in namespace: $namespace"
 
   while true; do
-    # Get the list of pods for the resource
-    local pods=$(oc get pods -n $namespace -l app=$resource_name -o jsonpath='{.items[*].metadata.name}')
+    # Dynamically determine the label selector
+    local label_selector="app=$resource_name"
+    local pods=$(oc get pods -n $namespace -l $label_selector -o jsonpath='{.items[*].metadata.name}')
+
+    # If no pods are found, try alternative label selectors
+    if [[ -z "$pods" ]]; then
+      label_selector="statefulset.kubernetes.io/pod-name=$resource_name"
+      pods=$(oc get pods -n $namespace -l $label_selector -o jsonpath='{.items[*].metadata.name}')
+    fi
+
+    if [[ -z "$pods" ]]; then
+      label_selector="app.kubernetes.io/name=$resource_name"
+      pods=$(oc get pods -n $namespace -l $label_selector -o jsonpath='{.items[*].metadata.name}')
+    fi
 
     if [[ -z "$pods" ]]; then
       echo "❌ No pods found for resource: $resource_name. Retrying..."
