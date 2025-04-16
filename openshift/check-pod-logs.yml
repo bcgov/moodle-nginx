@@ -39,14 +39,9 @@ objects:
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts
-                    - name: moodle-shared
-                      mountPath: /tmp/logs
               restartPolicy: OnFailure
               volumes:
                 - name: script-volume
                   configMap:
                     name: check-pod-logs-script
                     defaultMode: 0755
-                - name: moodle-shared
-                  persistentVolumeClaim:
-                    claimName: moodle-shared
