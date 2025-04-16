@@ -388,7 +388,7 @@ manage_maintenance_mode() {
 
   # Retry logic for the maintenance mode operation
   while true; do
-    maintenance_output=$(oc exec deployment/$deployment_name -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
+    maintenance_output=$(oc exec deployment/$deployment_name -- sh -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
 
     if echo "$maintenance_output" | grep -q "$expected_output"; then
       echo "✔️ Maintenance mode has been successfully ${action}d."
@@ -397,6 +397,9 @@ manage_maintenance_mode() {
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
     elif echo "$maintenance_output" | grep -q "Error"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    elif echo "$maintenance_output" | grep -q "level=error"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+      exit 1
     else
       echo "Unexpected output while attempting to ${action} maintenance mode:"
       echo "$maintenance_output"
