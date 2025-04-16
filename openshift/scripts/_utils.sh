@@ -66,6 +66,12 @@ scale_deployment() {
   fi
 }
 
+check_pod_logs_action() {
+  local pod=$1
+  local namespace=$2
+  check_pod_logs $pod "$error_search_string" "$error_handler"
+}
+
 # Function to check logs for a single pod
 check_pod_logs() {
   local pod=$1
@@ -239,76 +245,45 @@ wait_for_scale_down() {
 # Function to wait for all pods in a deployment
 # or statefulset to be running and check for errors
 wait_for_deployment_without_errors() {
-  local resource=$1 # e.g. deployment/web
+  local resource=$1 # e.g., deployment/web
   local error_search_string=${2:-error}
   local error_handler=${3:-delete_pod}
-  local max_retries=100
-  local retry_count=0
-  local wait_time=5
+  local max_retries=${4:-30}
+  local wait_time=${5:-10}
 
   # Split the resource into type and name
   local resource_type=${resource%%/*}
   local resource_name=${resource##*/}
 
+  echo "Waiting for $resource to be ready and error-free..."
+
   # Check if the resource exists
   if ! oc get $resource_type $resource_name &> /dev/null; then
-    echo "❌ Error from server (NotFound): oc get $resource_type $resource_name not found"
+    echo "❌ Error from server (NotFound): $resource_type/$resource_name not found"
     return 1
   fi
 
   # Get the desired replica count
   local desired_replicas=$(oc get $resource_type $resource_name -o jsonpath='{.spec.replicas}')
   if [[ "$desired_replicas" == "0" ]]; then
-    # Delegate to the scale-down function
-    wait_for_scale_down "$resource" $max_retries $wait_time
-    return $?
+    echo "✔️ $resource has scaled down to 0 replicas."
+    return 0
   fi
 
-  # Get the list of pods created for the resource
-  local pods=$(oc get pods --selector=${resource_type}=${resource_name} -o jsonpath='{.items[*].metadata.name}')
+  # Define the action to check pod logs for errors
+  check_pod_logs_action() {
+    local pod=$1
+    local namespace=$2
+    check_pod_logs $pod "$error_search_string" "$error_handler"
+  }
 
-  for pod in $pods; do
-    while true; do
-      # Get the pod status
-      pod_status=$(oc get pod $pod -o 'jsonpath={..status.phase}' 2>&1)
+  # Use handle_pods_in_resource to manage pods
+  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" check_pod_logs_action $max_retries $wait_time; then
+    echo "❌ Errors detected in pods for $resource. Exiting..."
+    return 1
+  fi
 
-      # Check if the pod is not found
-      if echo "$pod_status" | grep -q "NotFound"; then
-        echo "Pod $pod not found. Restarting the process..."
-        break
-      fi
-
-      # Wait until the pod is in the "Running" state
-      if [[ "$pod_status" != "Running" ]]; then
-        if [[ "$pod_status" == "Failed" ]]; then
-          echo "❌ ${resource_name} pod Failed."
-          echo "Exiting..."
-          return 1
-        fi
-        echo "Waiting for pod $pod to be running..."
-        sleep $wait_time
-      else
-        # Check for errors in the pod logs
-        if ! check_pod_logs $pod $error_search_string $error_handler; then
-          echo "✔️ $pod"
-          break
-        elif [[ $error_handler == "delete_pod" ]]; then
-          echo "Waiting for pod to restart..."
-          sleep $wait_time
-          retry_count=$((retry_count + 1))
-
-          if [[ $retry_count -ge $max_retries ]]; then
-            echo "❌ Error still found in pod $pod after $max_retries retries. Exiting..."
-            return 1
-          fi
-        else
-          break
-        fi
-      fi
-    done
-  done
-
-  echo "✔️ All pods in $resource are running and error-free."
+  echo "✔️ All pods in $resource are ready and error-free."
   return 0
 }
 
