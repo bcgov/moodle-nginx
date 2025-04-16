@@ -356,6 +356,9 @@ manage_maintenance_mode() {
   local action=$1
   local deployment_name=$2
   local route_name=$3
+  local max_retries=${4:-5} # Default to 5 retries
+  local wait_time=${5:-30} # Default to 30 seconds between retries
+  local retry_count=0
 
   if [[ $action != "enable" && $action != "disable" ]]; then
     echo "Invalid action: $action. Use 'enable' or 'disable'."
@@ -374,16 +377,40 @@ manage_maintenance_mode() {
   fi
 
   echo "${action^} maintenance mode..."
-  maintenance_output=$(oc exec deployment/$CRON_NAME -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action")
 
-  if echo "$maintenance_output" | grep -q "$expected_output"; then
-    echo "Maintenance mode has been successfully ${action}d."
-  elif echo "$maintenance_output" | grep -q "Error"; then
-    echo "Failed to ${action} maintenance mode. Error message: $maintenance_output"
+  # Ensure Redis Proxy is ready before proceeding
+  echo "Ensuring Redis Proxy is ready..."
+  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 30 10; then
+    echo "❌ Redis Proxy is not ready. Exiting..."
     exit 1
-  else
-    echo "$maintenance_output"
   fi
+  echo "✔️ Redis Proxy is ready."
+
+  # Retry logic for the maintenance mode operation
+  while true; do
+    maintenance_output=$(oc exec deployment/$deployment_name -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
+
+    if echo "$maintenance_output" | grep -q "$expected_output"; then
+      echo "✔️ Maintenance mode has been successfully ${action}d."
+      return 0
+    elif echo "$maintenance_output" | grep -q "Exception"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    elif echo "$maintenance_output" | grep -q "Error"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    else
+      echo "Unexpected output while attempting to ${action} maintenance mode:"
+      echo "$maintenance_output"
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Max retries reached. Failed to ${action} maintenance mode. Exiting..."
+      exit 1
+    fi
+
+    echo "Retrying in $wait_time seconds... (Attempt $retry_count/$max_retries)"
+    sleep $wait_time
+  done
 }
 
 # Function to patch route and verify changes
