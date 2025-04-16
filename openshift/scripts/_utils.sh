@@ -386,9 +386,18 @@ manage_maintenance_mode() {
   fi
   echo "✔️ Redis Proxy is ready."
 
+  # Get an active pod from the Cron deployment
+  echo "Getting an active pod from deployment/$CRON_NAME..."
+  local cron_pod=$(oc get pods -l app=$CRON_NAME --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+  if [[ -z "$cron_pod" ]]; then
+    echo "❌ No running pods found for deployment/$CRON_NAME. Exiting..."
+    exit 1
+  fi
+  echo "Using pod: $cron_pod"
+
   # Retry logic for the maintenance mode operation
   while true; do
-    maintenance_output=$(oc exec deployment/$deployment_name -- sh -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
+    maintenance_output=$(oc exec -n $DEPLOY_NAMESPACE $cron_pod -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
 
     if echo "$maintenance_output" | grep -q "$expected_output"; then
       echo "✔️ Maintenance mode has been successfully ${action}d."
