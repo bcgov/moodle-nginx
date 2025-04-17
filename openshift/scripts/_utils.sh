@@ -1113,7 +1113,9 @@ get_pods_for_resource() {
   done
 
   # Retrieve the pods using the label selector
-  local pods=$(oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+  command=oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}'
+  echo "Executing: $command"
+  local pods=$(eval $command)
   if [[ -z "$pods" ]]; then
     echo "❌ No pods found for resource: $resource_name using selector: $label_selector."
     return 1
