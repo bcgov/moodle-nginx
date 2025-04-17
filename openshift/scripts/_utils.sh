@@ -1036,7 +1036,7 @@ handle_pods_in_resource() {
     fi
 
     # Get the list of pods associated with the resource
-    local command = "oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}'"
+    command="oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}'"
     local pods=$(eval $command)
     echo "Running command: $command"
 
