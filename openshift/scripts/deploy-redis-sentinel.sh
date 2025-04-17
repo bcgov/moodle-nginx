@@ -77,13 +77,14 @@ sentinel:
 EOF
 
 # Scale down the Redis deployment if it exists
-if [[ `oc describe statefulset/$REDIS_NAME 2>&1` =~ "NotFound" ]]; then
+redis_node_name=$REDIS_NAME-node
+if [[ `oc describe statefulset/$redis_node_name 2>&1` =~ "NotFound" ]]; then
   echo "Redis StatefulSet NOT FOUND... Creating new deployment..."
 else
   echo "Redis StatefulSet found. Scaling down..."
-  scale_deployment "statefulset" "$REDIS_NAME" "0" "0"
-  if ! wait_for "statefulset/$REDIS_NAME" "ready" "120s" "down"; then
-    echo "Failed to scale $REDIS_NAME to 0 replicas. Exiting..."
+  scale_deployment "statefulset" "$redis_node_name" "0" "0"
+  if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+    echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
     exit 1
   fi
 fi
@@ -93,18 +94,18 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "values.yaml" \
   "upgrade.yaml"
-if ! wait_for "statefulset/$REDIS_NAME"; then
+if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
 fi
 
-scale_deployment "statefulset" "$REDIS_NAME-node" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
+scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"
 
 # Wait for Redis nodes to sync
-if ! wait_for_redis_sync "$REDIS_NAME-node" "$OC_PROJECT" 60 10; then
+if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   echo "Redis nodes failed to sync. Exiting..."
   exit 1
 fi

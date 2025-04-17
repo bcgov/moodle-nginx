@@ -55,7 +55,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
    # Output the response for debugging purposes
-  echo "$helm_upgrade_response"
+  # echo "$helm_upgrade_response"
 
   # Check if the helm upgrade command failed
   if [[ $? -ne 0 ]]; then
