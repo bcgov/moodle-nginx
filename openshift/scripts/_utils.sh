@@ -24,7 +24,7 @@ scale_deployment() {
   local max_surge="100%"
   local max_unavailable="33%"
 
-  if [[ "$type" == "sts" ]]; then
+  if [[ "$type" == "sts" || "$type" == "statefulset" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
     echo "Executing: $cmd"
     $cmd
@@ -157,7 +157,7 @@ check_deployment_logs() {
       total_pods=$(echo $PODS | wc -w)
 
       for pod in "${pod_array[@]}"; do
-        echo "Processing pod: $pod"
+        echo "Processing pod logs: $pod"
 
         if check_pod_logs $pod "$error_search_strings" "$error_handler"; then
           errors_detected=$((errors_detected + 1))
@@ -1048,7 +1048,7 @@ handle_pods_in_resource() {
     local all_pods_handled=true
 
     for pod in $pods; do
-      echo "Processing pod: $pod"
+      echo "Handle Processing pod: $pod"
 
       # Check if the pod is in the "Ready" condition
       if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
