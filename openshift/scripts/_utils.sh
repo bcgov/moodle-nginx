@@ -1059,7 +1059,11 @@ handle_pods_in_resource() {
 
       # Call action with pod, namespace, and additional arguments explicitly
       if ! $action "$pod" "$namespace" $action_args; then
-        echo "❌ Action failed for pod: $pod. Retrying..."
+        echo "❌ Action failed for pod: $pod"
+        echo "Action: $action"
+        echo "Arguments: $action_args"
+        echo "Error message: $action_output"
+        echo "Retrying..."
         all_pods_handled=false
         continue
       fi
@@ -1092,11 +1096,8 @@ handle_pods_in_resource() {
 get_pods_for_resource() {
   local resource_name=$1
   local namespace=$2
-
-  # Debug messages to stderr
-  echo "Getting pods for resource: $resource_name" >&2
-
   local resource_type=""
+
   if [[ "$resource_name" == */* ]]; then
     resource_type=${resource_name%%/*}
     resource_name=${resource_name##*/}
@@ -1113,7 +1114,7 @@ get_pods_for_resource() {
     fi
   fi
 
-  echo "Resource type: $resource_type" >&2
+  echo "Getting pods for: $resource_type / $resource_name" >&2
 
   local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
   if [[ -z "$labels" ]]; then
