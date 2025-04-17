@@ -465,8 +465,13 @@ handle_deployment_status() {
 
   while true; do
     # Get the list of pods for the resource
-    local pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
-    if [[ $? -ne 0 ]]; then
+    local pods
+    pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    local status=$?
+
+    echo "Pods for resource $resource_name: $pods"
+
+    if [[ $status -ne 0 ]]; then
       echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
       retry_count=$((retry_count + 1))
       if [[ $retry_count -ge $max_retries ]]; then
@@ -502,7 +507,7 @@ handle_deployment_status() {
         echo "✔️ All pods for $resource_name have scaled down."
         return 0
       else
-        echo "Pods still exist for $resource_name. Retrying..."
+        echo "Pods still exist for $resource_name ($pods). Retrying..."
       fi
     fi
 
@@ -728,7 +733,7 @@ EOF
   # First, delete the HPA if it exists
   delete_resource_if_exists hpa $name
 
-  echo "Creating HPA from template:"
+  echo "Cre$pod--forating HPA from template:"
   # echo $(cat hpa.yaml)
   oc create -f hpa.yaml
 
@@ -1024,8 +1029,11 @@ handle_pods_in_resource() {
 
   while true; do
     # Get the list of pods for the resource
-    local pods=$(get_pods_for_resource "$resource_name" "$namespace")
-    if [[ $? -ne 0 ]]; then
+    local pods
+    pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    local status=$?
+
+    if [[ $status -ne 0 ]]; then
       echo "❌ Failed to retrieve pods for resource: $resource_name. Exiting..."
       return 1
     fi
@@ -1083,35 +1091,34 @@ get_pods_for_resource() {
   local resource_name=$1
   local namespace=$2
 
-  echo "Getting pods for resource: $resource_name"
+  # Debug messages to stderr
+  echo "Getting pods for resource: $resource_name" >&2
 
-  # Check if resource_name includes the type (e.g., statefulset/redis)
   local resource_type=""
   if [[ "$resource_name" == */* ]]; then
-    resource_type=${resource_name%%/*}  # Extract the type (e.g., statefulset)
-    resource_name=${resource_name##*/} # Extract the name (e.g., redis)
+    resource_type=${resource_name%%/*}
+    resource_name=${resource_name##*/}
   fi
 
-  # Determine the resource type if not already set
   if [[ -z "$resource_type" ]]; then
-    if oc get statefulset $resource_name -n $namespace &> /dev/null; then
+    if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
       resource_type="statefulset"
-    elif oc get deployment $resource_name -n $namespace &> /dev/null; then
+    elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
       resource_type="deployment"
     else
-      echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..."
+      echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..." >&2
       return 1
     fi
   fi
 
-  # Retrieve the labels from the resource
-  local labels=$(oc get $resource_type $resource_name -n $namespace -o jsonpath='{.spec.selector.matchLabels}')
+  echo "Resource type: $resource_type" >&2
+
+  local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
   if [[ -z "$labels" ]]; then
-    echo "❌ No labels found for resource: $resource_name. Exiting..."
+    echo "❌ No labels found for resource: $resource_name. Exiting..." >&2
     return 1
   fi
 
-  # Convert the labels into a selector string
   local label_selector=""
   for key in $(echo "$labels" | jq -r 'keys[]'); do
     local value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
@@ -1121,15 +1128,15 @@ get_pods_for_resource() {
     label_selector+="$key=$value"
   done
 
-  echo "Using label selector: $label_selector"
+  echo "Using label selector: $label_selector" >&2
 
-  # Retrieve the pods using the label selector
-  local pods=$(oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  local pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
   if [[ -z "$pods" ]]; then
-    echo "❌ No pods found for resource: $resource_name using selector: $label_selector. Exiting..."
+    echo "❌ No pods found for resource: $resource_name using selector: $label_selector. Exiting..." >&2
     return 1
   fi
 
+  # Only output the pod names to stdout
   echo "$pods"
   return 0
 }
