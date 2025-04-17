@@ -1035,6 +1035,25 @@ handle_pods_in_resource() {
       return 1
     fi
 
+    # Retrieve the labels from the resource
+    local labels=$(oc get $resource_type $resource_name -n $namespace -o jsonpath='{.spec.selector.matchLabels}')
+    if [[ -z "$labels" ]]; then
+      echo "❌ No labels found for resource: $resource_name. Exiting..."
+      return 1
+    fi
+
+    # Convert the labels into a selector string
+    local label_selector=""
+    for key in $(echo "$labels" | jq -r 'keys[]'); do
+      local value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+      if [[ -n "$label_selector" ]]; then
+        label_selector+=","
+      fi
+      label_selector+="$key=$value"
+    done
+
+    echo "Using label selector: $label_selector"
+
     # Get the list of pods associated with the resource
     command="oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}'"
     local pods=$(eval $command)
