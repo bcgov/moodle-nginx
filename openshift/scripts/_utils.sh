@@ -1027,7 +1027,7 @@ handle_pods_in_resource() {
     # Determine the resource type (StatefulSet or Deployment)
     local resource_type=""
     if oc get statefulset $resource_name -n $namespace &> /dev/null; then
-      resource_type="statefulset"
+      resource_type="app.kubernetes.io/name"
     elif oc get deployment $resource_name -n $namespace &> /dev/null; then
       resource_type="deployment"
     else
@@ -1036,7 +1036,9 @@ handle_pods_in_resource() {
     fi
 
     # Get the list of pods associated with the resource
-    local pods=$(oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}')
+    local command = "oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}'"
+    local pods=$(eval $command)
+    echo "Running command: $command"
 
     if [[ -z "$pods" ]]; then
       echo "❌ No pods found for resource: $resource_name. Retrying..."
