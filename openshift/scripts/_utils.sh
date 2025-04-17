@@ -782,7 +782,7 @@ create_or_update_helm_deployment() {
     helm_upgrade_response=$(helm upgrade --reuse-values -f $upgrade_file $redis_name $redis_helm_chart 2>&1)
 
     # Output the response for debugging purposes
-    echo "1. $helm_upgrade_response"
+    # echo "1. $helm_upgrade_response"
 
     # Check if the helm upgrade command failed
     if [[ $? -ne 0 ]]; then
@@ -1026,14 +1026,13 @@ handle_pods_in_resource() {
     # Get the list of pods for the resource
     local pods=$(get_pods_for_resource "$resource_name" "$namespace")
     if [[ $? -ne 0 ]]; then
-      echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
-      retry_count=$((retry_count + 1))
-      if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Timeout waiting for pods in resource: $resource_name. Exiting..."
-        return 1
-      fi
-      sleep $wait_time
-      continue
+      echo "❌ Failed to retrieve pods for resource: $resource_name. Exiting..."
+      return 1
+    fi
+
+    if [[ -z "$pods" ]]; then
+      echo "❌ No pods found for resource: $resource_name. Exiting..."
+      return 1
     fi
 
     local all_pods_handled=true
@@ -1084,15 +1083,25 @@ get_pods_for_resource() {
   local resource_name=$1
   local namespace=$2
 
-  # Determine the resource type (StatefulSet or Deployment)
+  echo "Getting pods for resource: $resource_name"
+
+  # Check if resource_name includes the type (e.g., statefulset/redis)
   local resource_type=""
-  if oc get statefulset $resource_name -n $namespace &> /dev/null; then
-    resource_type="statefulset"
-  elif oc get deployment $resource_name -n $namespace &> /dev/null; then
-    resource_type="deployment"
-  else
-    echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..."
-    return 1
+  if [[ "$resource_name" == */* ]]; then
+    resource_type=${resource_name%%/*}  # Extract the type (e.g., statefulset)
+    resource_name=${resource_name##*/} # Extract the name (e.g., redis)
+  fi
+
+  # Determine the resource type if not already set
+  if [[ -z "$resource_type" ]]; then
+    if oc get statefulset $resource_name -n $namespace &> /dev/null; then
+      resource_type="statefulset"
+    elif oc get deployment $resource_name -n $namespace &> /dev/null; then
+      resource_type="deployment"
+    else
+      echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..."
+      return 1
+    fi
   fi
 
   # Retrieve the labels from the resource
@@ -1111,6 +1120,8 @@ get_pods_for_resource() {
     fi
     label_selector+="$key=$value"
   done
+
+  echo "Using label selector: $label_selector"
 
   # Retrieve the pods using the label selector
   local pods=$(oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
