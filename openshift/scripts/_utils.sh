@@ -464,18 +464,17 @@ handle_deployment_status() {
   local wait_time=$6
 
   while true; do
-    # Determine the appropriate label selector
-    local label_selector="deployment=$resource_name"
-    local pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
-
-    if [[ -z "$pods" ]]; then
-      label_selector="app=$resource_name"
-      pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
-    fi
-
-    if [[ -z "$pods" ]]; then
-      label_selector="app.kubernetes.io/name=$resource_name"
-      pods=$(oc get pods --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+    # Get the list of pods for the resource
+    local pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    if [[ $? -ne 0 ]]; then
+      echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+        return 1
+      fi
+      sleep $wait_time
+      continue
     fi
 
     if [[ $scale_direction == "up" ]]; then
@@ -508,14 +507,14 @@ handle_deployment_status() {
     fi
 
     # Retry logic
+    retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for condition '$condition' with selector '$label_selector'. Exiting..."
+      echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
       return 1
     fi
 
     echo "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
     sleep $wait_time
-    retry_count=$((retry_count + 1))
   done
 }
 
@@ -1024,43 +1023,10 @@ handle_pods_in_resource() {
   echo "Handling pods for resource: $resource_name in namespace: $namespace"
 
   while true; do
-    # Determine the resource type (StatefulSet or Deployment)
-    local resource_type=""
-    if oc get statefulset $resource_name -n $namespace &> /dev/null; then
-      resource_type="app.kubernetes.io/name"
-    elif oc get deployment $resource_name -n $namespace &> /dev/null; then
-      resource_type="deployment"
-    else
-      echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..."
-      return 1
-    fi
-
-    # Retrieve the labels from the resource
-    local labels=$(oc get $resource_type $resource_name -n $namespace -o jsonpath='{.spec.selector.matchLabels}')
-    if [[ -z "$labels" ]]; then
-      echo "❌ No labels found for resource: $resource_name. Exiting..."
-      return 1
-    fi
-
-    # Convert the labels into a selector string
-    local label_selector=""
-    for key in $(echo "$labels" | jq -r 'keys[]'); do
-      local value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
-      if [[ -n "$label_selector" ]]; then
-        label_selector+=","
-      fi
-      label_selector+="$key=$value"
-    done
-
-    echo "Using label selector: $label_selector"
-
-    # Get the list of pods associated with the resource
-    command="oc get pods -n $namespace --selector=$resource_type=$resource_name -o jsonpath='{.items[*].metadata.name}'"
-    local pods=$(eval $command)
-    echo "Running command: $command"
-
-    if [[ -z "$pods" ]]; then
-      echo "❌ No pods found for resource: $resource_name. Retrying..."
+    # Get the list of pods for the resource
+    local pods=$(get_pods_for_resource "$resource_name" "$namespace")
+    if [[ $? -ne 0 ]]; then
+      echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
       retry_count=$((retry_count + 1))
       if [[ $retry_count -ge $max_retries ]]; then
         echo "❌ Timeout waiting for pods in resource: $resource_name. Exiting..."
@@ -1112,4 +1078,47 @@ handle_pods_in_resource() {
     echo "Retrying in $wait_time seconds..."
     sleep $wait_time
   done
+}
+
+get_pods_for_resource() {
+  local resource_name=$1
+  local namespace=$2
+
+  # Determine the resource type (StatefulSet or Deployment)
+  local resource_type=""
+  if oc get statefulset $resource_name -n $namespace &> /dev/null; then
+    resource_type="statefulset"
+  elif oc get deployment $resource_name -n $namespace &> /dev/null; then
+    resource_type="deployment"
+  else
+    echo "❌ Resource $resource_name not found in namespace $namespace."
+    return 1
+  fi
+
+  # Retrieve the labels from the resource
+  local labels=$(oc get $resource_type $resource_name -n $namespace -o jsonpath='{.spec.selector.matchLabels}')
+  if [[ -z "$labels" ]]; then
+    echo "❌ No labels found for resource: $resource_name."
+    return 1
+  fi
+
+  # Convert the labels into a selector string
+  local label_selector=""
+  for key in $(echo "$labels" | jq -r 'keys[]'); do
+    local value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+    if [[ -n "$label_selector" ]]; then
+      label_selector+=","
+    fi
+    label_selector+="$key=$value"
+  done
+
+  # Retrieve the pods using the label selector
+  local pods=$(oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}')
+  if [[ -z "$pods" ]]; then
+    echo "❌ No pods found for resource: $resource_name using selector: $label_selector."
+    return 1
+  fi
+
+  echo "$pods"
+  return 0
 }
