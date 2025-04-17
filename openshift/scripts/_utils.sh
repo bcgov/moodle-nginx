@@ -69,8 +69,9 @@ scale_deployment() {
 # Function to check logs for a single pod
 check_pod_logs() {
   local pod=$1
-  local error_search_strings=${2:-"error"}
-  local error_handler=${3:-delete_pod}
+  local namespace=$2
+  local error_search_strings=${3:-"error"}
+  local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
 
   # Split the error_search_strings into an array
@@ -265,7 +266,7 @@ wait_for_deployment_without_errors() {
   fi
 
   # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs $error_search_string $error_handler" $max_retries $wait_time; then
+  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string $error_handler" $max_retries $wait_time; then
     echo "❌ Errors detected in pods for $resource. Exiting..."
     return 1
   fi
@@ -1021,8 +1022,9 @@ handle_pods_in_resource() {
   local resource_name=$1
   local namespace=$2
   local action=$3
-  local max_retries=${4:-30}
-  local wait_time=${5:-10}
+  local action_args=$4
+  local max_retries=${5:-30}
+  local wait_time=${6:-10}
   local retry_count=0
 
   echo "Handling pods for resource: $resource_name in namespace: $namespace"
@@ -1055,8 +1057,8 @@ handle_pods_in_resource() {
         continue
       fi
 
-      # Execute the user-defined action on the pod
-      if ! $action $pod $namespace; then
+      # Call action with pod, namespace, and additional arguments explicitly
+      if ! $action "$pod" "$namespace" $action_args; then
         echo "❌ Action failed for pod: $pod. Retrying..."
         all_pods_handled=false
         continue

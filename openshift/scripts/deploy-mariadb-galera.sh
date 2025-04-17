@@ -187,6 +187,7 @@ sleep 10
 echo "Scaling $DB_DEPLOYMENT_NAME to $DB_REPLICAS replicas..."
 oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
 
+echo "Waiting for 2 minutes..."
 sleep 120
 
 # Wait for the deployment to scale up
