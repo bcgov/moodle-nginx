@@ -1091,14 +1091,14 @@ get_pods_for_resource() {
   elif oc get deployment $resource_name -n $namespace &> /dev/null; then
     resource_type="deployment"
   else
-    echo "❌ Resource $resource_name not found in namespace $namespace."
+    echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..."
     return 1
   fi
 
   # Retrieve the labels from the resource
   local labels=$(oc get $resource_type $resource_name -n $namespace -o jsonpath='{.spec.selector.matchLabels}')
   if [[ -z "$labels" ]]; then
-    echo "❌ No labels found for resource: $resource_name."
+    echo "❌ No labels found for resource: $resource_name. Exiting..."
     return 1
   fi
 
@@ -1113,11 +1113,9 @@ get_pods_for_resource() {
   done
 
   # Retrieve the pods using the label selector
-  command="oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}'"
-  echo "Executing: $command"
-  local pods=$(eval $command)
+  local pods=$(oc get pods -n $namespace --selector=$label_selector -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
   if [[ -z "$pods" ]]; then
-    echo "❌ No pods found for resource: $resource_name using selector: $label_selector."
+    echo "❌ No pods found for resource: $resource_name using selector: $label_selector. Exiting..."
     return 1
   fi
 
