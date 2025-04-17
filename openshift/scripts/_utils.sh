@@ -1131,9 +1131,13 @@ get_pods_for_resource() {
   echo "Using label selector: $label_selector" >&2
 
   local pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+  # Do NOT treat empty pod list as an error
   if [[ -z "$pods" ]]; then
-    echo "❌ No pods found for resource: $resource_name using selector: $label_selector. Exiting..." >&2
-    return 1
+    echo "No pods found for resource: $resource_name using selector: $label_selector." >&2
+    # Return success (0) with empty pod list
+    echo ""
+    return 0
   fi
 
   # Only output the pod names to stdout
