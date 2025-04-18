@@ -74,6 +74,10 @@ check_pod_logs() {
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
 
+  echo "Checking logs for pod: $pod"
+  echo "Error search strings: $error_search_strings"
+  echo "Error handler: $error_handler"
+
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
@@ -1060,7 +1064,7 @@ handle_pods_in_resource() {
       if ! "$action" "$pod" "$namespace" "$error_search_string" "$error_handler"; then
         echo "❌ Action failed for pod: $pod"
         echo "Action: $action"
-        echo "Arguments: $error_search_string $error_handler"
+        echo "Arguments: $pod $namespace $error_search_string $error_handler"
         echo "Retrying..."
         all_pods_handled=false
         continue
