@@ -140,14 +140,7 @@ if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
   exit 1
 fi
 
-sleep 60
-
-echo "Purging caches..."
-oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/purge_caches.php' --wait
-
-echo "Purging missing plugins..."
-plugin_purge=$(oc exec deployment/$PHP_DEPLOYMENT_NAME -- bash -c 'php /var/www/html/admin/cli/uninstall_plugins.php --purge-missing --run' --wait)
-echo "Result: $plugin_purge"
+sleep 10
 
 # Right-sizing cluster, according to environment
 bash ./openshift/scripts/right-sizing.sh
@@ -155,12 +148,15 @@ bash ./openshift/scripts/right-sizing.sh
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
 
+sleep 20
+
 echo "Directing traffic / route to Moodle..."
 patch_route "$APP-$WEB_DEPLOYMENT_NAME" "$WEB_DEPLOYMENT_NAME"
 
+echo "Waiting for route to be ready..."
+sleep 60
+
+echo "Shutting down maintenance message..."
 oc scale deployment/maintenance-message --replicas=0
 
 echo "Deployment complete."
-
-# Wait for things to warm up a bit before proceeding with the [lighthouse] tests
-sleep 30

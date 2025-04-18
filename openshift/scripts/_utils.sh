@@ -320,6 +320,14 @@ manage_maintenance_mode() {
   local wait_time=${5:-30} # Default to 30 seconds between retries
   local retry_count=0
 
+  # Ensure Redis Proxy is ready before proceeding
+  echo "Ensuring Redis Proxy is ready..."
+  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 30 10; then
+    echo "❌ Redis Proxy is not ready. Exiting..."
+    exit 1
+  fi
+  echo "✔️ Redis Proxy is ready."
+
   if [[ $action != "enable" && $action != "disable" ]]; then
     echo "Invalid action: $action. Use 'enable' or 'disable'."
     return 1
@@ -337,14 +345,6 @@ manage_maintenance_mode() {
   fi
 
   echo "${action^} maintenance mode..."
-
-  # Ensure Redis Proxy is ready before proceeding
-  echo "Ensuring Redis Proxy is ready..."
-  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 30 10; then
-    echo "❌ Redis Proxy is not ready. Exiting..."
-    exit 1
-  fi
-  echo "✔️ Redis Proxy is ready."
 
   # Get an active pod from the Cron deployment
   echo "Getting an active pod from deployment/$CRON_NAME..."
@@ -1004,16 +1004,14 @@ test_redis_proxy_connectivity() {
   fi
 
   # 2. Check logs for error patterns
-  local logs
-  logs=$(oc logs "$pod" -n "$namespace" 2>&1)
-  IFS=',' read -ra patterns <<< "$error_patterns"
-  for pattern in "${patterns[@]}"; do
-    if echo "$logs" | grep -qi "$pattern"; then
-      echo "❌ Pod $pod log contains error pattern: $pattern"
-      delete_pod "$pod"
-      return 1
-    fi
-  done
+  check_logs_for_pattern "$pod" "$namespace" "$error_patterns"
+  if [[ $? -ne 0 ]]; then
+    echo "❌ Pod $pod logs contain error patterns."
+    delete_pod "$pod"
+    return 1
+  fi
+
+  echo "✔️ No errors found in pod: $pod"
 
   return 0
 }
