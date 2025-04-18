@@ -266,7 +266,7 @@ wait_for_deployment_without_errors() {
   fi
 
   # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string $error_handler" $max_retries $wait_time; then
+  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
     echo "❌ Errors detected in pods for $resource. Exiting..."
     return 1
   fi
@@ -1022,17 +1022,17 @@ handle_pods_in_resource() {
   local resource_name=$1
   local namespace=$2
   local action=$3
-  local action_args=$4
-  local max_retries=${5:-30}
-  local wait_time=${6:-10}
+  shift 3
+  local action_args=("$@") # Capture remaining arguments as an array
+  local max_retries=${MAX_RETRIES:-30}
+  local wait_time=${WAIT_TIME:-10}
   local retry_count=0
 
   echo "Handling pods for resource: $resource_name in namespace: $namespace"
 
   while true; do
-    # Get the list of pods for the resource
     local pods
-    pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    pods=$(get_pods_for_resource "$resource_name" "$namespace")
     local status=$?
 
     if [[ $status -ne 0 ]]; then
@@ -1050,25 +1050,22 @@ handle_pods_in_resource() {
     for pod in $pods; do
       echo "Handle Processing pod: $pod"
 
-      # Check if the pod is in the "Ready" condition
       if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
         echo "Pod $pod is not ready. Retrying..."
         all_pods_handled=false
         continue
       fi
 
-      # Call action with pod, namespace, and additional arguments explicitly
-      if ! $action "$pod" "$namespace" $action_args; then
+      # Call action with pod, namespace, and additional arguments explicitly as array
+      if ! "$action" "$pod" "$namespace" "${action_args[@]}"; then
         echo "❌ Action failed for pod: $pod"
         echo "Action: $action"
-        echo "Arguments: $action_args"
-        echo "Error message: $action_output"
+        echo "Arguments: ${action_args[*]}"
         echo "Retrying..."
         all_pods_handled=false
         continue
       fi
 
-      # Check if the pod still exists
       if ! oc get pod $pod -n $namespace &> /dev/null; then
         echo "❌ Pod $pod has been deleted. Moving to the next pod..."
         all_pods_handled=false
@@ -1081,7 +1078,6 @@ handle_pods_in_resource() {
       return 0
     fi
 
-    # Retry logic for the entire resource
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
       echo "❌ Timeout waiting for all pods in resource: $resource_name to be handled. Exiting..."
