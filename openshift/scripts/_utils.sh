@@ -991,15 +991,31 @@ wait_for_redis_sync() {
 test_redis_proxy_connectivity() {
   local pod=$1
   local namespace=$2
+  local error_patterns="err:,panic,fatal,error"
 
   echo "Testing Redis Proxy connectivity from pod: $pod"
-  if oc exec -n $namespace $pod -- redis-cli -h localhost -p 6379 PING | grep -q "PONG"; then
+
+  # 1. Check PING
+  if oc exec -n "$namespace" "$pod" -- redis-cli -h localhost -p 6379 PING | grep -q "PONG"; then
     echo "✔️ Pod $pod is responding to PING."
-    return 0
   else
     echo "❌ Pod $pod is not responding to PING."
     return 1
   fi
+
+  # 2. Check logs for error patterns
+  local logs
+  logs=$(oc logs "$pod" -n "$namespace" 2>&1)
+  IFS=',' read -ra patterns <<< "$error_patterns"
+  for pattern in "${patterns[@]}"; do
+    if echo "$logs" | grep -qi "$pattern"; then
+      echo "❌ Pod $pod log contains error pattern: $pattern"
+      delete_pod "$pod"
+      return 1
+    fi
+  done
+
+  return 0
 }
 
 wait_for_redis_proxy_ready() {
