@@ -75,15 +75,19 @@ check_pod_logs() {
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
 
-  # echo "Checking logs for pod: $pod"
-  # echo "Error search strings: $error_search_strings"
-  # echo "Error handler: $error_handler"
+  echo "DEBUG: pod='$pod' namespace='$namespace' error_search_strings='$error_search_strings' error_handler='$error_handler'"
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
+  # Check for malformed variables
+  if [[ -z "$pod" || -z "$namespace" ]]; then
+    echo "ERROR: pod or namespace is empty!"
+    return 1
+  fi
+
   # Get the list of containers in the pod
-  CONTAINERS=$(oc get pod $pod -n $namespace -o jsonpath='{.spec.containers[*].name}')
+  CONTAINERS=$(oc get pod "$pod" -n "$namespace" -o jsonpath='{.spec.containers[*].name}')
   IFS=' ' read -r -a container_array <<< "$CONTAINERS"
 
   for container in "${container_array[@]}"; do
@@ -237,7 +241,7 @@ wait_for_deployment_without_errors() {
   local error_search_string=${2:-error}
   local error_handler=${3:-delete_pod}
   local max_retries=${4:-30}
-  local wait_time=${5:-10}
+  local wait_time=${5:-30}
 
   # Split the resource into type and name
   local resource_type=${resource%%/*}
@@ -880,8 +884,8 @@ wait_for_galera_sync() {
   local sts_name=$1
   local namespace=$2
   local expected_size=${5:-5}
-  local max_retries=${4:-30}
-  local wait_time=${5:-10}
+  local max_retries=${4:-60}
+  local wait_time=${5:-30}
   local retry_count=0
 
   echo "Waiting for MariaDB Galera cluster ($sts_name) to sync in namespace $namespace..."
@@ -912,7 +916,7 @@ wait_for_galera_sync() {
 check_galera_pod_ready() {
   local pod=$1
   local namespace=$2
-  local expected_size=${5:-5}
+  local expected_size=${3:-5}
   local root_pw="${DB_PASSWORD:-root}" # Adjust as needed
 
   # Check if MySQL is ready
@@ -1067,7 +1071,7 @@ handle_pods_in_resource() {
       # Call action with pod, namespace, and additional arguments explicitly
       if ! "$action" "$pod" "$namespace" "$error_search_string" "$error_handler"; then
         echo "❌ Action failed for pod: $pod"
-        # echo "Action: $action"
+        echo "Action: $action"
         # echo "Arguments: $pod $namespace $error_search_string $error_handler"
         echo "Retrying..."
         all_pods_handled=false

@@ -228,7 +228,7 @@ done
 echo "Database pod name: $DB_POD_NAME has been found and is running."
 
 echo "Waiting for MariaDB Galera nodes to synchronize..."
-if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" "$OC_PROJECT" 60 10; then
+if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" "$OC_PROJECT" 30 60; then
   echo "❌ MariaDB Galera nodes failed to synchronize. Exiting..."
   exit 1
 fi
