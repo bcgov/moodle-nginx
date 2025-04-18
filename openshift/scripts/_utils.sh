@@ -152,7 +152,7 @@ check_deployment_logs() {
       for pod in "${pod_array[@]}"; do
         echo "Processing pod logs: $pod"
 
-        if check_pod_logs $pod "$error_search_strings" "$error_handler"; then
+        if check_pod_logs "$pod" "$DEPLOY_NAMESPACE" "$error_search_strings" "$error_handler"; then
           errors_detected=$((errors_detected + 1))
           total_errors=$((total_errors + 1))
 

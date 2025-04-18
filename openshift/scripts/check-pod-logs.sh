@@ -24,4 +24,4 @@ DEPLOYMENTS=(
 
 # Convert the DEPLOYMENTS array to a string and pass it to the function
 deployments_str=$(declare -p DEPLOYMENTS)
-check_deployment_logs "$deployments_str"
+check_deployment_logs "$deployments_str" "$DEPLOY_NAMESPACE"
