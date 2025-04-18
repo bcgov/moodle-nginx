@@ -1022,10 +1022,10 @@ handle_pods_in_resource() {
   local resource_name=$1
   local namespace=$2
   local action=$3
-  shift 3
-  local action_args=("$@") # Capture remaining arguments as an array
-  local max_retries=${MAX_RETRIES:-30}
-  local wait_time=${WAIT_TIME:-10}
+  local error_search_string=$4
+  local error_handler=$5
+  local max_retries=${6:-30}
+  local wait_time=${7:-10}
   local retry_count=0
 
   echo "Handling pods for resource: $resource_name in namespace: $namespace"
@@ -1056,11 +1056,11 @@ handle_pods_in_resource() {
         continue
       fi
 
-      # Call action with pod, namespace, and additional arguments explicitly as array
-      if ! "$action" "$pod" "$namespace" "${action_args[@]}"; then
+      # Call action with pod, namespace, and additional arguments explicitly
+      if ! "$action" "$pod" "$namespace" "$error_search_string" "$error_handler"; then
         echo "❌ Action failed for pod: $pod"
         echo "Action: $action"
-        echo "Arguments: ${action_args[*]}"
+        echo "Arguments: $error_search_string $error_handler"
         echo "Retrying..."
         all_pods_handled=false
         continue
