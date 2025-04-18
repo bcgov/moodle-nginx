@@ -26,7 +26,7 @@ scale_deployment() {
 
   if [[ "$type" == "sts" || "$type" == "statefulset" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
-    echo "Executing: $cmd"
+    # echo "Executing: $cmd"
     $cmd
   elif [[ "$type" == "deployment" ]]; then
     # Remove existing autoscaler if it exists
@@ -38,26 +38,27 @@ scale_deployment() {
     sleep 10
 
     cmd="oc scale $type/$deployment --replicas=$pod_count"
-    echo "Executing: $cmd"
+    # echo "Executing: $cmd"
     $cmd
 
     # Add HorizontalPodAutoscaler if MaxPods > PodCount
     local diff=$((max_pods - pod_count))
     if [[ $diff -gt 0 ]]; then
       cmd="oc autoscale $type/$deployment --min $pod_count --max $max_pods --cpu-percent=80"
-      echo "Executing: $cmd"
+      # echo "Executing: $cmd"
       $cmd
 
       # Patch the deployment
-      echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
+      # echo "Executing: oc patch $type/$deployment -p={\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"33%\"}}}}"
       oc patch $type/$deployment -p="{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"$max_surge\", \"maxUnavailable\":\"$max_unavailable\"}}}}"
     fi
   fi
 
-  sleep 20
-
   # Wait for the deployment to be ready
   echo "Waiting for deployment to scale ($pod_count/$max_pods): $type/$deployment..."
+
+  sleep 20
+
   if wait_for_deployment_without_errors "$type/$deployment"; then
     return 0
   else
@@ -74,9 +75,9 @@ check_pod_logs() {
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
 
-  echo "Checking logs for pod: $pod"
-  echo "Error search strings: $error_search_strings"
-  echo "Error handler: $error_handler"
+  # echo "Checking logs for pod: $pod"
+  # echo "Error search strings: $error_search_strings"
+  # echo "Error handler: $error_handler"
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
@@ -286,7 +287,7 @@ enable_maintenance_mode() {
     "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
 
   # Redirect traffic
-  echo "Redirecting traffic: $route_name > $service_name"
+  # echo "Redirecting traffic: $route_name > $service_name"
   patch_route $route_name $service_name
 }
 
@@ -302,7 +303,7 @@ disable_maintenance_mode() {
   scale_deployment "deployment" "$maintenance_service_name" 0 0
 
   # Redirect traffic back to application
-  echo "Redirecting traffic to: service/$service_name..."
+  # echo "Redirecting traffic to: service/$service_name..."
   patch_route $route_name $service_name
 }
 
@@ -385,7 +386,7 @@ patch_route() {
   local route_name=$1
   local target_service=$2
 
-  echo "Patching route: $route_name > $target_service..."
+  # echo "Patching route: $route_name > $target_service..."
   oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
   # Wait for the route change to take effect
@@ -462,7 +463,7 @@ handle_deployment_status() {
     pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
     local status=$?
 
-    echo "Pods for resource $resource_name: $pods"
+    # echo "Pods for resource $resource_name: $pods"
 
     if [[ $status -ne 0 ]]; then
       echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
@@ -482,8 +483,8 @@ handle_deployment_status() {
         local all_pods_ready=true
         for pod in $pods; do
           local output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
-          echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
-          echo "Status: $output"
+          # echo "Executing: oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s"
+          # echo "Status: $output"
           if ! echo "$output" | grep -q "condition met"; then
             all_pods_ready=false
             echo "Pod $pod is not in '$condition' condition. Retrying..."
@@ -576,16 +577,16 @@ check_timestamp() {
   local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
 
   echo "Last modified time: $last_modified_minutes minutes ago"
-  echo "Rerun block time: $rerun_minutes minutes"
+  # echo "Rerun block time: $rerun_minutes minutes"
   echo "Rerun block time: $rerun_hours hours"
   echo "Current time: $(date +%Y-%m-%dT%H:%M:%S)"
   echo "Current time (epoch): $(date +%s)"
   echo "Last modified time (epoch): $(stat -c %Y $file_to_test)"
-  echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%Y-%m-%dT%H:%M:%S)"
-  echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%s)"
-  echo "Difference: $(( $(date +%s) - $(stat -c %Y $file_to_test) )) seconds"
+  # echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%Y-%m-%dT%H:%M:%S)"
+  # echo "Last modified time (epoch): $(date -d "@$(stat -c %Y $file_to_test)" +%s)"
+  # echo "Difference: $(( $(date +%s) - $(stat -c %Y $file_to_test) )) seconds"
   echo "Difference in hours: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 3600 )) hours"
-  echo "Difference in minutes: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 )) minutes"
+  # echo "Difference in minutes: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 )) minutes"
 
   # Check if the script has been run within the past hour
   if [ -f "$file_to_test" ]; then
@@ -763,7 +764,7 @@ create_or_update_configmap() {
   done
 
   # Execute the command
-  echo "Executing: $create_cmd"
+  # echo "Executing: $create_cmd"
   eval $create_cmd
 }
 
@@ -841,7 +842,7 @@ deploy_resource_from_template() {
   done
 
   echo "Deploying resource from template: $template_file"
-  echo "Executing: $process_cmd"
+  # echo "Executing: $process_cmd"
 
   # Process the template and print the output for debugging
   local processed_template
@@ -1020,7 +1021,7 @@ handle_pods_in_resource() {
   local wait_time=${7:-10}
   local retry_count=0
 
-  echo "Handling pods for resource: $resource_name in namespace: $namespace"
+  # echo "Handling pods for resource: $resource_name in namespace: $namespace"
 
   while true; do
     local pods
@@ -1040,7 +1041,7 @@ handle_pods_in_resource() {
     local all_pods_handled=true
 
     for pod in $pods; do
-      echo "Handle Processing pod: $pod"
+      # echo "Handle Processing pod: $pod"
 
       if ! oc wait --for=condition=ready pod/$pod -n $namespace --timeout=10s &> /dev/null; then
         echo "Pod $pod is not ready. Retrying..."
@@ -1051,8 +1052,8 @@ handle_pods_in_resource() {
       # Call action with pod, namespace, and additional arguments explicitly
       if ! "$action" "$pod" "$namespace" "$error_search_string" "$error_handler"; then
         echo "❌ Action failed for pod: $pod"
-        echo "Action: $action"
-        echo "Arguments: $pod $namespace $error_search_string $error_handler"
+        # echo "Action: $action"
+        # echo "Arguments: $pod $namespace $error_search_string $error_handler"
         echo "Retrying..."
         all_pods_handled=false
         continue
