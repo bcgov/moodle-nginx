@@ -913,7 +913,7 @@ check_galera_pod_ready() {
   local pod=$1
   local namespace=$2
   local expected_size=${3:-3}
-  local root_pw="${MARIADB_ROOT_PASSWORD:-root}" # Adjust as needed
+  local root_pw="${DB_PASSWORD:-root}" # Adjust as needed
 
   local status_output
   status_output=$(oc exec -n "$namespace" "$pod" -- \
