@@ -879,51 +879,60 @@ check_logs_for_pattern() {
 wait_for_galera_sync() {
   local sts_name=$1
   local namespace=$2
-  local max_retries=${3:-30}
-  local wait_time=${4:-10}
+  local expected_size=${3:-3}
+  local max_retries=${4:-30}
+  local wait_time=${5:-10}
   local retry_count=0
 
   echo "Waiting for MariaDB Galera cluster ($sts_name) to sync in namespace $namespace..."
 
+  # Use handle_pods_in_resource to check all pods
   while true; do
-    # Check if the statefulset exists
-    if ! oc get sts $sts_name -n $namespace &> /dev/null; then
+    if ! oc get sts "$sts_name" -n "$namespace" &> /dev/null; then
       echo "❌ StatefulSet $sts_name not found in namespace $namespace. Exiting..."
       return 1
     fi
 
-    # Get the name of the first pod in the statefulset
-    local first_pod="${sts_name}-0"
-    if ! oc get pod $first_pod -n $namespace &> /dev/null; then
-      echo "❌ Pod $first_pod not found. Retrying..."
-      sleep $wait_time
-      retry_count=$((retry_count + 1))
-      if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Timeout waiting for pod $first_pod to be created. Exiting..."
-        return 1
-      fi
-      continue
+    if handle_pods_in_resource "$sts_name" "$namespace" check_galera_pod_ready "$expected_size"; then
+      echo "✔️ All Galera pods are healthy and synced."
+      return 0
     fi
 
-    # Check the logs of the first pod for the sync condition
-    if check_logs_for_pattern $first_pod $namespace "members(5):"; then
-      if check_logs_for_pattern $first_pod $namespace "ready for connections"; then
-        echo "✔️ MariaDB Galera cluster is synced. All members are running."
-        return 0
-      fi
-    fi
-
-    # Retry logic
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
       echo "❌ Timeout waiting for MariaDB Galera cluster to sync. Exiting..."
       return 1
     fi
 
-    echo "Waiting for sync..."
-
+    echo "Waiting for sync... ($retry_count/$max_retries)"
     sleep $wait_time
   done
+}
+
+check_galera_pod_ready() {
+  local pod=$1
+  local namespace=$2
+  local expected_size=${3:-3}
+  local root_pw="${MARIADB_ROOT_PASSWORD:-root}" # Adjust as needed
+
+  local status_output
+  status_output=$(oc exec -n "$namespace" "$pod" -- \
+    mysql -u root -p"$root_pw" -e "SHOW STATUS LIKE 'wsrep_%';" 2>/dev/null)
+
+  local cluster_status
+  cluster_status=$(echo "$status_output" | awk '/wsrep_cluster_status/ {print $2}')
+  local local_state
+  local_state=$(echo "$status_output" | awk '/wsrep_local_state_comment/ {print $2}')
+  local cluster_size
+  cluster_size=$(echo "$status_output" | awk '/wsrep_cluster_size/ {print $2}')
+
+  echo "$pod: cluster_status=$cluster_status, local_state=$local_state, cluster_size=$cluster_size"
+
+  if [[ "$cluster_status" == "Primary" && "$local_state" == "Synced" && "$cluster_size" == "$expected_size" ]]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 wait_for_redis_sync() {
