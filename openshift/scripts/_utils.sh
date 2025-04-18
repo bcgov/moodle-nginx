@@ -879,7 +879,7 @@ check_logs_for_pattern() {
 wait_for_galera_sync() {
   local sts_name=$1
   local namespace=$2
-  local expected_size=${3:-3}
+  local expected_size=${5:-5}
   local max_retries=${4:-30}
   local wait_time=${5:-10}
   local retry_count=0
@@ -912,8 +912,14 @@ wait_for_galera_sync() {
 check_galera_pod_ready() {
   local pod=$1
   local namespace=$2
-  local expected_size=${3:-3}
+  local expected_size=${5:-5}
   local root_pw="${DB_PASSWORD:-root}" # Adjust as needed
+
+  # Check if MySQL is ready
+  if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u root -p"$root_pw" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
+    echo "$pod: MySQL is not ready yet."
+    return 1
+  fi
 
   local status_output
   status_output=$(oc exec -n "$namespace" "$pod" -- \
@@ -926,7 +932,7 @@ check_galera_pod_ready() {
   local cluster_size
   cluster_size=$(echo "$status_output" | awk '/wsrep_cluster_size/ {print $2}')
 
-  echo "$pod: cluster_status=$cluster_status, local_state=$local_state, cluster_size=$cluster_size"
+  echo "$pod: cluster_status=$cluster_status, local_state=$local_state, cluster_size=$cluster_size (of expected: $expected_size)"
 
   if [[ "$cluster_status" == "Primary" && "$local_state" == "Synced" && "$cluster_size" == "$expected_size" ]]; then
     return 0
