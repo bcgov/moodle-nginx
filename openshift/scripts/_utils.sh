@@ -82,40 +82,28 @@ check_pod_logs() {
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
 
   # Get the list of containers in the pod
-  CONTAINERS=$(oc get pod $pod -o jsonpath='{.spec.containers[*].name}')
-  # echo "CONTAINERS in pod $pod: $CONTAINERS"
-  total_containers=$(echo $CONTAINERS | wc -w)
-  # echo "Total containers in pod $pod: $total_containers"
-
-  # Convert CONTAINERS to an array
+  CONTAINERS=$(oc get pod $pod -n $namespace -o jsonpath='{.spec.containers[*].name}')
   IFS=' ' read -r -a container_array <<< "$CONTAINERS"
-  # echo "Container array: ${container_array[@]}"
 
   for container in "${container_array[@]}"; do
-    # Check for the specific error messages in the logs
-    LOGS=$(oc logs $pod -c $container)
-    # echo "Logs for pod: $pod, container: $container"
-    # echo "$LOGS"
+    LOGS=$(oc logs $pod -n $namespace -c $container)
 
     for error_search_string in "${error_strings[@]}"; do
-      # echo "Searching for error string: $error_search_string"
-      if echo "$LOGS" | grep -q "$error_search_string" > /dev/null 2>&1; then
-        # Check if the connection was reestablished
-        if echo "$logs" | grep -q "$error_search_string" && echo "$logs" | grep -q "Success"; then
+      if echo "$LOGS" | grep -q "$error_search_string"; then
+        if echo "$LOGS" | grep -q "Success"; then
           echo "Connection was lost but reestablished. No need to restart the pod."
-          return 0
+          continue
         else
           echo "Error found in pod logs: $error_search_string"
-          # Call the appropriate error handling function
           $error_handler $pod
+          return 1  # Return failure if an error was found and handled
         fi
       fi
     done
-
-    # echo "No errors found in pod: $pod, container: $container"
   done
 
-  return 1
+  echo "No errors found in pod: $pod"
+  return 0  # Return success if no errors were found
 }
 
 log_error_to_file() {
