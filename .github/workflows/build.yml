@@ -281,9 +281,10 @@ jobs:
             # Exit with the same error code
             exit $EXIT_CODE
           else
-            # Write the full output to GITHUB_OUTPUT using EOF
+            # Only allow safe characters and redact anything that looks like a secret
+            SAFE_OUTPUT=$(echo "$OUTPUT" | sed 's/[A-Za-z0-9._%+-]\{20,\}/[REDACTED]/g')
             echo "LHRESULT<<EOF" >> $GITHUB_OUTPUT
-            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "$SAFE_OUTPUT" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           fi
         env:

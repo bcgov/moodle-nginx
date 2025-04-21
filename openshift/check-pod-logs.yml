@@ -36,6 +36,8 @@ objects:
                           key: token
                     - name: OPENSHIFT_SERVER
                       value: ${OPENSHIFT_SERVER}
+                    - name: DEPLOY_NAMESPACE
+                      value: ${DEPLOY_NAMESPACE}
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts

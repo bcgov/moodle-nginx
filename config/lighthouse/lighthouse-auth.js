@@ -107,9 +107,6 @@ async function runLighthouse(url, options, config = null) {
     process.exit(1); // Fail the test
   }
 
-  // const cookies = await page.cookies();
-  // console.log('cookies: ', JSON.stringify(cookies));
-
   for (const char of detectEncodingIssues) {
     if (content.includes(char)) {
       errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
