@@ -75,7 +75,7 @@ check_pod_logs() {
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
 
-  echo "DEBUG: pod='$pod' namespace='$namespace' error_search_strings='$error_search_strings' error_handler='$error_handler'"
+  # echo "DEBUG: pod='$pod' namespace='$namespace' error_search_strings='$error_search_strings' error_handler='$error_handler'"
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
@@ -303,12 +303,14 @@ disable_maintenance_mode() {
 
   echo "Disabling $maintenance_service_name..."
 
-  # Scale to 0
-  scale_deployment "deployment" "$maintenance_service_name" 0 0
-
   # Redirect traffic back to application
   # echo "Redirecting traffic to: service/$service_name..."
   patch_route $route_name $service_name
+
+  sleep 60
+
+  # Scale to 0
+  scale_deployment "deployment" "$maintenance_service_name" 0 0
 }
 
 # Function to manage maintenance mode
@@ -1020,6 +1022,9 @@ test_redis_proxy_connectivity() {
   if check_logs_for_pattern "$pod" "$namespace" "$error_patterns"; then
     echo "❌ Pod $pod logs contain error patterns."
     delete_pod "$pod"
+    # Wait for the new pod to be ready
+    echo "Waiting for new pod to be ready after deletion..."
+    oc wait --for=condition=Ready pod -l app=redis-proxy -n "$namespace" --timeout=180s
     return 1
   fi
 

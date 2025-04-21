@@ -238,7 +238,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [checkEnv, call-deploy-workflow]
     outputs:
-      LHRESULT: ${{ steps.lighthouse.outputs.LHRESULT }}
+      LHSTATUS: ${{ steps.lighthouse.outputs.LHSTATUS }}
     if: |
       always() &&
       (
@@ -261,31 +261,36 @@ jobs:
       - name: Lighthouse
         id: lighthouse
         run: |
-          # sleep 300 # Wait for the deployment to be ready
           set +e
           OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
           EXIT_CODE=$?
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "Lighthouse script failed with error:"
-            echo "$OUTPUT"
+          # Default to failure
+          LHSTATUS="failure"
+          LHWARNINGS=""
 
-            # Extract the first line of the error message and sanitize it
-            ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
-
-            # Write the sanitized error message to GITHUB_OUTPUT
-            echo "LHRESULT<<EOF" >> $GITHUB_OUTPUT
-            echo "$ERROR_MESSAGE" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-
-            # Exit with the same error code
-            exit $EXIT_CODE
+          if [ $EXIT_CODE -eq 0 ]; then
+            LHSTATUS="success"
+            # Optionally, extract Lighthouse warnings from OUTPUT
+            # For example, count "warning" lines:
+            WARN_COUNT=$(echo "$OUTPUT" | grep -i warning | wc -l)
+            if [ "$WARN_COUNT" -gt 0 ]; then
+              LHWARNINGS=" ($WARN_COUNT warnings)"
+            fi
           else
-            # Only allow safe characters and redact anything that looks like a secret
-            SAFE_OUTPUT=$(echo "$OUTPUT" | sed 's/[A-Za-z0-9._%+-]\{20,\}/[REDACTED]/g')
-            echo "LHRESULT<<EOF" >> $GITHUB_OUTPUT
-            echo "$SAFE_OUTPUT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            # Optionally, extract the first error line
+            ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
+            LHWARNINGS=" (Error: $ERROR_MESSAGE)"
+          fi
+
+          # Set a simple output for notification
+          echo "LHSTATUS=${LHSTATUS}${LHWARNINGS}" >> $GITHUB_OUTPUT
+
+          # Archive full output as artifact if needed
+          echo "$OUTPUT" > lighthouse-full.log
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            exit $EXIT_CODE
           fi
         env:
           APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
@@ -363,7 +368,7 @@ jobs:
                   "title": "Deploy to OpenShift: ${{ needs.call-deploy-workflow.result }}"
                 },{
                   "title": "Lighthouse Test Results:",
-                  "value": "${{ needs.lighthouse-check.outputs.LHRESULT }}"
+                  "value": "${{ needs.lighthouse-check.outputs.LHSTATUS }}"
                 }]
               }]
             }
