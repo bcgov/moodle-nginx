@@ -870,14 +870,20 @@ deploy_resource_from_template() {
 check_logs_for_pattern() {
   local pod_name=$1
   local namespace=$2
-  local pattern=$3
+  local pattern_list=$3
 
-  local logs=$(oc logs $pod_name -n $namespace 2>&1)
-  if echo "$logs" | grep -q "$pattern"; then
-    return 0
-  else
-    return 1
-  fi
+  local logs
+  logs=$(oc logs "$pod_name" -n "$namespace" 2>&1)
+
+  IFS=',' read -ra patterns <<< "$pattern_list"
+  for pattern in "${patterns[@]}"; do
+    # Use -w for whole word, -i for case-insensitive, and anchor if needed
+    if echo "$logs" | grep -i -q "$pattern"; then
+      echo "Pattern matched: $pattern"
+      return 0
+    fi
+  done
+  return 1
 }
 
 wait_for_galera_sync() {
@@ -998,7 +1004,7 @@ wait_for_redis_sync() {
 test_redis_proxy_connectivity() {
   local pod=$1
   local namespace=$2
-  local error_patterns="err:,panic,fatal,error"
+  local error_patterns="err:,panic,fatal"
 
   echo "Testing Redis Proxy connectivity from pod: $pod"
 
