@@ -883,41 +883,41 @@ check_logs_for_pattern() {
 wait_for_galera_sync() {
   local sts_name=$1
   local namespace=$2
-  local expected_size=${5:-5}
+  local expected_size=${3:-5}
   local max_retries=${4:-60}
   local wait_time=${5:-30}
-  local retry_count=0
 
-  echo "Waiting for MariaDB Galera cluster ($sts_name) to sync in namespace $namespace..."
+  for ((i=1; i<=expected_size; i++)); do
+    echo "Scaling $sts_name to $i replicas..."
+    oc scale statefulset/$sts_name -n $namespace --replicas=$i
 
-  # Use handle_pods_in_resource to check all pods
-  while true; do
-    if ! oc get sts "$sts_name" -n "$namespace" &> /dev/null; then
-      echo "❌ StatefulSet $sts_name not found in namespace $namespace. Exiting..."
-      return 1
-    fi
-
-    if handle_pods_in_resource "$sts_name" "$namespace" check_galera_pod_ready "$expected_size"; then
-      echo "✔️ All Galera pods are healthy and synced."
-      return 0
-    fi
-
-    retry_count=$((retry_count + 1))
-    if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for MariaDB Galera cluster to sync. Exiting..."
-      return 1
-    fi
-
-    echo "Waiting for sync... ($retry_count/$max_retries)"
-    sleep $wait_time
+    # Wait for the new pod to be healthy
+    local pod_name="${sts_name}-$((i-1))"
+    local retries=0
+    while true; do
+      if check_galera_pod_ready "$pod_name" "$namespace" "$i"; then
+        echo "$pod_name is healthy and joined the cluster."
+        break
+      fi
+      retries=$((retries+1))
+      if [[ $retries -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for $pod_name to be healthy."
+        return 1
+      fi
+      echo "Waiting for $pod_name to be healthy... ($retries/$max_retries)"
+      sleep $wait_time
+    done
   done
+
+  echo "✔️ All Galera pods are healthy and synced."
+  return 0
 }
 
 check_galera_pod_ready() {
   local pod=$1
   local namespace=$2
   local expected_size=${3:-5}
-  local root_pw="${DB_PASSWORD:-root}" # Adjust as needed
+  local root_pw="${DB_PASSWORD:-root}"
 
   # Check if MySQL is ready
   if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u root -p"$root_pw" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
@@ -940,9 +940,16 @@ check_galera_pod_ready() {
 
   if [[ "$cluster_status" == "Primary" && "$local_state" == "Synced" && "$cluster_size" == "$expected_size" ]]; then
     return 0
-  else
+  fi
+
+  # If pod is Disconnected or in non-primary, restart it
+  if [[ "$cluster_status" == "Disconnected" || "$cluster_status" == "non-primary" ]]; then
+    echo "$pod: Detected Disconnected/non-primary state, restarting pod..."
+    delete_pod "$pod"
     return 1
   fi
+
+  return 1
 }
 
 wait_for_redis_sync() {
