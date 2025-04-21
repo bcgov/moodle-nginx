@@ -8,12 +8,6 @@ test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
-# Wait for MariaDB Galera cluster to sync (180 reteies with 10 second wait = 30 min max)
-if ! wait_for_galera_sync "mariadb-galera" "$DEPLOY_NAMESPACE" 180 10; then
-  echo "MariaDB Galera cluster failed to sync. Exiting..."
-  exit 1
-fi
-
 # Enable Moodle maintenance mode
 # Note: Should maybe use cron for this [instead of php pod]
 manage_maintenance_mode \
