@@ -1017,8 +1017,7 @@ test_redis_proxy_connectivity() {
   fi
 
   # 2. Check logs for error patterns
-  check_logs_for_pattern "$pod" "$namespace" "$error_patterns"
-  if [[ $? -ne 0 ]]; then
+  if check_logs_for_pattern "$pod" "$namespace" "$error_patterns"; then
     echo "❌ Pod $pod logs contain error patterns."
     delete_pod "$pod"
     return 1
