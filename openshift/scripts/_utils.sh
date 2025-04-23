@@ -393,12 +393,12 @@ patch_route() {
   local target_service=$2
 
   # Check if the route exists before attempting to patch
-  if ! oc get route "$route_name" &> /dev/null; then
+  if [[ $(oc get route "$route_name" 2>&1) =~ "NotFound" ]]; then
     echo "⚠️ Route $route_name does not exist. Skipping route patch."
     return 0
   fi
 
-  # echo "Patching route: $route_name > $target_service..."
+  # Patch the route
   oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
   # Wait for the route change to take effect
@@ -407,6 +407,12 @@ patch_route() {
   local wait_time=5
 
   while true; do
+    # If the route is deleted or not yet created, skip waiting
+    if ! oc get route "$route_name" &> /dev/null; then
+      echo "⚠️ Route $route_name no longer exists during patch wait. Skipping further checks."
+      return 0
+    fi
+
     current_target=$(oc get route $route_name -o jsonpath='{.spec.to.name}')
     if [[ "$current_target" == "$target_service" ]]; then
       echo "✔️ Route $route_name successfully updated to $target_service."
@@ -414,7 +420,7 @@ patch_route() {
     fi
     if [[ $retry_count -ge $max_retries ]]; then
       echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds. Exiting..."
-      exit 1
+      return 1
     fi
     echo "Waiting for route $route_name to update to $target_service..."
     sleep $wait_time
