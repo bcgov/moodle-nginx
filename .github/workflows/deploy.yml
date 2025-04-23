@@ -122,10 +122,8 @@ jobs:
     runs-on: ubuntu-22.04
     if: |
       always()
-      && (
-        contains(github.event.workflow_run.conclusion, 'success')
-        && !contains(github.event.workflow_run.conclusion, 'failure')
-      )
+      && contains(github.event.workflow_run.conclusion, 'success')
+      && !contains(github.event.workflow_run.conclusion, 'failure')
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
