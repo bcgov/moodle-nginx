@@ -410,6 +410,8 @@ patch_route() {
   local retry_count=0
   local wait_time=5
 
+  echo "DEBUG: Entering patch_route for $route_name $target_service"
+
   while true; do
     # If the route is deleted or not yet created, skip waiting
     if ! oc get route "$route_name" &> /dev/null; then
