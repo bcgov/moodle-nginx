@@ -67,4 +67,8 @@ if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "500s"; then
 fi
 
 # Redirect traffic to maintenance-message
-patch_route $ROUTE_NAME $BUILD_NAME
+if ! oc get route "$ROUTE_NAME" &> /dev/null; then
+  echo "⚠️ Route $ROUTE_NAME does not exist. Skipping route patch."
+else
+  patch_route $ROUTE_NAME $BUILD_NAME
+fi
