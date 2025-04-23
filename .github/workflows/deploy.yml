@@ -123,8 +123,6 @@ jobs:
     if: |
       always()
       && (
-        github.ref_name == 'dev' || github.ref_name  == 'test' || github.ref_name  == 'prod'
-      ) || (
         contains(github.event.workflow_run.conclusion, 'success')
         && !contains(github.event.workflow_run.conclusion, 'failure')
       )
