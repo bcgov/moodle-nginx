@@ -165,7 +165,7 @@ jobs:
 
   moodle:
     name: 🔨 Moodle
-    needs: [checkEnv]
+    needs: [checkEnv, php]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
     secrets: inherit

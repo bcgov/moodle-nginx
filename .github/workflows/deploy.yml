@@ -135,7 +135,7 @@ jobs:
         run: |
           server=https://api.silver.devops.gov.bc.ca:6443
           if [[ ${{ github.ref_name == '950003-dev' }} ]]; then
-            oc login --token=${{ secrets.SA_TOKEN }} --server=$server
+            oc login --token=${{ secrets.AUTH_TOKEN_TEST }} --server=$server
           elif [[ ${{ github.ref_name == '950003-test' }} ]]; then
             oc login --token=${{ secrets.SA_TOKEN }} --server=$server
           elif [[ ${{ github.ref_name == '950003-prod' }} ]]; then
