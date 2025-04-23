@@ -393,9 +393,13 @@ patch_route() {
   local target_service=$2
 
   # Check if the route exists before attempting to patch
-  if [[ $(oc get route "$route_name" 2>&1) =~ "NotFound" ]]; then
+  # if [[ $(oc get route "$route_name" 2>&1) =~ "NotFound" ]]; then
+  if ! oc get route "$route_name" &> /dev/null; then
     echo "⚠️ Route $route_name does not exist. Skipping route patch."
     return 0
+  else
+    echo "Patching route $route_name to point to $target_service..."
+    echo "Current route: $(oc get route $route_name -o jsonpath='{.spec.to.name}')"
   fi
 
   # Patch the route
