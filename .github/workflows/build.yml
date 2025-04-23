@@ -151,7 +151,7 @@ jobs:
 
   cron:
     name: 🔨 Cron
-    needs: [checkEnv]
+    needs: [checkEnv, php]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/cron.yml
     secrets: inherit
