@@ -120,10 +120,7 @@ jobs:
   deploy:
     name: OpenShift (${{ github.ref_name }})
     runs-on: ubuntu-22.04
-    if: |
-      always()
-      && contains(github.event.workflow_run.conclusion, 'success')
-      && !contains(github.event.workflow_run.conclusion, 'failure')
+    if: github.event.workflow_run.conclusion != 'failure'
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
