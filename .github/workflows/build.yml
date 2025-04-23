@@ -121,9 +121,9 @@ jobs:
 
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
+          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.BRANCH }}
           echo "-----------------------"
-          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
+          echo URL: https://${{ env.APP }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
   db:
