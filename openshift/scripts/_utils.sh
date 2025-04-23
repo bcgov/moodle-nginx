@@ -397,10 +397,10 @@ patch_route() {
   if ! oc get route "$route_name" &> /dev/null; then
     echo "⚠️ Route $route_name does not exist. Skipping route patch."
     return 0
-  else
-    echo "Patching route $route_name to point to $target_service..."
-    echo "Current route: $(oc get route $route_name -o jsonpath='{.spec.to.name}')"
   fi
+
+  echo "Patching route $route_name to point to $target_service..."
+  echo "Current route: $(oc get route $route_name -o jsonpath='{.spec.to.name}')"
 
   # Patch the route
   oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
