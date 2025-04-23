@@ -392,6 +392,12 @@ patch_route() {
   local route_name=$1
   local target_service=$2
 
+  # Check if the route exists before attempting to patch
+  if ! oc get route "$route_name" &> /dev/null; then
+    echo "⚠️ Route $route_name does not exist. Skipping route patch."
+    return 0
+  fi
+
   # echo "Patching route: $route_name > $target_service..."
   oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
