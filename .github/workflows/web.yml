@@ -14,7 +14,6 @@ jobs:
   build-images:
     name: '🐸 Build to JFrog'
     runs-on: ubuntu-22.04
-    if: (github.ref_name == 'dev' || github.ref_name == 'test' || github.ref_name == 'prod')
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
