@@ -134,17 +134,10 @@ jobs:
         if: success()
         run: |
           server=https://api.silver.devops.gov.bc.ca:6443
-          if [[ ${{ github.ref_name == '950003-dev' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_PROD }} --server=$server
-          elif [[ ${{ github.ref_name == '950003-test' }} ]]; then
-            oc login --token=${{ secrets.SA_TOKEN }} --server=$server
-          elif [[ ${{ github.ref_name == '950003-prod' }} ]]; then
-            oc login --token=${{ secrets.SA_TOKEN }} --server=$server
-          elif [[ ${{ github.ref_name == 'e66ac2-dev' }} ]]; then
-            oc login --token=${{ secrets.AUTH_TOKEN_DEV }} --server=$server
-          else
-            echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
-          fi
+          token_name: ${{ format('AUTH_TOKEN_{0}', replace(toUpper(github.ref_name), '-', '_')) }}
+          token=${{ secrets[token_name] }}
+          echo "Logging in to OpenShift with secret token: $token_name"
+          oc login --token=$token --server=$server
 
       - name: Deploy/Enable Maintenance Messaging
         if: success()
