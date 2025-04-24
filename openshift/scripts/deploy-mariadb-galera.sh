@@ -83,6 +83,7 @@ else
   # --set metrics.serviceMonitor.enabled=true \
   # --set metrics.prometheusRules.enabled=false \
   # --set primary.persistence.accessModes={ReadWriteMany} \
+  # --atomic \
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.tag=10.6 \
@@ -116,7 +117,6 @@ else
     --set lifecycle.preStop.exec.command[0]="/bin/sh" \
     --set lifecycle.preStop.exec.command[1]="-c" \
     --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
-    --atomic \
     --wait \
     --timeout 20m0s
     #-f ./config/mariadb/galera-values.yaml
