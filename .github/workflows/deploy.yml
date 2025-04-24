@@ -125,7 +125,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
 
       # Log in to OpenShift.
       # Note: The secrets needed to log in are NOT available if the PR comes from a FORK.
@@ -148,7 +148,7 @@ jobs:
 
       - name: Deploy/Enable Maintenance Messaging
         if: success()
-        run: bash ./openshift/scripts/deploy-maintenance-message-test.sh
+        run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}

@@ -14,7 +14,7 @@ env:
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
-  BRANCH : ${{ github.ref_name }}
+  BRANCH: ${{ github.ref_name }}
   INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
@@ -57,7 +57,6 @@ jobs:
       APP: ${{ env.APP }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ env.IMAGE_REBUILD_TIME_LIMIT }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
-      BRANCH: ${{ env.BRANCH }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ env.OPENSHIFT_SERVER }}
       DEPLOY_NAMESPACE: ${{ github.ref_name }}
@@ -96,7 +95,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
           sparse-checkout: |
             config/mariadb
             example.env
@@ -120,9 +119,9 @@ jobs:
 
       - name: Print Env Vars
         run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.BRANCH }}
+          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ github.ref_name }}
           echo "-----------------------"
-          echo URL: https://${{ env.APP }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
+          echo URL: https://${{ env.APP }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
   db:
@@ -179,7 +178,6 @@ jobs:
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
       APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
-      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
       BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
