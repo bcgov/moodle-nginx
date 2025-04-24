@@ -148,7 +148,7 @@ jobs:
 
       - name: Deploy/Enable Maintenance Messaging
         if: success()
-        run: bash ./openshift/scripts/deploy-maintenance-message.sh
+        run: bash ./openshift/scripts/deploy-maintenance-message-test.sh
         env:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
