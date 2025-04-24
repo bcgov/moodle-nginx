@@ -60,15 +60,9 @@ if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "500s"; then
   exit 1
 fi
 
-echo "DEBUG: About to call patch_route in deploy-maintenance-message.sh"
-echo "Script removed temporarily: FIX ME"
-
-# Enable Moodle maintenance mode
-manage_maintenance_mode "enable" "$MAINTENANCE_SERVICE_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
-
 # Redirect traffic to maintenance-message
-# if ! oc get route "$ROUTE_NAME" &> /dev/null; then
-#   echo "⚠️ Route $ROUTE_NAME does not exist. Skipping route patch."
-# else
-#   patch_route $ROUTE_NAME $BUILD_NAME
-# fi
+if ! oc get route "$ROUTE_NAME" &> /dev/null; then
+  echo "⚠️ Route $ROUTE_NAME does not exist. Skipping route patch."
+else
+  patch_route $ROUTE_NAME $BUILD_NAME
+fi
