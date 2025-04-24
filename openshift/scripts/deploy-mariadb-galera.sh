@@ -7,6 +7,17 @@ echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
 
+# Ensure we're using custom config for the database
+echo "Creating ConfigMap mariadb-galera-configuration..."
+create_or_update_configmap "mariadb-galera-configuration" "./config/mariadb/my.cnf"
+# oc create configmap mariadb-galera-configuration --from-file=./config/mariadb/my.cnf --dry-run=client -o yaml | oc apply -f -
+oc label configmap mariadb-galera-configuration app.kubernetes.io/managed-by=Helm --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-name=mariadb-galera --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace=950003-dev --overwrite
+
+# Create or update the ConfigMap from the prestop.sh script
+create_or_update_configmap "${DB_DEPLOYMENT_NAME}-prestop-script" "mariadb-prestop.sh=./openshift/scripts/mariadb-prestop.sh"
+
 # Check if the Helm deployment exists
 if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "$DB_DEPLOYMENT_NAME installation found"
@@ -109,23 +120,6 @@ else
     --wait \
     --timeout 20m0s
     #-f ./config/mariadb/galera-values.yaml
-fi
-
-# Ensure we're using custom config for the database
-echo "Creating ConfigMap mariadb-galera-configuration..."
-oc create configmap mariadb-galera-configuration --from-file=./config/mariadb/my.cnf --dry-run=client -o yaml | oc apply -f -
-
-oc label configmap mariadb-galera-configuration app.kubernetes.io/managed-by=Helm --overwrite
-oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-name=mariadb-galera --overwrite
-oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace=950003-dev --overwrite
-
-# Create or update the ConfigMap from the prestop.sh script
-if oc get configmap ${DB_DEPLOYMENT_NAME}-prestop-script &> /dev/null; then
-  echo "ConfigMap ${DB_DEPLOYMENT_NAME}-prestop-script already exists. Updating..."
-  oc create configmap ${DB_DEPLOYMENT_NAME}-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh -o yaml --dry-run=client | oc apply -f -
-else
-  echo "Creating ConfigMap ${DB_DEPLOYMENT_NAME}-prestop-script..."
-  oc create configmap ${DB_DEPLOYMENT_NAME}-prestop-script --from-file=./openshift/scripts/mariadb-prestop.sh
 fi
 
 # Function to check if a JSON path exists in the StatefulSet
