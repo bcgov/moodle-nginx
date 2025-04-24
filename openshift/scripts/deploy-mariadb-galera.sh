@@ -115,6 +115,10 @@ fi
 echo "Creating ConfigMap mariadb-galera-configuration..."
 oc create configmap mariadb-galera-configuration --from-file=./config/mariadb/my.cnf --dry-run=client -o yaml | oc apply -f -
 
+oc label configmap mariadb-galera-configuration app.kubernetes.io/managed-by=Helm --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-name=mariadb-galera --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace=950003-dev --overwrite
+
 # Create or update the ConfigMap from the prestop.sh script
 if oc get configmap ${DB_DEPLOYMENT_NAME}-prestop-script &> /dev/null; then
   echo "ConfigMap ${DB_DEPLOYMENT_NAME}-prestop-script already exists. Updating..."
