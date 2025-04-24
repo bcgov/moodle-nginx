@@ -25,7 +25,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory

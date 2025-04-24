@@ -12,9 +12,6 @@ on:
       APP:
         required: true
         type: string
-      BRANCH:
-        required: true
-        type: string
       APP_HOST_URL:
         required: true
         type: string
@@ -73,7 +70,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
 
       # Get Environment Variables from file
       - name: 📋 Setup Environment from File

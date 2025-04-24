@@ -20,7 +20,7 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
           sparse-checkout: |
             config/cron
             config/php
