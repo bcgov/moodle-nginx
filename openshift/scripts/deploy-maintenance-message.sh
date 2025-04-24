@@ -52,12 +52,6 @@ deploy_resource_from_template ./openshift/maintenance.yml \
   WEB_IMAGE=$WEB_IMAGE \
   BUILD_NAME=$BUILD_NAME
 
-# oc process -f ./openshift/maintenance.yml \
-#   -p DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
-#   -p WEB_IMAGE=$WEB_IMAGE \
-#   -p BUILD_NAME=$BUILD_NAME \
-#   | oc create -f -
-
 # Wait for the deployment/to scale to 1
 if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "500s"; then
   # If maintenance deployment failed
@@ -68,6 +62,7 @@ fi
 
 echo "DEBUG: About to call patch_route in deploy-maintenance-message.sh"
 echo "Script removed temporarily: FIX ME"
+
 # Redirect traffic to maintenance-message
 # if ! oc get route "$ROUTE_NAME" &> /dev/null; then
 #   echo "⚠️ Route $ROUTE_NAME does not exist. Skipping route patch."
