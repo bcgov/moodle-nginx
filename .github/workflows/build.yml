@@ -14,8 +14,7 @@ env:
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
-  # BRANCH: ${{ env.BRANCH }}
-  BRANCH: dev
+  BRANCH : ${{ github.ref_name }}
   INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
