@@ -146,16 +146,16 @@ jobs:
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
 
-      # - name: Deploy/Enable Maintenance Messaging
-      #   if: success()
-      #   run: bash ./openshift/scripts/deploy-maintenance-message.sh
-      #   env:
-      #     BUILD_NAME: "maintenance-message"
-      #     DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
-      #     WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
-      #     APP: ${{ inputs.APP }}
-      #     WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
-      #     APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
+      - name: Deploy/Enable Maintenance Messaging
+        if: success()
+        run: bash ./openshift/scripts/deploy-maintenance-message.sh
+        env:
+          BUILD_NAME: "maintenance-message"
+          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
+          APP: ${{ inputs.APP }}
+          WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
+          APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
 
       - name: Create ConfigMap (moodle-env)
         if: success()

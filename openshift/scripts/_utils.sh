@@ -925,6 +925,7 @@ wait_for_galera_sync() {
         echo "$pod_name is healthy and joined the cluster."
         break
       fi
+
       retries=$((retries+1))
       if [[ $retries -ge $max_retries ]]; then
         echo "❌ Timeout waiting for $pod_name to be healthy."

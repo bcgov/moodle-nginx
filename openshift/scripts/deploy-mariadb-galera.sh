@@ -184,25 +184,6 @@ oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRete
 
 sleep 10
 
-# echo "Scaling $DB_DEPLOYMENT_NAME to $DB_REPLICAS replicas..."
-# oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
-
-# echo "Waiting for 2 minutes..."
-# sleep 120
-
-# Wait for the deployment to scale up
-# ATTEMPTS=0
-# MAX_ATTEMPTS=60
-# while [[ $(oc get sts $DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne $DB_REPLICAS && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
-#   echo "Waiting for $DB_DEPLOYMENT_NAME to scale to $DB_REPLICAS..."
-#   sleep 10
-#   ATTEMPTS=$((ATTEMPTS + 1))
-# done
-# if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
-#   echo "Timeout waiting for $DB_DEPLOYMENT_NAME to scale to $DB_REPLICAS"
-#   exit 1
-# fi
-
 echo "Waiting for MariaDB Galera nodes to synchronize..."
 if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" "$OC_PROJECT" $DB_REPLICAS 60 30; then
   echo "❌ MariaDB Galera nodes failed to synchronize. Exiting..."
