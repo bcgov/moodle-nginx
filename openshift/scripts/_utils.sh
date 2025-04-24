@@ -292,7 +292,7 @@ enable_maintenance_mode() {
 
   # Redirect traffic
   # echo "Redirecting traffic: $route_name > $service_name"
-  patch_route2 $route_name $service_name
+  patch_route $route_name $service_name
 }
 
 # Function to disable maintenance mode
@@ -305,7 +305,7 @@ disable_maintenance_mode() {
 
   # Redirect traffic back to application
   # echo "Redirecting traffic to: service/$service_name..."
-  patch_route2 $route_name $service_name
+  patch_route $route_name $service_name
 
   sleep 60
 
@@ -388,7 +388,7 @@ manage_maintenance_mode() {
 }
 
 # Function to patch route and verify changes
-patch_route2() {
+patch_route() {
   local route_name=$1
   local target_service=$2
 
