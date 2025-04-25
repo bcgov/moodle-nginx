@@ -21,7 +21,7 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
 # Create a temporary values file
-cat <<EOF > values.yaml
+cat <<EOF > install.yaml
 global:
   redis:
     password: ""
@@ -92,7 +92,7 @@ fi
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
-  "values.yaml" \
+  "install.yaml" \
   "upgrade.yaml"
 if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."

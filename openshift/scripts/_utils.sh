@@ -822,15 +822,13 @@ create_or_update_helm_deployment() {
     fi
 
     if [[ `oc describe sts/$helm_name-node 2>&1` =~ "NotFound" ]]; then
+      echo "Helm chart ($helm_name) exists, but StatefulSet ($helm_name-node) was NOT FOUND."
+
       if [[ `oc describe deployment/$helm_name-backup-storage 2>&1` =~ "NotFound" ]]; then
         echo "Helm chart ($helm_name) exists, but Deployment ($helm_name-backup-storage) was NOT FOUND."
         echo "Helm upgrade failed. Exiting..."
         exit 1
       fi
-
-      echo "Helm chart ($helm_name) exists, but StatefulSet ($helm_name-node) was NOT FOUND."
-      echo "Helm upgrade failed. Exiting..."
-      exit 1
     fi
   else
     echo "Helm deployment ($helm_name) NOT FOUND. Beginning deployment..."
