@@ -794,15 +794,15 @@ create_or_update_configmap() {
 
 # Function to create or update a Helm deployment
 create_or_update_helm_deployment() {
-  local redis_name=$1
-  local redis_helm_chart=$2
+  local helm_name=$1
+  local helm_chart=$2
   local values_file=$3
   local upgrade_file=$4
 
-  if helm list -q | grep -q "^$redis_name$"; then
+  if helm list -q | grep -q "^$helm_name$"; then
     echo "Helm deployment found. Updating..."
     helm_repo_update_response=$(helm repo update 2>&1)
-    helm_upgrade_response=$(helm upgrade --reuse-values -f $upgrade_file $redis_name $redis_helm_chart 2>&1)
+    helm_upgrade_response=$(helm upgrade --reuse-values -f $upgrade_file $helm_name $helm_chart 2>&1)
 
     # Output the response for debugging purposes
     # echo "1. $helm_upgrade_response"
@@ -821,20 +821,27 @@ create_or_update_helm_deployment() {
       exit 1
     fi
 
-    if [[ `oc describe sts/$redis_name-node 2>&1` =~ "NotFound" ]]; then
-      echo "Helm chart ($redis_name) exists, but StatefulSet ($redis_name-node) was NOT FOUND."
+    if [[ `oc describe sts/$helm_name-node 2>&1` =~ "NotFound" ]]; then
+      if [[ `oc describe deployment/$helm_name-backup-storage 2>&1` =~ "NotFound" ]]; then
+        echo "Helm chart ($helm_name) exists, but Deployment ($helm_name-backup-storage) was NOT FOUND."
+        echo "Helm upgrade failed. Exiting..."
+        exit 1
+      fi
+
+      echo "Helm chart ($helm_name) exists, but StatefulSet ($helm_name-node) was NOT FOUND."
+      echo "Helm upgrade failed. Exiting..."
       exit 1
     fi
   else
-    echo "Helm deployment ($redis_name) NOT FOUND. Beginning deployment..."
-    helm install --values $values_file $redis_name $redis_helm_chart
+    echo "Helm deployment ($helm_name) NOT FOUND. Beginning deployment..."
+    helm install --values $values_file $helm_name $helm_chart
   fi
 
   # Clean up the temporary values file
   rm $values_file
   rm $upgrade_file
 
-  echo "Helm updates completed for $redis_name."
+  echo "Helm updates completed for $helm_name."
 }
 
 # Function to delete a resource if it exists
