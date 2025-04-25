@@ -18,20 +18,10 @@ if ! type wait_for &> /dev/null; then
 fi
 
 # maintenance html page
-if [[ `oc describe configmap maintenance-page 2>&1` =~ "NotFound" ]]; then
-  oc create configmap maintenance-page --from-file=./config/maintenance/index.html
-else
-  oc delete configmap maintenance-page
-  oc create configmap maintenance-page --from-file=./config/maintenance/index.html
-fi
+create_or_update_configmap maintenance-page ./config/maintenance/index.html
 
 # maintenance nginx config
-if [[ `oc describe configmap maintenance-config 2>&1` =~ "NotFound" ]]; then
-  oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
-else
-  oc delete configmap maintenance-config
-  oc create configmap maintenance-config --from-file=default.conf=./config/nginx/maintenance.conf
-fi
+create_or_update_configmap maintenance-config ./config/nginx/maintenance.conf
 
 if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
   echo "$DEPLOYMENT_SELECTOR NOT FOUND: Beginning deployment..."
