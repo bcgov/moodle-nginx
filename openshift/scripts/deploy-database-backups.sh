@@ -1,3 +1,6 @@
+# Source the utility script
+source ./openshift/scripts/_utils.sh
+
 helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
 
