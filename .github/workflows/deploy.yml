@@ -201,6 +201,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-redis-sentinel.sh
         env:
+          IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           REDIS_HELM_CHART: ${{ inputs.REDIS_HELM_CHART }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           REDIS_NAME: ${{ inputs.REDIS_NAME }}
