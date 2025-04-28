@@ -24,6 +24,12 @@ scale_deployment() {
   local max_surge="100%"
   local max_unavailable="33%"
 
+  # Check if the resource exists before attempting to scale
+  if ! oc get $type $deployment &> /dev/null && ! oc get $type/$deployment &> /dev/null; then
+    echo "⚠️ $type/$deployment does not exist. Skipping scale operation."
+    return 0
+  fi
+
   if [[ "$type" == "sts" || "$type" == "statefulset" ]]; then
     cmd="oc scale $type $deployment --replicas=$pod_count"
     # echo "Executing: $cmd"
@@ -353,7 +359,7 @@ manage_maintenance_mode() {
   local cron_pod=$(oc get pods -l app=$CRON_NAME --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
   if [[ -z "$cron_pod" ]]; then
     echo "❌ No running pods found for deployment/$CRON_NAME. Skipping..."
-    exit 0
+    return 0
   fi
   echo "Using pod: $cron_pod"
 
