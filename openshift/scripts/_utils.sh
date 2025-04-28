@@ -352,8 +352,8 @@ manage_maintenance_mode() {
   echo "Getting an active pod from deployment/$CRON_NAME..."
   local cron_pod=$(oc get pods -l app=$CRON_NAME --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
   if [[ -z "$cron_pod" ]]; then
-    echo "❌ No running pods found for deployment/$CRON_NAME. Exiting..."
-    exit 1
+    echo "❌ No running pods found for deployment/$CRON_NAME. Skipping..."
+    exit 0
   fi
   echo "Using pod: $cron_pod"
 
