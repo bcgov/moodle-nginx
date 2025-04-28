@@ -152,7 +152,7 @@ jobs:
         env:
           BUILD_NAME: "maintenance-message"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
-          WEB_IMAGE: $${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
+          WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
           APP: ${{ inputs.APP }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
