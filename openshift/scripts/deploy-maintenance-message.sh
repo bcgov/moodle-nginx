@@ -21,7 +21,7 @@ fi
 create_or_update_configmap maintenance-page ./config/maintenance/index.html
 
 # maintenance nginx config
-create_or_update_configmap maintenance-config ./config/nginx/maintenance.conf
+create_or_update_configmap maintenance-config ./config/nginx/maintenance.conf=/etc/nginx/conf.d/default.conf
 
 if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
   echo "$DEPLOYMENT_SELECTOR NOT FOUND: Beginning deployment..."
