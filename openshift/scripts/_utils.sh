@@ -575,6 +575,12 @@ wait_for() {
 
   echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
+  # Check if the resource exists before attempting to scale
+  if ! oc get $resource &> /dev/null; then
+    echo "⚠️ $resource does not exist. Skipping..."
+    return 0
+  fi
+
   if [[ $resource_type == "job" ]]; then
     handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
   else

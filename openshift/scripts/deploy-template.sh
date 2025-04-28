@@ -45,11 +45,6 @@ create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./c
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh"
 
-# Create cronjob to check pod logs for errors, and restart if necessary
-deploy_resource_from_template ./openshift/check-pod-logs.yml \
-  OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
-  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE
-
 # Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
   echo "$WEB_DEPLOYMENT_NAME NOT FOUND..."
@@ -136,10 +131,17 @@ sleep 10
 # Right-sizing cluster, according to environment
 bash ./openshift/scripts/right-sizing.sh
 
+# Create cronjob to check pod logs for errors, and restart if necessary
+deploy_resource_from_template ./openshift/check-pod-logs.yml \
+  OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
+  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE
+
+sleep 60
+
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
 
-sleep 20
+sleep 30
 
 echo "Directing traffic / route to Moodle..."
 patch_route "$APP-$WEB_DEPLOYMENT_NAME" "$WEB_DEPLOYMENT_NAME"
