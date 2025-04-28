@@ -99,7 +99,7 @@ else
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
     --set persistence.size=6Gi \
-    --set resources.requests.cpu=100m \
+    --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
     --set resources.limits.cpu=null \
     --set resources.limits.memory=null \
