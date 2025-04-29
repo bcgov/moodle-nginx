@@ -169,7 +169,7 @@
         }
       },
       "spec": {
-        "replicas": 3,
+        "replicas": 1,
         "selector": {
           "matchLabels": {
             "deployment": "${PHP_DEPLOYMENT_NAME}"
@@ -661,7 +661,7 @@
         "namespace": "${DEPLOY_NAMESPACE}"
       },
       "spec": {
-        "replicas": 3,
+        "replicas": 1,
         "selector": {
           "matchLabels": {
             "deployment": "${WEB_DEPLOYMENT_NAME}"

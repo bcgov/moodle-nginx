@@ -55,8 +55,8 @@ sentinel:
     size: 5Mi
   resources:
     requests:
-      cpu: 10m
-      memory: 32Mi
+      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
     limits:
       cpu: null
       memory: null
