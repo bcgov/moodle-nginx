@@ -73,7 +73,10 @@ deploy_resource_from_template ./openshift/template.json \
   "MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME"
 
 echo "Create and run migrate-build-files job..."
-oc process -f ./openshift/migrate-build-files.yml | oc create -f -
+deploy_resource_from_template ./openshift/migrate-build-files.yml \
+    IMAGE_REPO=$IMAGE_REPO \
+    BUILD_NAME=moodle \
+    BUILD_NAMESPACE=$BUILD_NAMESPACE
 if ! wait_for "job/migrate-build-files" "complete" "800s"; then
   echo "Failed to run migrate-build-files job. Exiting..."
   exit 1

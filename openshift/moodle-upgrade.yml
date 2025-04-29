@@ -97,7 +97,7 @@ parameters:
     value: "image-registry.openshift-image-registry.svc:5000/"
   - name: DB_HOST_SERVICE
     required: true
-    value: "mariadb-galera.e66ac2-dev.svc"
+    value: "mariadb-galera"
   - name: DEPLOY_NAMESPACE
     required: true
     value: "e66ac2-dev"

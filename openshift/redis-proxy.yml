@@ -22,7 +22,7 @@ objects:
         app: ${REDIS_PROXY_NAME}
         deployment: ${REDIS_PROXY_NAME}
     spec:
-      replicas: 3
+      replicas: 1
       selector:
         matchLabels:
           deployment: ${REDIS_PROXY_NAME}
