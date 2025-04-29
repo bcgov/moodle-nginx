@@ -703,6 +703,10 @@
                 ],
                 "volumeMounts": [
                   {
+                    "name": "filecache",
+                    "mountPath": "/mnt/ramdisk/filecache"
+                  },
+                  {
                     "mountPath": "${MOODLE_DATA_MOUNT_PATH}",
                     "name": "${APP_NAME}-data"
                   },
@@ -735,6 +739,13 @@
               }
             ],
             "volumes": [
+              {
+                "name": "filecache",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                }
+              },
               {
                 "name": "${APP_NAME}-data",
                 "persistentVolumeClaim": {
@@ -876,13 +887,13 @@
       "description": "Requested amount of memory for the PHP container.",
       "displayName": "PHP Request Memory",
       "name": "PHP_MEMORY_REQUEST",
-      "value": "70Mi"
+      "value": "128Mi"
     },
     {
       "description": "Requested CPU for the PHP container.",
       "displayName": "PHP Request CPU",
       "name": "PHP_CPU_REQUEST",
-      "value": "400m"
+      "value": "50m"
     },
     {
       "description": "Requested amount of memory for the PHP container.",

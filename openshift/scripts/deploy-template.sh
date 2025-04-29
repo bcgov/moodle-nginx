@@ -43,6 +43,7 @@ create_or_update_configmap "$WEB_DEPLOYMENT_NAME-nginx-root-config" "./config/ng
 create_or_update_configmap "$APP-config" "config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./config/php/php-fpm.conf"
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
+create_or_update_configmap "$CRON_NAME-php-config" "moodle-php.ini=./config/php/php.ini"
 create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh"
 
 # Annotate the web deployment to trigger a restart if it already exists
