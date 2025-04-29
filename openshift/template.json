@@ -682,7 +682,7 @@
             "terminationGracePeriodSeconds": 120,
             "containers": [
               {
-                "image": "${IMAGE_REPO}${WEB_IMAGE}:${DEPLOY_NAMESPACE}",
+                "image": "${IMAGE_REPO}${WEB_IMAGE}",
                 "name": "${WEB_DEPLOYMENT_NAME}",
                 "imagePullPolicy": "Always",
                 "lifecycle": {

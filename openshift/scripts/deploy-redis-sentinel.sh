@@ -16,7 +16,10 @@ create_or_update_configmap "$REDIS_STATS_NAME" \
 # Delete existing Service for Redis proxy if it exists
 delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
 
-# Create the ConfigMap for Redis proxy
+# Generate dynamic sentinel config for the current environment
+generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
+
+# Create the ConfigMap for Redis proxy with the generated config
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 

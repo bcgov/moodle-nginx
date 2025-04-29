@@ -1222,3 +1222,42 @@ get_pods_for_resource() {
   echo "$pods"
   return 0
 }
+
+generate_sentinel_config_json() {
+  local namespace="$1"
+  local redis_sts_name="$2"
+  local headless_service="$3"
+  local port="${4:-26379}"
+  local output_file="${5:-sentinel_tunnel.remote.config.json}"
+
+  # Get the number of replicas from the StatefulSet
+  local replicas
+  replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
+  if [[ -z "$replicas" ]]; then
+    echo "Could not determine replica count for $redis_sts_name in $namespace"
+    return 1
+  fi
+
+  # Build the sentinels list
+  local sentinels=()
+  for i in $(seq 0 $((replicas-1))); do
+    sentinels+=("\"${redis_sts_name}-$i.${headless_service}.${namespace}.svc.cluster.local:${port}\"")
+  done
+  local sentinels_joined
+  sentinels_joined=$(IFS=, ; echo "${sentinels[*]}")
+
+  # Output the JSON
+  cat <<EOF > "$output_file"
+{
+  "Sentinels_addresses_list":[
+    $sentinels_joined
+  ],
+	"Databases":[
+		{
+			"Name": "mymaster",
+			"Local_port": "6379"
+		}
+	]
+}
+EOF
+}
