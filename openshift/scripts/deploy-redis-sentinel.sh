@@ -25,6 +25,11 @@ cat <<EOF > install.yaml
 global:
   redis:
     password: ""
+persistence:
+  enabled: false
+  storageClass: "-"
+  storageClassName: "-"
+  size: 0Mi
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -50,9 +55,16 @@ EOF
 
 # Create minimal file for updates (or it will fail)
 cat <<EOF > upgrade.yaml
+persistence:
+  enabled: false
+  storageClass: "-"
+  storageClassName: "-"
+  size: 0Mi
 redis:
   persistence:
     enabled: false
+    storageClass: "-"
+    storageClassName: "-"
     size: 0Mi
   resources:
     requests:
@@ -69,6 +81,8 @@ sentinel:
   automateClusterRecovery: true
   persistence:
     enabled: false
+    storageClass: "-"
+    storageClassName: "-"
     size: 0Mi
   resources:
     requests:
