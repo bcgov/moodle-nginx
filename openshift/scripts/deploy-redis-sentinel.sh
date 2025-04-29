@@ -25,6 +25,13 @@ cat <<EOF > install.yaml
 global:
   redis:
     password: ""
+resources:
+  requests:
+    cpu: $REDIS_REQUEST_CPU
+    memory: $REDIS_REQUEST_MEMORY
+  limits:
+    cpu: null
+    memory: null
 persistence:
   enabled: false
   storageClass: "-"
@@ -46,6 +53,13 @@ sentinel:
   persistence:
     enabled: false
     size: 5Mi
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: null
+      memory: null
 auth:
   enabled: false
   sentinel: false
@@ -60,6 +74,13 @@ persistence:
   storageClass: "-"
   storageClassName: "-"
   size: 0Mi
+resources:
+  requests:
+    cpu: $REDIS_REQUEST_CPU
+    memory: $REDIS_REQUEST_MEMORY
+  limits:
+    cpu: null
+    memory: null
 redis:
   persistence:
     enabled: false
