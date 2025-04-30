@@ -94,6 +94,9 @@ redis:
     requests:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+    limits:
+      cpu: null
+      memory: null
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -112,6 +115,9 @@ sentinel:
     requests:
       memory: 32Mi
       cpu: 5m
+    limits:
+      cpu: null
+      memory: null
 EOF
 
 # Scale down the Redis deployment if it exists
