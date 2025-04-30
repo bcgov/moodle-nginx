@@ -8,6 +8,8 @@ ARG DEPLOY_ENVIRONMENT="remote"
 
 COPY --from=builder /go/bin/sentinel_tunnel /usr/local/bin/
 COPY ./config/redis/entrypoint /usr/local/bin
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    dos2unix
 RUN mkdir /etc/sentinel_tunnel && \
     chown www-data /etc/sentinel_tunnel && \
     chmod g+rwx /etc/sentinel_tunnel && \
@@ -16,11 +18,13 @@ RUN mkdir /etc/sentinel_tunnel && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Add this in OpenShift via ConfigMap or docker-redis.yml file (for remote / local)
+# Add this in OpenShift via ConfigMap (to make it dynamic)
 # COPY ./config/redis/sentinel_tunnel.${DEPLOY_ENVIRONMENT}.config.json /etc/sentinel_tunnel/config.json
 
 # Ensure entrypoint is executable
-RUN chmod +x /usr/local/bin/entrypoint
+RUN dos2unix /usr/local/bin/entrypoint
+RUN chmod 755 /usr/local/bin/entrypoint && \
+    chown www-data /usr/local/bin/entrypoint
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["/usr/local/bin/sentinel_tunnel", "/etc/sentinel_tunnel/config.json", "/dev/stdout"]
