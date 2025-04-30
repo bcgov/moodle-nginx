@@ -19,6 +19,9 @@ RUN mkdir /etc/sentinel_tunnel && \
 # Add this in OpenShift via ConfigMap or docker-redis.yml file (for remote / local)
 # COPY ./config/redis/sentinel_tunnel.${DEPLOY_ENVIRONMENT}.config.json /etc/sentinel_tunnel/config.json
 
+# Ensure entrypoint is executable
+RUN chmod +x /usr/local/bin/entrypoint
+
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["/usr/local/bin/sentinel_tunnel", "/etc/sentinel_tunnel/config.json", "/dev/stdout"]
 
