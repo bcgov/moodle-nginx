@@ -167,7 +167,10 @@ jobs:
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
     uses: ./.github/workflows/moodle.yml
     secrets: inherit
-
+    with:
+      MOODLE_BRANCH_VERSION: ${{ needs.checkEnv.outputs.MOODLE_BRANCH_VERSION }}
+      PSAELMSYNC_BRANCH_VERSION: ${{ needs.checkEnv.outputs.PSAELMSYNC_BRANCH_VERSION }}
+      HVP_BRANCH_VERSION: ${{ needs.checkEnv.outputs.HVP_BRANCH_VERSION }}
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml

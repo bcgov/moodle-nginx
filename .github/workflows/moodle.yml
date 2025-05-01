@@ -39,5 +39,5 @@ jobs:
           keys-case: upper
 
       - name: 🐸 Buld to JFrog
-        run: docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
+        run: docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg MOODLE_BRANCH_VERSION=${{ env.MOODLE_BRANCH_VERSION }} --build-arg PSAELMSYNC_BRANCH_VERSION=${{ env.PSAELMSYNC_BRANCH_VERSION }} --build-arg HVP_BRANCH_VERSION=${{ env.HVP_BRANCH_VERSION }} --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
 
