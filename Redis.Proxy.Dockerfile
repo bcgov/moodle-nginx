@@ -22,8 +22,8 @@ RUN mkdir /etc/sentinel_tunnel && \
 # COPY ./config/redis/sentinel_tunnel.${DEPLOY_ENVIRONMENT}.config.json /etc/sentinel_tunnel/config.json
 
 # Ensure entrypoint is executable
-RUN dos2unix /usr/local/bin/entrypoint
-RUN chmod 755 /usr/local/bin/entrypoint && \
+RUN dos2unix /usr/local/bin/entrypoint && \
+    chmod 755 /usr/local/bin/entrypoint && \
     chown www-data /usr/local/bin/entrypoint
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
