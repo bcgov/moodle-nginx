@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-22.04
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
+      MOODLE_BRANCH_VERSION: ${{ env.MOODLE_BRANCH_VERSION }}
+      PSAELMSYNC_BRANCH_VERSION: ${{ env.PSAELMSYNC_BRANCH_VERSION }}
+      HVP_BRANCH_VERSION: ${{ env.HVP_BRANCH_VERSION }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ env.IMAGE_REBUILD_TIME_LIMIT }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
