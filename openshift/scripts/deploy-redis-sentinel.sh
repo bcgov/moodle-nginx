@@ -32,9 +32,6 @@ resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
     memory: $REDIS_REQUEST_MEMORY
-  limits:
-    cpu: null
-    memory: null
 persistence:
   enabled: false
   storageClass: "-"
@@ -48,9 +45,6 @@ replicas:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: null
-      memory: null
 sentinel:
   enabled: true
   persistence:
@@ -60,9 +54,6 @@ sentinel:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: null
-      memory: null
 auth:
   enabled: false
   sentinel: false

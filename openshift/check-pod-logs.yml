@@ -6,6 +6,9 @@ parameters:
   - name: OPENSHIFT_SERVER
     description: The OpenShift server URL
     required: true
+  - name: DEPLOY_NAMESPACE
+    description: The namespace where the deployment is located
+    required: true
 objects:
   - apiVersion: batch/v1
     kind: CronJob

@@ -1261,3 +1261,40 @@ generate_sentinel_config_json() {
 }
 EOF
 }
+
+should_migrate_by_version() {
+  local src_version_file="/app/public/version.php"
+  local dest_version_file="/var/www/html/version.php"
+
+  if [[ ! -f "$src_version_file" ]]; then
+    echo "Source version file not found: $src_version_file"
+    echo "Migration cannot proceed."
+    return 1  # Fail if source is missing
+  fi
+  if [[ ! -f "$dest_version_file" ]]; then
+    echo "Destination version file not found: $dest_version_file"
+    return 0  # Proceed with migration if destination is missing
+  fi
+
+  # Extract version numbers using grep and sed
+  local src_version
+  local dest_version
+  src_version=$(grep -Eo '\$version\s*=\s*[0-9]+\.[0-9]+' "$src_version_file" | sed -E 's/[^0-9.]+//g')
+  dest_version=$(grep -Eo '\$version\s*=\s*[0-9]+\.[0-9]+' "$dest_version_file" | sed -E 's/[^0-9.]+//g')
+
+  if [[ -z "$src_version" || -z "$dest_version" ]]; then
+    echo "Could not extract version from one or both files."
+    return 0  # Proceed with migration if extraction fails
+  fi
+
+  echo "Source version: $src_version"
+  echo "Destination version: $dest_version"
+
+  if [[ "$src_version" == "$dest_version" ]]; then
+    echo "Versions match. Skipping migration."
+    return 1  # Skip migration
+  else
+    echo "Versions differ. Proceeding with migration."
+    return 0  # Proceed with migration
+  fi
+}

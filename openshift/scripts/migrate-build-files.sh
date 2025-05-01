@@ -9,8 +9,8 @@ fi
 # Source the utility script
 source /usr/local/bin/_utils.sh
 
-# Check if the script has been run within the time limit
-if check_timestamp; then
+# Check if the build is newer than the last migration
+if should_migrate_by_version; then
   echo "Proceeding..."
 else
   echo "Skipping file maintenance."
