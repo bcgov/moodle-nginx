@@ -68,13 +68,6 @@ persistence:
   storageClass: "-"
   storageClassName: "-"
   size: 0Mi
-resources:
-  requests:
-    cpu: $REDIS_REQUEST_CPU
-    memory: $REDIS_REQUEST_MEMORY
-  limits:
-    cpu: null
-    memory: null
 redis:
   persistence:
     enabled: false
@@ -92,6 +85,10 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
+  resources:
+    requests:
+      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
 sentinel:
   enabled: true
   externalAccess:
@@ -145,12 +142,11 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
+# Temporary fix: swap 'e66ac2' with '950003' in the image tag for redis-proxy to fix a permissions issue with 950003 version
+# DEPLOY_IMAGE_FIXED=$(echo "$REDIS_PROXY_IMAGE" | sed 's/:e66ac2-dev/:950003-dev/')
 # Deploy the Redis proxy
-# Temporary fix: swap 'e66ac2' with '950003' in the image tag for redis-proxy
-DEPLOY_IMAGE_FIXED=$(echo "$REDIS_PROXY_IMAGE" | sed 's/:e66ac2-dev/:950003-dev/')
-
 deploy_resource_from_template ./openshift/redis-proxy.yml \
-  DEPLOY_IMAGE=${DEPLOY_IMAGE_FIXED} \
+  DEPLOY_IMAGE=${REDIS_PROXY_IMAGE} \
   REDIS_PROXY_NAME=$REDIS_PROXY_NAME
 if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   echo "Failed to deploy Redis Proxy. Exiting..."

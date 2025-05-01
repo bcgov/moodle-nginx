@@ -45,7 +45,7 @@ objects:
           containers:
             - name:  ${REDIS_PROXY_NAME}
               image: ${DEPLOY_IMAGE}
-              imagePullPolicy: IfNotPresent
+              imagePullPolicy: Always
               volumeMounts:
                 - name: ${REDIS_PROXY_NAME}-config
                   mountPath: /etc/sentinel_tunnel/config.json
