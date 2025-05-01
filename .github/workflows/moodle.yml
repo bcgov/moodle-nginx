@@ -10,6 +10,16 @@ env:
 
 on:
   workflow_call:
+    inputs:
+      MOODLE_BRANCH_VERSION:
+        required: true
+        type: string
+      PSAELMSYNC_BRANCH_VERSION:
+        required: true
+        type: string
+      HVP_BRANCH_VERSION:
+        required: true
+        type: string
 
 jobs:
   build-images:
