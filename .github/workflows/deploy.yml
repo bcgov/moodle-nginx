@@ -230,7 +230,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
-          OPENSHIFT_SA_TOKEN_NAME: ${{ secrets.OPENSHIFT_SA_TOKEN_NAME }}
+          OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
           APP: ${{ inputs.APP }}
           IMAGE_REBUILD_TIME_LIMIT: ${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
           MOODLE_DEPLOYMENT_NAME: ${{ inputs.MOODLE_DEPLOYMENT_NAME }}
