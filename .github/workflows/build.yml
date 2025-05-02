@@ -206,7 +206,7 @@ jobs:
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}
-      OPENSHIFT_SA_TOKEN_NAME: ${{ secrets.OPENSHIFT_SA_TOKEN_NAME }}
+      OPENSHIFT_SA_TOKEN_NAME: ${{ needs.checkEnv.outputs.OPENSHIFT_SA_TOKEN_NAME }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       MOODLE_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.MOODLE_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
