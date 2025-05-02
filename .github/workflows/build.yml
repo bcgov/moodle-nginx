@@ -62,6 +62,7 @@ jobs:
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ env.OPENSHIFT_SERVER }}
+      OPENSHIFT_SA_TOKEN_NAME: ${{ secrets.OPENSHIFT_SA_TOKEN_NAME }}
       DEPLOY_NAMESPACE: ${{ github.ref_name }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
       BUILD_NAMESPACE: ${{ github.ref_name }}
@@ -205,6 +206,7 @@ jobs:
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}
+      OPENSHIFT_SA_TOKEN_NAME: ${{ secrets.OPENSHIFT_SA_TOKEN_NAME }}
       APP: ${{ needs.checkEnv.outputs.APP }}
       MOODLE_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.MOODLE_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}

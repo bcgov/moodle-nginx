@@ -138,6 +138,7 @@ bash ./openshift/scripts/right-sizing.sh
 # Create cronjob to check pod logs for errors, and restart if necessary
 deploy_resource_from_template ./openshift/check-pod-logs.yml \
   OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
+  OPENSHIFT_SA_TOKEN_NAME=$OPENSHIFT_SA_TOKEN_NAME \
   DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE
 
 sleep 60

@@ -18,6 +18,9 @@ on:
       OPENSHIFT_SERVER:
         required: true
         type: string
+      OPENSHIFT_SA_TOKEN_NAME:
+        required: true
+        type: string
       APP:
         required: true
         type: string
@@ -227,6 +230,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
+          OPENSHIFT_SA_TOKEN_NAME: ${{ secrets.OPENSHIFT_SA_TOKEN_NAME }}
           APP: ${{ inputs.APP }}
           IMAGE_REBUILD_TIME_LIMIT: ${{ inputs.IMAGE_REBUILD_TIME_LIMIT }}
           MOODLE_DEPLOYMENT_NAME: ${{ inputs.MOODLE_DEPLOYMENT_NAME }}

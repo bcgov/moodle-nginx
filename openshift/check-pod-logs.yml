@@ -6,6 +6,9 @@ parameters:
   - name: OPENSHIFT_SERVER
     description: The OpenShift server URL
     required: true
+  - name: OPENSHIFT_SA_TOKEN_NAME
+    description: The name of the secret containing the service account token
+    required: true
   - name: DEPLOY_NAMESPACE
     description: The namespace where the deployment is located
     required: true
@@ -35,7 +38,7 @@ objects:
                     - name: OPENSHIFT_TOKEN
                       valueFrom:
                         secretKeyRef:
-                          name: github-actions-sa-token-bcgk6
+                          name: ${OPENSHIFT_SA_TOKEN_NAME}
                           key: token
                     - name: OPENSHIFT_SERVER
                       value: ${OPENSHIFT_SERVER}

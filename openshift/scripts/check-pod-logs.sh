@@ -11,6 +11,15 @@ source /scripts/_utils.sh
 
 echo "Checking pod logs..."
 
+# Ensure kubeconfig is in a writeable location
+export KUBECONFIG=/tmp/kubeconfig
+
+# Set up oc to use the service account token
+if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
+  oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
+  oc project "$DEPLOY_NAMESPACE"
+fi
+
 # Define the list of deployments and their corresponding error messages and handling functions
 declare -A DEPLOYMENTS
 DEPLOYMENTS=(
