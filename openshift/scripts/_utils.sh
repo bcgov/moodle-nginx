@@ -1204,7 +1204,7 @@ get_pods_for_resource() {
   if [[ -n "$label_selector" ]]; then
     label_selector="app.kubernetes.io/name=$label_selector"
   else
-    # Fallback: extract the first key:value from the Go map and convert to key=value
+    # Extract the first key:value from the Go map and convert to key=value
     local raw_labels
     raw_labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
       -o jsonpath='{.spec.selector.matchLabels}' | sed -e 's/^map\[//' -e 's/\]$//')
