@@ -22,6 +22,12 @@ services:
         MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
+      - ./openshift/scripts/migrate-build-files.sh:/usr/local/bin/migrate-build-files.sh:delegated
+      - ./openshift/scripts/_utils.sh:/usr/local/bin/_utils.sh:delegated
+      - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
+      - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
+      - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
+      - ./openshift/scripts/includes/moodle_content_replacement_columns.csv:/usr/local/bin/includes/moodle_content_replacement_columns.csv
 
   db-0:
     extends:
@@ -30,12 +36,15 @@ services:
     container_name: db-0
     deploy:
       replicas: 1
+    ports:
+        - "3306:3306"
     volumes:
       - mysqldata-0:/var/lib/mysql:delegated
       - ./temp/db-backups:/tmp/db-backups:delegated
     networks:
-      static-network:
-        ipv4_address: 172.19.5.18
+      moodle-net:
+        ipv4_address: 172.99.0.18
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
   php-0:
     extends:
@@ -48,21 +57,34 @@ services:
       db-0:
         condition: service_healthy
     environment:
-      PHP_IMAGE: php:8.0-fpm
+      PHP_IMAGE: php:8.1-fpm
       DB_HOST: db-0
+      IMAGE_REPO: ""
     build:
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+        IMAGE_REPO: ""
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
       - ./temp/docker/moodledata-0:/var/www/moodledata:delegated
+      - ./config/php/php-fpm.local.conf:/usr/local/etc/php-fpm.d/zz-docker.conf:delegated
+      - ./config/moodle/local.config.php:/var/www/html/config.php:delegated
+      - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
+      - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
+      - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
+      - ./openshift/scripts/includes/moodle_content_replacement_columns.csv:/usr/local/bin/includes/moodle_content_replacement_columns.csv
+      - ./config/moodle/fix-mojibake.php:/var/www/html/fix-mojibake.php:delegated
+      - ./config/moodle/fix-mojibake-sql-file.php:/var/www/html/fix-mojibake-sql-file.php:delegated
+      - ./config/moodle/fix-mojibake-mbz-file.php:/var/www/html/fix-mojibake-mbz-file.php:delegated
+      - ./temp/db-backups:/tmp/db-backups:delegated
+      - ./temp/courses:/tmp/courses:delegated
     links:
       - db-0
       - redis-primary
       - redis-proxy
     networks:
-      static-network:
-        ipv4_address: 172.19.5.16
+      moodle-net:
+        ipv4_address: 172.99.0.16
 
   cron-0:
     extends:
@@ -72,6 +94,7 @@ services:
     environment:
       DB_DEPLOYMENT_NAME: db-0
       DB_HOST: db-0
+      IMAGE_REPO: ""
     deploy:
       replicas: 1
     depends_on:
@@ -81,17 +104,23 @@ services:
       context: .
       dockerfile: CRON.Dockerfile
       args:
+        IMAGE_REPO: ""
         DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
       - ./temp/docker/moodledata-0:/var/www/moodledata:delegated
+      - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
+      - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
+      - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
+      - ./openshift/scripts/includes/moodle_content_replacement_columns.csv:/usr/local/bin/includes/moodle_content_replacement_columns.csv
+      - ./temp/courses:/tmp/courses:delegated
     links:
       - db-0
       - redis
     networks:
-      static-network:
-        ipv4_address: 172.19.5.17
+      moodle-net:
+        ipv4_address: 172.99.0.17
 
   web-0:
     extends:
@@ -112,17 +141,17 @@ services:
     links:
       - php-0
     networks:
-      static-network:
-        ipv4_address: 172.19.5.13
+      moodle-net:
+        ipv4_address: 172.99.0.13
 
 volumes:
     mysqldata-0: {}
 
 networks:
-  static-network:
+  moodle-net:
     ipam:
       driver: default
       config:
-        - subnet: 172.19.0.0/16
-          ip_range: 172.19.5.0/24
+        - subnet: 172.99.0.0/16
+          ip_range: 172.99.0.0/24
 

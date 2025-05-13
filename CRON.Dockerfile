@@ -7,10 +7,10 @@ ARG PHP_INI_ENVIRONMENT=production
 # Moodle App directory
 ENV MOODLE_APP_DIR=/var/www/html
 ENV ETC_DIR=/usr/local/etc
-ENV PHP_INI_DIR $ETC_DIR/php
+ENV PHP_INI_DIR=$ETC_DIR/php
 # ENV PHP_INI_FILE=$PHP_INI_DIR/php.ini
 ENV PHP_INI_FILE_BASE=$PHP_INI_DIR/conf.d/php.ini
-ENV PHP_INI_FILE $ETC_DIR/php/conf.d/moodle-php.ini
+ENV PHP_INI_FILE=$ETC_DIR/php/conf.d/moodle-php.ini
 
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-php-extensions && \

@@ -57,6 +57,7 @@ jobs:
       APP: ${{ env.APP }}
       MOODLE_BRANCH_VERSION: ${{ env.MOODLE_BRANCH_VERSION }}
       PSAELMSYNC_BRANCH_VERSION: ${{ env.PSAELMSYNC_BRANCH_VERSION }}
+      REPORT_ALL_BACKUPS_BRANCH_VERSION: ${{ env.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
       HVP_BRANCH_VERSION: ${{ env.HVP_BRANCH_VERSION }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ env.IMAGE_REBUILD_TIME_LIMIT }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
@@ -175,6 +176,7 @@ jobs:
       MOODLE_BRANCH_VERSION: ${{ needs.checkEnv.outputs.MOODLE_BRANCH_VERSION }}
       PSAELMSYNC_BRANCH_VERSION: ${{ needs.checkEnv.outputs.PSAELMSYNC_BRANCH_VERSION }}
       HVP_BRANCH_VERSION: ${{ needs.checkEnv.outputs.HVP_BRANCH_VERSION }}
+      REPORT_ALL_BACKUPS_BRANCH_VERSION: ${{ needs.checkEnv.outputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml

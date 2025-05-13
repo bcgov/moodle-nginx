@@ -5,7 +5,6 @@ echo ""
 
 # Exclude directories that may cause permission issues
 # EXCLUDES="--exclude=".*" --exclude='*/.*' --exclude=/etc/ssl/private --exclude=/proc/tty/driver --exclude=/root --exclude=/var/cache/apt/archives/partial --exclude=/var/cache/ldconfig --exclude=.git"
-
 # Use rsync to copy files, excluding hidden files and symbolic links
 # rsync -rcn --out-format="%n" --existing $EXCLUDES $src_dir/ $dest_dir/ | sort | uniq
 
@@ -72,7 +71,7 @@ echo ""
 if [ -n "$incorrect_permissions_files" ]; then
   echo "The following files in the moodle directory do not have the correct permissions:"
   echo "$incorrect_permissions_files"
-  # exit 1 # Don't exit here
+  exit 0 # Don't exit here
 else
   echo "All files in the destination directory have the correct permissions."
 fi
@@ -80,3 +79,4 @@ fi
 echo ""
 
 echo "File copy and verification complete."
+exit 0

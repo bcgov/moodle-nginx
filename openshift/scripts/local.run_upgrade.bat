@@ -6,36 +6,26 @@
 :: It will run any database upgrades
 :: It will also run cron and purge caches
 
+set IMAGE_REPO=
+
 set html-dir="/var/www/html"
 set moodle-cli-path=%html-dir%/admin/cli
-set moodle-service-name="moodle"
-set php-container-name="moodle-nginx-php-1"
+set moodle-service-name="php-0"
+set php-container-name="php-0"
 
 set purge-plugins-command="php %moodle-cli-path%/uninstall_plugins.php --purge-missing --run"
 set maintenance-enable-command="php %moodle-cli-path%/maintenance.php --enable"
 set maintenance-disable-command="php %moodle-cli-path%/maintenance.php --disable"
 set upgrade-command="php %moodle-cli-path%/upgrade.php --non-interactive"
 set cron-command="php %moodle-cli-path%/cron.php"
+set purge-cache-command="php %moodle-cli-path%/admin/cli/purge_caches.php"
 
 :: Build / upgrade moodle
 :: PHP pod
 echo "Enable maintenance mode..."
 docker exec -it %php-container-name% sh -c %maintenance-enable-command%
 
-SLEEP 10
-
-:: Moodle pod (will automatically copy files on launch)
-echo "Starting moodle pod... copying files from build to deploy location"
-docker-compose up -d %moodle-service-name%
-
-SLEEP 10
-
-:loop
-  timeout /t 1 >nul
-  docker-compose ps --all --status=exited | find /i "moodle-nginx-moodle"
-if errorlevel 1 goto :loop
-
-echo "Moodle file deployment complete."
+SLEEP 5
 
 :: PHP Pod
 echo "Purge any missing plugins..."
@@ -45,7 +35,7 @@ echo "Running Moodle upgrades..."
 docker exec -it %php-container-name% sh -c %upgrade-command%
 
 echo "Purge caches..."
-docker exec -it %php-container-name% sh -c %purge-command%
+docker exec -it %php-container-name% sh -c %purge-cache-command%
 
 echo "Disable maintenance mode..."
 docker exec -it %php-container-name% sh -c %maintenance-disable-command%

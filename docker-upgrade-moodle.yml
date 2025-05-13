@@ -73,11 +73,11 @@ services:
       db-1:
         condition: service_healthy
     environment:
-      PHP_IMAGE: php:8.0-fpm
+      PHP_IMAGE: php:8.1-fpm
       DB_HOST: db-1
     build:
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.0-fpm}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
     volumes:
       - ./temp/docker/build-1/var/www/html:/var/www/html:delegated
       - ./temp/docker/moodledata-1:/var/www/moodledata:delegated
@@ -105,8 +105,8 @@ services:
       - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
       - ./temp/docker/moodledata-2:/var/www/moodledata:delegated
     networks:
-      static-network:
-        ipv4_address: 172.19.5.6
+      moodle-net:
+        ipv4_address: 172.99.8.6
 
   cron-1:
     extends:
@@ -185,8 +185,8 @@ services:
         - ./temp/docker/build-2/var/www/html:/var/www/html:delegated
         - ./temp/docker/moodledata-2:/var/www/moodledata:delegated
     networks:
-      static-network:
-        ipv4_address: 172.19.5.5
+      moodle-net:
+        ipv4_address: 172.99.8.5
 
 volumes:
     mysqldata-1: {}

@@ -24,8 +24,8 @@ services:
     expose:
       - "6450"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.3
+      moodle-net:
+        ipv4_address: 172.99.0.3
     env_file:
       - example.env
     environment:
@@ -55,8 +55,8 @@ services:
     expose:
       - "6379"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.10
+      moodle-net:
+        ipv4_address: 172.99.0.10
     command:
       [
         "redis-server",
@@ -65,7 +65,7 @@ services:
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.5.10",
+        "172.99.0.10",
         # "--requirepass ",
         # "local-example",
         "--replica-announce-port",
@@ -86,8 +86,8 @@ services:
     expose:
       - "6380"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.14
+      moodle-net:
+        ipv4_address: 172.99.0.14
     volumes:
       - ./temp/data/secondary1:/data
     command:
@@ -96,12 +96,12 @@ services:
         "--appendonly",
         "yes",
         "--replicaof",
-        "172.19.5.10",
+        "172.99.0.10",
         "6379",
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.5.14",
+        "172.99.0.14",
         "--replica-announce-port",
         "6380",
         "--protected-mode",
@@ -119,8 +119,8 @@ services:
     expose:
       - "6381"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.15
+      moodle-net:
+        ipv4_address: 172.99.0.15
     volumes:
       - ./data/secondary2:/data
     command:
@@ -129,12 +129,12 @@ services:
         "--appendonly",
         "yes",
         "--replicaof",
-        "172.19.5.10",
+        "172.99.0.10",
         "6379",
         "--repl-diskless-load",
         "on-empty-db",
         "--replica-announce-ip",
-        "172.19.5.15",
+        "172.99.0.15",
         "--replica-announce-port",
         "6381",
         "--protected-mode",
@@ -151,15 +151,15 @@ services:
     expose:
       - "26379"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.9
+      moodle-net:
+        ipv4_address: 172.99.0.9
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
     command: >
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.5.9" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.99.0.9" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26379" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
@@ -175,8 +175,8 @@ services:
     ports:
       - "26380:26382"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.7
+      moodle-net:
+        ipv4_address: 172.99.0.7
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
@@ -184,7 +184,7 @@ services:
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.5.7" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.99.0.7" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26380" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
         echo "sentinel failover-timeout mymaster 5000" >> /etc/sentinel.conf &&
@@ -199,8 +199,8 @@ services:
     ports:
       - "26381:26379"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.12
+      moodle-net:
+        ipv4_address: 172.99.0.12
     environment:
       - SENTINEL_DOWN_AFTER=5000
       - SENTINEL_FAILOVER=5000
@@ -208,7 +208,7 @@ services:
       sh -c 'echo "bind 0.0.0.0" > /etc/sentinel.conf &&
         echo "sentinel monitor mymaster $${REDIS_HOST_IP} 6379 2" >> /etc/sentinel.conf &&
         echo "sentinel resolve-hostnames yes" >> /etc/sentinel.conf &&
-        echo "sentinel announce-ip 172.19.5.12" >> /etc/sentinel.conf &&
+        echo "sentinel announce-ip 172.99.0.12" >> /etc/sentinel.conf &&
         echo "sentinel announce-port 26381" >> /etc/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /etc/sentinel.conf &&
         echo "sentinel failover-timeout mymaster 5000" >> /etc/sentinel.conf &&
@@ -221,5 +221,5 @@ services:
     ports:
       - "5540:5540"
     networks:
-      static-network:
-        ipv4_address: 172.19.5.11
+      moodle-net:
+        ipv4_address: 172.99.0.11

@@ -1,0 +1,28 @@
+Garbled Output,Original Intended Character,Description,Latin1 Hex,UTF-8 Hex
+â€œ,“,Left double quotation mark,0x93,0xE2 80 9C
+â€,”,Right double quotation mark,0x94,0xE2 80 9D
+â€˜,‘,Left single quotation mark,0x91,0xE2 80 98
+â€™,’,Right single quotation mark / apostrophe,0x92,0xE2 80 99
+â€“,–,En dash,0x96,0xE2 80 93
+â€”,—,Em dash,0x97,0xE2 80 94
+â€¦,…,Ellipsis,0x85,0xE2 80 A6
+â€,†,Dagger,0x86,0xE2 80 A0
+â€¡,‡,Double dagger,0x87,0xE2 80 A1
+â„¢,™,Trademark symbol,0x99,0xE2 84 A2
+Â,,Non-breaking space,0xA0,0xC2 A0
+Â©,©,Copyright symbol,0xA9,0xC2 A9
+Â®,®,Registered symbol,0xAE,0xC2 AE
+Â«,«,Left guillemet,0xAB,0xC2 AB
+Â»,»,Right guillemet,0xBB,0xC2 BB
+Â±,±,Plus-minus symbol,0xB1,0xC2 B1
+Â£,£,British Pound,0xA3,0xC2 A3
+Â¢,¢,Cent sign,0xA2,0xC2 A2
+Â¥,¥,Yen sign,0xA5,0xC2 A5
+Â§,§,Section sign,0xA7,0xC2 A7
+Â¨,¨,Diaeresis,0xA8,0xC2 A8
+Âª,ª,Feminine ordinal,0xAA,0xC2 AA
+Âº,º,Masculine ordinal,0xBA,0xC2 BA
+Âœ,œ,Latin small ligature oe (French),0x9C,0xC5 93
+Â¼,¼,One quarter,0xBC,0xC2 BC
+Â½,½,One half,0xBD,0xC2 BD
+Â¾,¾,Three quarters,0xBE,0xC2 BE

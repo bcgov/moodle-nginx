@@ -1,0 +1,11 @@
+Table,Column
+course,summary
+course,fullname
+course,shortname
+course,summaryformat
+course_sections,summary
+page,content
+label,intro
+forum_posts,message
+assign,intro
+book_chapters,content

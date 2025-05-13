@@ -2,13 +2,13 @@ ARG DOCKER_FROM_IMAGE=php:8.1-fpm
 FROM ${DOCKER_FROM_IMAGE}
 
 # Moodle Configs
-ENV MOODLE_APP_DIR /app/public
+ENV MOODLE_APP_DIR=/app/public
 ARG DEPLOY_ENVIRONMENT="remote"
 
 # PHP Configs
 ENV ETC_DIR=/usr/local/etc
-ENV PHP_INI_DIR $ETC_DIR/php
-ENV PHP_INI_FILE $ETC_DIR/php/conf.d/moodle-php.ini
+ENV PHP_INI_DIR=$ETC_DIR/php
+ENV PHP_INI_FILE=$ETC_DIR/php/conf.d/moodle-php.ini
 ARG PHP_INI_ENVIRONMENT=production
 ENV GIT_SSL_NO_VERIFY=1
 
@@ -24,6 +24,9 @@ ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
 ARG HVP_BRANCH_VERSION=stable
 ENV HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
 ENV HVP_DIR=$MOODLE_APP_DIR/mod/hvp
+ARG REPORT_ALL_BACKUPS_BRANCH_VERSION=MOODLE_400_STABLE
+ENV REPORT_ALL_BACKUPS_URL="https://github.com/catalyst/moodle-report_allbackups"
+ENV REPORT_ALL_BACKUPS_DIR=$MOODLE_APP_DIR/report/allbackups
 
 # ARG CUSTOMCERT_BRANCH_VERSION=MOODLE_401_STABLE
 # ENV CUSTOMCERT_URL="https://github.com/mdjnelson/moodle-mod_customcert"
@@ -109,7 +112,8 @@ COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
-    git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR
+    git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
   # git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR && \
   # git clone --recurse-submodules --jobs 8 --branch $DATAFLOWS_BRANCH_VERSION --single-branch $DATAFLOWS_URL $DATAFLOWS_DIR && \
   # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \

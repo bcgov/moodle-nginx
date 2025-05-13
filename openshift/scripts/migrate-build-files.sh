@@ -9,16 +9,33 @@ fi
 # Source the utility script
 source /usr/local/bin/_utils.sh
 
-# Check if the build is newer than the last migration
-if should_migrate_by_version; then
-  echo "Proceeding..."
-else
-  echo "Skipping file maintenance."
-  exit 0
-fi
-
 src_dir='/app/public'
 dest_dir='/var/www/html'
+
+# Check if the build is newer than the last migration
+if should_migrate_by_version; then
+  echo "Source and destination versions do not match. Proceeding..."
+else
+  # Compare file counts in src_dir and dest_dir
+  echo "Source and destination versions match. Checking file counts..."
+  src_count=$(find "$src_dir" -type f | wc -l)
+  dest_count=$(find "$dest_dir" -type f | wc -l)
+  echo "Source file count: $src_count"
+  echo "Destination file count: $dest_count"
+  if [ "$src_count" -ne "$dest_count" ]; then
+    echo "File counts not not matcch. Checking if files are missing..."
+    count_difference=$((src_count - dest_count))
+    if [ $count_difference -gt 2 ]; then
+      echo "Source has $count_difference more files than destination. Proceeding with migration..."
+    else
+      echo "Destination has $((count_difference * -1)) more files than source. Likely just hidden files and config. Skipping migration."
+      exit 0
+    fi
+  else
+    echo "Skipping file maintenance."
+    exit 0
+  fi
+fi
 
 echo "Replacing Moodle index with maintenance page..."
 cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php

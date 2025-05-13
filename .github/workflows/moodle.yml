@@ -20,6 +20,9 @@ on:
       HVP_BRANCH_VERSION:
         required: true
         type: string
+      REPORT_ALL_BACKUPS_BRANCH_VERSION:
+        required: true
+        type: string
 
 jobs:
   build-images:

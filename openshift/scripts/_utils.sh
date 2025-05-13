@@ -961,17 +961,16 @@ check_galera_pod_ready() {
   local pod=$1
   local namespace=$2
   local expected_size=${3:-5}
-  local root_pw="${DB_PASSWORD:-root}"
 
   # Check if MySQL is ready
-  if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u root -p"$root_pw" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
+  if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u "$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
     echo "$pod: MySQL is not ready yet."
     return 1
   fi
 
   local status_output
   status_output=$(oc exec -n "$namespace" "$pod" -- \
-    mysql -u root -p"$root_pw" -e "SHOW STATUS LIKE 'wsrep_%';" 2>/dev/null)
+    mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" -e "SHOW STATUS LIKE 'wsrep_%';" 2>/dev/null)
 
   local cluster_status
   cluster_status=$(echo "$status_output" | awk '/wsrep_cluster_status/ {print $2}')
@@ -1197,16 +1196,31 @@ get_pods_for_resource() {
     return 1
   fi
 
-  local label_selector=""
-  for key in $(echo "$labels" | jq -r 'keys[]'); do
-    local value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
-    if [[ -n "$label_selector" ]]; then
-      label_selector+=","
-    fi
-    label_selector+="$key=$value"
-  done
+  # Extract a single label (preferably app.kubernetes.io/name) for selector
+  local label_selector
+  label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
+    -o jsonpath="{.spec.selector.matchLabels['app.kubernetes.io/name']}")
 
-  # echo "Using label selector: $label_selector" >&2
+  if [[ -n "$label_selector" ]]; then
+    label_selector="app.kubernetes.io/name=$label_selector"
+  else
+    # Fallback: extract the first key:value from the Go map and convert to key=value
+    local raw_labels
+    raw_labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
+      -o jsonpath='{.spec.selector.matchLabels}' | sed -e 's/^map\[//' -e 's/\]$//')
+    local first_pair
+    first_pair=$(echo "$raw_labels" | awk '{print $1}')
+    local key=${first_pair%%:*}
+    local value=${first_pair#*:}
+    if [[ -n "$key" && -n "$value" ]]; then
+      label_selector="$key=$value"
+    else
+      echo "❌ Could not extract a valid label selector for resource: $resource_name" >&2
+      return 1
+    fi
+  fi
+
+  echo "Using label selector: $label_selector" >&2
 
   local pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
 
@@ -1291,10 +1305,100 @@ should_migrate_by_version() {
   echo "Destination version: $dest_version"
 
   if [[ "$src_version" == "$dest_version" ]]; then
-    echo "Versions match. Skipping migration."
     return 1  # Skip migration
   else
-    echo "Versions differ. Proceeding with migration."
     return 0  # Proceed with migration
+  fi
+}
+
+find_db_characters() {
+  local table="$1"
+  local column="$2"
+  local csv_file="/usr/local/bin/includes/mojibake_replacements_2.csv"
+
+  # Use get_pods_for_resource to get the first MariaDB pod
+  local db_pods db_pod
+  db_pods=$(get_pods_for_resource "mariadb-galera" "$DEPLOY_NAMESPACE")
+  db_pod=$(echo "$db_pods" | awk '{print $1}')
+  if [[ -z "$db_pod" ]]; then
+    echo "Could not find a mariadb-galera pod."
+    return 1
+  fi
+
+  # Build regex from CSV
+  local regex
+  regex=$(read_csv_file "$csv_file" | awk '{printf "%s|", $1}' | sed 's/|$//')
+
+  # Get the database credentials from the pod
+  MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_USER)
+  MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_PASSWORD_FILE)
+  MARIADB_PASSWORD=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- cat "$MARIADB_PASSWORD_FILE")
+  MARIADB_DATABASE=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_DATABASE)
+
+  local sql="USE \`$MARIADB_DATABASE\`; SELECT \`id\`, \`${column}\` FROM \`${table}\` WHERE \`${column}\` REGEXP '${regex}';"
+  oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- \
+    mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$sql"
+}
+
+replace_db_characters_from_csv() {
+  local table="$1"
+  local column="$2"
+  local csv_file="/usr/local/bin/includes/mojibake_replacements_2.csv"
+
+  # Use get_pods_for_resource to get the first MariaDB pod
+  local db_pods db_pod
+  db_pods=$(get_pods_for_resource "mariadb-galera" "$DEPLOY_NAMESPACE")
+  db_pod=$(echo "$db_pods" | awk '{print $1}')
+  if [[ -z "$db_pod" ]]; then
+    echo "Could not find a mariadb-galera pod."
+    return 1
+  fi
+
+  read_csv_file "$csv_file" | while IFS=$'\t' read -r garbled intended; do
+    # Escape single quotes for SQL
+    local garbled_esc intended_esc
+    garbled_esc=$(printf "%s" "$garbled" | sed "s/'/''/g")
+    intended_esc=$(printf "%s" "$intended" | sed "s/'/''/g")
+    local sql="USE \`$MARIADB_DATABASE\`; UPDATE \`${table}\` SET \`${column}\` = REPLACE(\`${column}\`, '${garbled_esc}', '${intended_esc}');"
+    echo "Replacing '$garbled' with '$intended' in $table.$column"
+    oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- \
+      mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" "$MARIADB_DATABASE" -e "$sql"
+  done
+}
+
+read_csv_file() {
+  local csv_file="$1"
+  local col_1="${2:-1}"
+  local col_2="${3:-2}"
+
+  # Skip header, output tab-separated pairs: garbled<TAB>intended
+  awk -F',' -v gc="$col_1" -v ic="$col_2" 'NR>1 {print $gc "\t" $ic}' "$csv_file"
+}
+
+process_moodle_content_columns() {
+  local action_func="$1"  # e.g., find_db_characters or replace_db_characters_from_csv
+  local columns_csv="/usr/local/bin/includes/moodle_content_replacement_columns.csv"
+
+  # Skip header, then for each line call the action function
+  tail -n +2 "$columns_csv" | while IFS=',' read -r table column; do
+    # Trim whitespace and carriage returns
+    table=$(echo "$table" | tr -d '\r' | xargs)
+    column=$(echo "$column" | tr -d '\r' | xargs)
+    if [[ -n "$table" && -n "$column" ]]; then
+      echo "Processing $table.$column ..."
+      "$action_func" "$table" "$column"
+    fi
+  done
+}
+
+moodle_content_cleanup() {
+  local mode="$1" # "find" or "replace"
+  if [[ "$mode" == "find" ]]; then
+    process_moodle_content_columns find_db_characters
+  elif [[ "$mode" == "replace" ]]; then
+    process_moodle_content_columns replace_db_characters_from_csv
+  else
+    echo "Unknown mode: $mode"
+    return 1
   fi
 }
