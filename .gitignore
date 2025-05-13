@@ -1,6 +1,5 @@
 app
 temp
-temp/docker/*
 data
 README.Moodle.DevOps.md
 .env*

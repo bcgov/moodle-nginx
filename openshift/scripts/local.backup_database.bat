@@ -14,7 +14,7 @@ set db_port=3306
 
 :: Get current date-time stamp in format yyyy-mm-dd_hh-mm-ss
 for /f %%a in ('wmic os get localdatetime ^| find "."') do set dt=%%a
-set datetime=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%_%dt:~8,2%-%dt:~10,2%
+set datetime=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%_%dt:~8,2%%dt:~10,2%
 
 set sql_file_name=local-mysql-%db_name%_%datetime%.sql.gz
 set sql_file_path=%local_backup_file_path%/%sql_file_name%

@@ -28,7 +28,7 @@ if [[ `oc describe $DEPLOYMENT_SELECTOR 2>&1` =~ "NotFound" ]]; then
 else
   echo "$DEPLOYMENT_SELECTOR Installation found...Scaling to 0..."
   oc scale $DEPLOYMENT_SELECTOR --replicas=0
-  wait_for "$DEPLOYMENT_SELECTOR" "ready" "90s" "down"
+  wait_for "$DEPLOYMENT_SELECTOR" "ready" "200s" "down"
 
   echo "Recreating $BUILD_NAME..."
   oc delete $DEPLOYMENT_SELECTOR -n $DEPLOY_NAMESPACE
@@ -43,7 +43,7 @@ deploy_resource_from_template ./openshift/maintenance.yml \
   BUILD_NAME=$BUILD_NAME
 
 # Wait for the deployment/to scale to 1
-if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "500s"; then
+if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "1500s"; then
   # If maintenance deployment failed
   # exit the deployment before changing the route
   echo "$DEPLOYMENT_SELECTOR failed. Exiting..."
