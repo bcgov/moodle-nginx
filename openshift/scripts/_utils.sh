@@ -1205,7 +1205,7 @@ get_pods_for_resource() {
     label_selector="app.kubernetes.io/name=$label_selector"
   else
     # After extracting label_selector, clean it up:
-    label_selector=$(echo "$label_selector" | tr -d '{}"' | sed 's/[:=]/=/g')
+    label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
   fi
 
   echo "Using label selector: $label_selector" >&2
