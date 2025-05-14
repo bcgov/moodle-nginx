@@ -972,9 +972,11 @@ check_galera_pod_ready() {
     return 1
   fi
 
+  get_mariadb_env_vars "$pod"
+
   local status_output
   status_output=$(oc exec -n "$namespace" "$pod" -- \
-    mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" -e "SHOW STATUS LIKE 'wsrep_%';" 2>/dev/null)
+    mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" -e "SHOW STATUS LIKE 'wsrep_%';" 2>/dev/null)
 
   local cluster_status
   cluster_status=$(echo "$status_output" | awk '/wsrep_cluster_status/ {print $2}')
@@ -1303,6 +1305,19 @@ should_migrate_by_version() {
   fi
 }
 
+get_mariadb_env_vars() {
+  local pod_name="$1"
+
+  # Get the environment variables from the pod
+  MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_USER)
+  MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_PASSWORD_FILE)
+  MARIADB_PASSWORD=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- cat "$MARIADB_PASSWORD_FILE")
+  MARIADB_DATABASE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_DATABASE)
+
+  return 0
+}
+
+
 find_db_characters() {
   local table="$1"
   local column="$2"
@@ -1322,10 +1337,7 @@ find_db_characters() {
   regex=$(read_csv_file "$csv_file" | awk '{printf "%s|", $1}' | sed 's/|$//')
 
   # Get the database credentials from the pod
-  MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_USER)
-  MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_PASSWORD_FILE)
-  MARIADB_PASSWORD=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- cat "$MARIADB_PASSWORD_FILE")
-  MARIADB_DATABASE=$(oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- printenv MARIADB_DATABASE)
+  get_mariadb_env_vars "$pod_name"
 
   local sql="USE \`$MARIADB_DATABASE\`; SELECT \`id\`, \`${column}\` FROM \`${table}\` WHERE \`${column}\` REGEXP '${regex}';"
   oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- \
@@ -1346,6 +1358,8 @@ replace_db_characters_from_csv() {
     return 1
   fi
 
+  get_mariadb_env_vars "$db_pod"
+
   read_csv_file "$csv_file" | while IFS=$'\t' read -r garbled intended; do
     # Escape single quotes for SQL
     local garbled_esc intended_esc
@@ -1354,7 +1368,7 @@ replace_db_characters_from_csv() {
     local sql="USE \`$MARIADB_DATABASE\`; UPDATE \`${table}\` SET \`${column}\` = REPLACE(\`${column}\`, '${garbled_esc}', '${intended_esc}');"
     echo "Replacing '$garbled' with '$intended' in $table.$column"
     oc exec -n "$DEPLOY_NAMESPACE" "$db_pod" -- \
-      mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" "$MARIADB_DATABASE" -e "$sql"
+      mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$sql"
   done
 }
 
