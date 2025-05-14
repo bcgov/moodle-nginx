@@ -61,7 +61,7 @@ objects:
                      name: moodle-secrets
                      key: database-password
                - name: FORCE_MIGRATE
-                 value: "${FORCE_MIGRATE:-false}"
+                 value: "${FORCE_MIGRATE}"
              command:
                - bash
                - "-c"

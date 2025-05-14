@@ -23,12 +23,12 @@ else
   echo "Source file count: $src_count"
   echo "Destination file count: $dest_count"
   if [ "$src_count" -ne "$dest_count" ]; then
-    echo "File counts not not matcch. Checking if files are missing..."
+    echo "File counts not not match. Checking if files are missing..."
     count_difference=$((src_count - dest_count))
     if [ $count_difference -gt 2 ]; then
       echo "Source has $count_difference more files than destination. Proceeding with migration..."
     else
-      if [ $FORCE_MIGRATE -eq "TRUE" ]; then
+      if [ $FORCE_MIGRATE  -ne "FALSE" ]; then
         echo "Source has $count_difference more files than destination. FORCE_MIGRATE set to TRUE. Proceeding with migration..."
       else
         echo "Destination has $((count_difference * -1)) different files than source. Likely just hidden files and config. Skipping migration."
