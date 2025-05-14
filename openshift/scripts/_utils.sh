@@ -938,9 +938,6 @@ wait_for_galera_sync() {
     local pod_name="${sts_name}-$((i-1))"
     local retries=0
 
-    MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_USER)
-    MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_PASSWORD_FILE)
-
     while true; do
       if check_galera_pod_ready "$pod_name" "$namespace" "$i"; then
         echo "$pod_name is healthy and joined the cluster."
@@ -966,8 +963,10 @@ check_galera_pod_ready() {
   local namespace=$2
   local expected_size=${3:-5}
 
+  get_mariadb_env_vars "$pod"
+
   # Check if MySQL is ready
-  if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u "$MARIADB_USER" -p"$MARIADB_PASSWORD_FILE" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
+  if ! oc exec -n "$namespace" "$pod" -- mysqladmin -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" ping --silent 2>/dev/null | grep -q "mysqld is alive"; then
     echo "$pod: MySQL is not ready yet."
     return 1
   fi
