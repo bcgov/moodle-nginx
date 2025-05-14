@@ -13,19 +13,19 @@ ARG PHP_INI_ENVIRONMENT=production
 ENV GIT_SSL_NO_VERIFY=1
 
 # Version control for Moodle and plugins
+ARG MOODLE_URL="https://github.com/moodle/moodle"
 ARG MOODLE_BRANCH_VERSION=MOODLE_401_STABLE
-
+ARG PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
 ARG PSAELMSYNC_BRANCH_VERSION=main
-ENV PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
-ENV THEME_BRANCH_VERSION=main
-ENV THEME_URL="https://github.com/bcgov/bcgovpsa-moodle"
+ARG THEME_URL="https://github.com/bcgov/bcgovpsa-moodle"
+ARG THEME_BRANCH_VERSION=main
 ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
+ARG HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
 ARG HVP_BRANCH_VERSION=stable
-ENV HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
 ENV HVP_DIR=$MOODLE_APP_DIR/mod/hvp
+ARG REPORT_ALL_BACKUPS_URL="https://github.com/catalyst/moodle-report_allbackups"
 ARG REPORT_ALL_BACKUPS_BRANCH_VERSION=MOODLE_400_STABLE
-ENV REPORT_ALL_BACKUPS_URL="https://github.com/catalyst/moodle-report_allbackups"
 ENV REPORT_ALL_BACKUPS_DIR=$MOODLE_APP_DIR/report/allbackups
 
 # ARG CUSTOMCERT_BRANCH_VERSION=MOODLE_401_STABLE
@@ -76,7 +76,7 @@ RUN echo "Building to directory: $MOODLE_APP_DIR"
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
 RUN git config --global core.compression 0
-RUN git clone --depth=1 --jobs 12 --branch $MOODLE_BRANCH_VERSION --recurse-submodules --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+RUN git clone --depth=1 --jobs 12 --branch $MOODLE_BRANCH_VERSION --recurse-submodules --single-branch $MOODLE_URL $MOODLE_APP_DIR
 
 WORKDIR $MOODLE_APP_DIR
 RUN git fetch --unshallow

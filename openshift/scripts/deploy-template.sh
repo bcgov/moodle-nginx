@@ -78,7 +78,7 @@ deploy_resource_from_template ./openshift/migrate-build-files.yml \
     IMAGE_REPO=$IMAGE_REPO \
     BUILD_NAME=moodle \
     BUILD_NAMESPACE=$BUILD_NAMESPACE \
-    FORCE_MIGRATE=$FORCE_MIGRATE \
+    FORCE_MIGRATE=$FORCE_MIGRATE
 if ! wait_for "job/migrate-build-files" "complete" "800s"; then
   echo "Failed to run migrate-build-files job. Exiting..."
   exit 1
