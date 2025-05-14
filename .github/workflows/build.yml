@@ -11,6 +11,7 @@ env:
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
   SKIP_DEPLOY: "NO"
+  FORCE_MIGRATE: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
   BUILD_ID: ${{ github.event.number }}
@@ -205,6 +206,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
+      FORCE_MIGRATE: ${{ env.FORCE_MIGRATE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ needs.checkEnv.outputs.OPENSHIFT_SERVER }}

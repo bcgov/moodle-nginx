@@ -60,6 +60,8 @@ objects:
                    secretKeyRef:
                      name: moodle-secrets
                      key: database-password
+               - name: FORCE_MIGRATE
+                 value: "${FORCE_MIGRATE:-false}"
              command:
                - bash
                - "-c"
@@ -70,11 +72,14 @@ objects:
          restartPolicy: Never
 parameters:
   - name: IMAGE_REPO
-    required: false
+    required: true
     value: "artifacts.developer.gov.bc.ca/m950-learning/"
   - name: BUILD_NAMESPACE
     required: true
-    value: "e66ac2-dev"
+    value: "950003-dev"
   - name: BUILD_NAME
     required: true
     value: "moodle"
+  - name: FORCE_MIGRATE
+    required: false
+    value: "false"

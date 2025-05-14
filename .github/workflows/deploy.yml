@@ -9,6 +9,9 @@ env:
 on:
   workflow_call:
     inputs:
+      FORCE_MIGRATE:
+        required: true
+        type: string
       IMAGE_REBUILD_TIME_LIMIT:
         required: true
         type: string
@@ -228,6 +231,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
+          FORCE_MIGRATE: ${{ inputs.FORCE_MIGRATE }}
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
@@ -241,7 +245,7 @@ jobs:
           BUILD_TAG: ${{ github.ref_name }}
           APP_HOST_URL: ${{ inputs.APP_HOST_URL }}
           BUILD_NAMESPACE: ${{ inputs.BUILD_NAMESPACE }}
-          IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
+          IMAGE_REPO: "artifacts.developer.gov.bc.ca/m950-learning/"
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_DEPLOYMENT_NAME: ${{ inputs.WEB_DEPLOYMENT_NAME }}
           WEB_IMAGE: ${{ inputs.WEB_IMAGE }}
