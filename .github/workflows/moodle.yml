@@ -87,6 +87,5 @@ jobs:
             --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --output=type=image,push=true \
-            --push \
-            -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
+            --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
 
