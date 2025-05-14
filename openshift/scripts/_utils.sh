@@ -937,6 +937,10 @@ wait_for_galera_sync() {
     # Wait for the new pod to be healthy
     local pod_name="${sts_name}-$((i-1))"
     local retries=0
+
+    MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_USER)
+    MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_PASSWORD_FILE)
+
     while true; do
       if check_galera_pod_ready "$pod_name" "$namespace" "$i"; then
         echo "$pod_name is healthy and joined the cluster."
