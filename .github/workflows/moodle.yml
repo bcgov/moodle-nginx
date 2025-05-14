@@ -70,4 +70,23 @@ jobs:
           keys-case: upper
 
       - name: 🐸 Buld to JFrog
-        run: docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} --build-arg THEME_URL=${{ inputs.THEME_URL }} --build-arg THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }} --build-arg HVP_URL=${{ inputs.HVP_URL }} --build-arg HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }} --build-arg PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }} --build-arg PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }} --build-arg REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }} --build-arg REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }} --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.MOODLE_DOCKER_FILE_PATH }} .
+        run: |
+          docker buildx build \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} \
+            --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
+            --build-arg THEME_URL=${{ inputs.THEME_URL }} \
+            --build-arg THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }} \
+            --build-arg HVP_URL=${{ inputs.HVP_URL }} \
+            --build-arg HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }} \
+            --build-arg PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }} \
+            --build-arg PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }} \
+            --build-arg REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }} \
+            --build-arg REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }} \
+            --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+            --output=type=image,push=true \
+            --push \
+            -f ${{ env.MOODLE_DOCKER_FILE_PATH }} \
+            .
