@@ -288,28 +288,27 @@ jobs:
           OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
           EXIT_CODE=$?
 
-          # Default to failure
           LHSTATUS="failure"
           LHWARNINGS=""
 
           if [ $EXIT_CODE -eq 0 ]; then
             LHSTATUS="success"
-            # Optionally, extract Lighthouse warnings from OUTPUT
-            # For example, count "warning" lines:
             WARN_COUNT=$(echo "$OUTPUT" | grep -i warning | wc -l)
             if [ "$WARN_COUNT" -gt 0 ]; then
               LHWARNINGS=" ($WARN_COUNT warnings)"
             fi
           else
-            # Optionally, extract the first error line
             ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
             LHWARNINGS=" (Error: $ERROR_MESSAGE)"
+            echo "Lighthouse error output:"
+            echo "$OUTPUT"
+            # Save full error to GITHUB_OUTPUT
+            echo "LHERROR<<EOF" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-          # Set a simple output for notification
           echo "LHSTATUS=${LHSTATUS}${LHWARNINGS}" >> $GITHUB_OUTPUT
-
-          # Archive full output as artifact if needed
           echo "$OUTPUT" > lighthouse-full.log
 
           if [ $EXIT_CODE -ne 0 ]; then

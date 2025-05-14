@@ -648,7 +648,7 @@ validate_and_format_resource_value() {
   if [[ $value =~ ^[1-9]+$ ]]; then
     echo "${value}${unit}"
   elif [[ $value == "0" || $value == 0 ]]; then
-    echo "'0'"
+    echo "0"
   else
     echo "null"
   fi
