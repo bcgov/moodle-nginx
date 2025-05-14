@@ -70,7 +70,7 @@ objects:
          restartPolicy: Never
 parameters:
   - name: IMAGE_REPO
-    required: true
+    required: false
     value: "artifacts.developer.gov.bc.ca/m950-learning/"
   - name: BUILD_NAMESPACE
     required: true
