@@ -93,9 +93,10 @@ RUN dos2unix /usr/local/bin/_utils.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 RUN dos2unix /usr/local/bin/test-migration-complete.sh
 
-# Copy the custom PHP-FPM configuration file into the Docker image
-# COPY ./config/php/php-fpm.conf /tmp/php-fpm.conf
-# Append the contents of the custom configuration file to the PHP-FPM configuration file
-# RUN cat /tmp/php-fpm.conf >> $PHP_FPM_CONF_FILE
-# Clean up the temporary configuration file
-# RUN rm /tmp/php-fpm.conf
+# Install Composer (if not already present)
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
+  php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
+  rm composer-setup.php
+
+# Install ZipStream library for Moodle plugins
+RUN composer require maennchen/zipstream-php

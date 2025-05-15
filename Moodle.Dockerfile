@@ -28,27 +28,6 @@ ARG REPORT_ALL_BACKUPS_URL="https://github.com/catalyst/moodle-report_allbackups
 ARG REPORT_ALL_BACKUPS_BRANCH_VERSION=MOODLE_400_STABLE
 ENV REPORT_ALL_BACKUPS_DIR=$MOODLE_APP_DIR/report/allbackups
 
-# ARG CUSTOMCERT_BRANCH_VERSION=MOODLE_401_STABLE
-# ENV CUSTOMCERT_URL="https://github.com/mdjnelson/moodle-mod_customcert"
-# ENV CUSTOMCERT_DIR=$MOODLE_APP_DIR/mod/customcert
-
-# ENV REDIS_SENTINEL_URL="https://github.com/catalyst/moodle-cachestore_redissentinel"
-# ENV REDIS_SENTINEL_DIR=$MOODLE_APP_DIR/cache/stores/redis/sentinel
-# ARG F2F_BRANCH_VERSION=MOODLE_400_STABLE
-# ARG FORMAT_BRANCH_VERSION=MOODLE_403
-# ENV FORMAT_URL="https://github.com/gjb2048/moodle-format_topcoll"
-# ENV FORMAT_DIR=$MOODLE_APP_DIR/course/format/topcoll
-# ARG CERTIFICATE_BRANCH_VERSION=MOODLE_31_STABLE
-# ARG DATAFLOWS_BRANCH_VERSION=MOODLE_35_STABLE
-# ENV DATAFLOWS_URL="https://github.com/catalyst/moodle-tool_dataflows.git"
-# ENV DATAFLOWS_DIR=$MOODLE_APP_DIR/admin/tool/dataflows
-# ENV TRIGGER_URL="https://github.com/catalyst/moodle-tool_trigger"
-# ENV TRIGGER_DIR=$MOODLE_APP_DIR/admin/tool/trigger
-# ENV F2F_URL="https://github.com/catalyst/moodle-mod_facetoface"
-# ENV F2F_DIR=$MOODLE_APP_DIR/mod/facetoface
-# ENV CERTIFICATE_URL=" https://github.com/mdjnelson/moodle-mod_certificate"
-# ENV CERTIFICATE_DIR=$MOODLE_APP_DIR/mod/certificate
-
 RUN echo "Building Moodle version: $MOODLE_BRANCH_VERSION for $PHP_INI_ENVIRONMENT environment for a $DEPLOY_ENVIRONMENT deployment"
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -68,11 +47,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p $MOODLE_APP_DIR
-
 RUN echo "Building to directory: $MOODLE_APP_DIR"
 
-# RUN git clone --recurse-submodules --jobs 8 --branch $MOODLE_BRANCH_VERSION --single-branch https://github.com/moodle/moodle $MOODLE_APP_DIR
+RUN mkdir -p $MOODLE_APP_DIR
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
 RUN git config --global core.compression 0
@@ -92,37 +69,11 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 # Add favicon
 COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
-# Add all plugin folders to a list, so we can clean them up later
-# RUN echo $DATAFLOWS_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
-    # echo $TRIGGER_DIR > $MOODLE_APP_DIR/plugin-folders.txt && \
-    # echo $F2F_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
-    # echo $HVP_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
-    # echo $FORMAT_DIR >> $MOODLE_APP_DIR/plugin-folders.txt && \
-    # echo $CUSTOMCERT_DIR >> $MOODLE_APP_DIR/plugin-folders.txt
-    # echo $CERTIFICATE_DIR >> $MOODLE_APP_DIR/plugin-folders.txt
-
-# RUN mkdir -p $HVP_DIR  && \
-  # mkdir -p $DATAFLOWS_DIR && \
-  # mkdir -p $TRIGGER_DIR && \
-  # mkdir -p $F2F_DIR && \
-  # mkdir -p $FORMAT_DIR  && \
-  # mkdir -p $CERTIFICATE  && \
-  # mkdir -p $CUSTOMCERT_DIR
-
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
-  # git clone --recurse-submodules --jobs 8 --branch $CUSTOMCERT_BRANCH_VERSION --single-branch $CUSTOMCERT_URL $CUSTOMCERT_DIR && \
-  # git clone --recurse-submodules --jobs 8 --branch $DATAFLOWS_BRANCH_VERSION --single-branch $DATAFLOWS_URL $DATAFLOWS_DIR && \
-  # git clone --recurse-submodules --jobs 8 $TRIGGER_URL $TRIGGER_DIR && \
-  # git clone --recurse-submodules --jobs 8 --branch $F2F_BRANCH_VERSION --single-branch $F2F_URL $F2F_DIR && \
-  # git clone --recurse-submodules --jobs 8 --branch $FORMAT_BRANCH_VERSION --single-branch $FORMAT_URL $FORMAT_DIR && \
-  # git clone --recurse-submodules --jobs 8 --branch $CERTIFICATE_BRANCH_VERSION --single-branch $CERTIFICATE_URL $CERTIFICATE_DIR
-# Add commands for site upgrades / migrations
-
-# COPY ./config/moodle/plugins/cache/stores/redisfile $MOODLE_APP_DIR/cache/stores/redisfile
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
@@ -139,5 +90,3 @@ RUN chmod +x /usr/local/bin/migrate-build-files.sh && \
   dos2unix /usr/local/bin/test-migration-complete.sh
 
 RUN chown -R www-data:www-data $MOODLE_APP_DIR
-
-# CMD ["/bin/bash", "/usr/local/bin/migrate-build-files.sh"]
