@@ -58,6 +58,7 @@ if (isset($_REQUEST['debug'])) {
   echo '<pre>',print_r($CFG),'</pre>';
 }
 
+require_once($CFG->moodleappdir . '/vendor/autoload.php');
 require_once(__DIR__ . '/lib/setup.php');
 
 // There is no php closing tag in this file,

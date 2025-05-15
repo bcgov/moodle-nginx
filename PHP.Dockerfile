@@ -78,8 +78,6 @@ RUN wget --progress=dot:giga -O /usr/local/bin/php-fpm-healthcheck \
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_FILE_BASE"
 COPY ./config/php/php.ini "$MOODLE_PHP_INI_FILE"
 RUN dos2unix "$MOODLE_PHP_INI_FILE"
-# COPY ./config/php/php-fpm.conf "$PHP_FPM_CONF_FILE"
-# RUN dos2unix "$PHP_FPM_CONF_FILE"
 
 # Add commands for site maintenance and upgrades
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
@@ -92,11 +90,3 @@ COPY ./openshift/scripts/_utils.sh /usr/local/bin/_utils.sh
 RUN dos2unix /usr/local/bin/_utils.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 RUN dos2unix /usr/local/bin/test-migration-complete.sh
-
-# Install Composer (if not already present)
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
-  php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
-  rm composer-setup.php
-
-# Install ZipStream library for Moodle plugins
-RUN composer require maennchen/zipstream-php:"^3.0" --with-all-dependencies

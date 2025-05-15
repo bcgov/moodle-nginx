@@ -47,6 +47,25 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+
+RUN chmod +x /usr/local/bin/install-php-extensions && \
+    install-php-extensions \
+    apcu \
+    gd \
+    xmlrpc \
+    pdo \
+    pdo_mysql \
+    mysqli \
+    soap \
+    intl \
+    zip \
+    xsl \
+    opcache \
+    ldap \
+    exif \
+    mbstring
+
 RUN echo "Building to directory: $MOODLE_APP_DIR"
 
 RUN mkdir -p $MOODLE_APP_DIR
@@ -75,13 +94,14 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
 
-    # Install Composer (if not already present)
+# Install Composer (if not already present)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
 php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
 rm composer-setup.php
 
 # Install ZipStream library for Moodle plugins
-RUN composer require maennchen/zipstream-php:"^3.0" --with-all-dependencies
+RUN composer require maennchen/zipstream-php:"^2.1" --with-all-dependencies
+RUN composer install --no-dev --optimize-autoloader
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh

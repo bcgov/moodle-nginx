@@ -144,6 +144,7 @@ if (isset($_REQUEST['TEST_CACHE_DISK'])) {
   loadTestCacheDisk($size_in_mb, $num_files);
 }
 
+require_once($CFG->moodleappdir . '/vendor/autoload.php');
 require_once(__DIR__ . '/lib/setup.php');
 
 if (@$_ENV['debug_load_test_cache_disk_msg'] != '') {
