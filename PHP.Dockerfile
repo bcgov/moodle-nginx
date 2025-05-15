@@ -99,4 +99,4 @@ RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &&
   rm composer-setup.php
 
 # Install ZipStream library for Moodle plugins
-RUN composer require maennchen/zipstream-php
+RUN composer require maennchen/zipstream-php:"^3.0" --with-all-dependencies
