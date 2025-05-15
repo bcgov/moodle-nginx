@@ -75,6 +75,14 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
 
+    # Install Composer (if not already present)
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
+php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
+rm composer-setup.php
+
+# Install ZipStream library for Moodle plugins
+RUN composer require maennchen/zipstream-php:"^3.0" --with-all-dependencies
+
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
 COPY ./config/moodle/moodle_index_during_maintenance.php /tmp/moodle_index_during_maintenance.php
