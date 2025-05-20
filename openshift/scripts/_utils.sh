@@ -1382,7 +1382,7 @@ read_csv_file() {
 
 process_moodle_content_columns() {
   local action_func="$1"  # e.g., find_db_characters or replace_db_characters_from_csv
-  local columns_csv="/usr/local/bin/includes/moodle_content_replacement_columns.csv"
+  local columns_csv="/usr/local/bin/includes/content_replacement_columns.csv"
 
   # Skip header, then for each line call the action function
   tail -n +2 "$columns_csv" | while IFS=',' read -r table column; do

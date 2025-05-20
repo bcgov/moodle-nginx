@@ -56,7 +56,7 @@ objects:
               resources:
                 requests:
                   memory: 16Mi
-                  cpu: 50m
+                  cpu: 20m
 
 parameters:
   - name: DEPLOY_IMAGE

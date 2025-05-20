@@ -29,7 +29,7 @@ objects:
                   image: openshift/origin-cli
                   resources:
                     requests:
-                      cpu: 100m
+                      cpu: 50m
                       memory: 256Mi
                   command: ["/bin/sh", "-c"]
                   args:
