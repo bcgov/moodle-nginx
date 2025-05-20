@@ -502,6 +502,11 @@
                     "name": "${CRON_NAME}-php-config",
                     "mountPath": "/usr/local/etc/php/conf.d/moodle-php.ini",
                     "subPath": "moodle-php.ini"
+                  },
+                  {
+                    "name": "${CRON_NAME}-shell",
+                    "mountPath": "/usr/local/bin/cron.sh",
+                    "subPath": "cron.sh"
                   }
                 ],
                 "resources": {

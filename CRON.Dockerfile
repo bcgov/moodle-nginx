@@ -37,8 +37,8 @@ COPY ./config/php/php.ini "$PHP_INI_FILE"
 RUN dos2unix "$PHP_INI_FILE"
 
 # Cron scripts
-COPY ./config/cron/cron.sh /usr/local/bin/cron.sh
-RUN dos2unix /usr/local/bin/cron.sh
+# COPY ./config/cron/cron.sh /usr/local/bin/cron.sh
+# RUN dos2unix /usr/local/bin/cron.sh
 
 # Site maintenance and upgrade scripts
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
