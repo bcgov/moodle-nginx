@@ -1213,7 +1213,7 @@ get_pods_for_resource() {
     label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
   fi
 
-  echo "Using label selector: $label_selector" >&2
+  # echo "Using label selector: $label_selector" >&2
 
   local pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
 
