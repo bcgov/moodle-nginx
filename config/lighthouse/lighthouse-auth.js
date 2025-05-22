@@ -1,21 +1,47 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
+const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
 
 const options = {
   chromeFlags: ['--headless'],
   output: 'json'
 };
-const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
+
+async function getDynamicPaths(page, baseUrl, maxPages = 5) {
+  const paths = [];
+
+  // 1. Go to "my/courses.php"
+  await page.goto(`${baseUrl}/my/courses.php`, { waitUntil: 'networkidle0' });
+
+  // 2. Find the first course link
+  const courseLinks = await page.$$eval('.course-info-container a', links =>
+    links.map(a => a.getAttribute('href')).filter(Boolean)
+  );
+  if (courseLinks.length === 0) throw new Error('No courses found for user.');
+
+  // Use the first course
+  const courseUrl = courseLinks[0].startsWith('http') ? courseLinks[0] : baseUrl + courseLinks[0];
+  paths.push(new URL(courseUrl).pathname + new URL(courseUrl).search);
+
+  // 3. Go to the course page
+  await page.goto(courseUrl, { waitUntil: 'networkidle0' });
+
+  // 4. Find up to 5 resource/page links
+  const pageLinks = await page.$$eval('a.courseindex-link', links =>
+    links
+      .map(a => a.getAttribute('href'))
+      .filter(href => href && href.includes('/mod/page/view.php?id='))
+      .slice(0, maxPages)
+  );
+  for (const link of pageLinks) {
+    const fullUrl = link.startsWith('http') ? link : baseUrl + link;
+    paths.push(new URL(fullUrl).pathname + new URL(fullUrl).search);
+  }
+
+  return paths;
+}
 
 async function runLighthouse(url, options, config = null) {
-  // Define the paths you want to navigate
-  const paths = [
-    '/course/view.php?id=62',
-    '/mod/assign/view.php?id=3218',
-    '/mod/page/view.php?id=3224',
-    '/mod/forum/view.php?id=3215',
-    '/mod/forum/discuss.php?d=426'
-  ];
   // Import chrome-launcher
   const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
   let errors = new Array();
@@ -116,6 +142,10 @@ async function runLighthouse(url, options, config = null) {
 
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
+  // After login, generate dynamic paths
+  const baseUrl = 'https://' + process.env.APP_HOST_URL;
+  const numberOfPages = 5; // Limit to 5 pages
+  const paths = await getDynamicPaths(page, baseUrl, numberOfPages);
   const pathCount = paths.length;
   let pathsPassed = 0;
   let pathsFailed = 0;

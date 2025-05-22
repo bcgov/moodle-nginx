@@ -153,9 +153,9 @@ if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   exit 1
 fi
 
-# Deploy Redis Insight
-echo "Deploying Redis Insight..."
-oc apply -f ./openshift/redis-insight.yml
+# Deploy Redis Insight (removed due to decurity flags)
+# echo "Deploying Redis Insight..."
+# oc apply -f ./openshift/redis-insight.yml
 
 # Verify Redis Proxy is ready and functional
 echo "Waiting for Redis Proxy to be ready and functional..."
