@@ -27,11 +27,14 @@ async function getDynamicPaths(page, baseUrl, maxPages = 5) {
   await page.goto(courseUrl, { waitUntil: 'networkidle0' });
 
   // 4. Find up to 5 resource/page links
-  const pageLinks = await page.$$eval('a.courseindex-link', links =>
-    links
-      .map(a => a.getAttribute('href'))
-      .filter(href => href && href.includes('/mod/page/view.php?id='))
-      .slice(0, maxPages)
+  const pageLinks = await page.$$eval(
+    'a.courseindex-link',
+    (links, maxPages) =>
+      links
+        .map(a => a.getAttribute('href'))
+        .filter(href => href && href.includes('/mod/page/view.php?id='))
+        .slice(0, maxPages),
+    maxPages
   );
   for (const link of pageLinks) {
     const fullUrl = link.startsWith('http') ? link : baseUrl + link;
