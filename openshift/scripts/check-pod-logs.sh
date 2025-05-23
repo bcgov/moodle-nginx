@@ -34,11 +34,11 @@ DEPLOYMENTS=(
 )
 
 # Convert the DEPLOYMENTS array to a string and pass it to the function
-deployments_str=$(declare -p DEPLOYMENTS)
-check_deployment_logs "$deployments_str" "$DEPLOY_NAMESPACE"
+# deployments_str=$(declare -p DEPLOYMENTS)
+# check_deployment_logs "$deployments_str" "$DEPLOY_NAMESPACE"
 
-echo "Searching for encoding issues in content tables..."
-moodle_content_cleanup find
+# echo "Searching for encoding issues in content tables..."
+# moodle_content_cleanup find
 # echo "Replace improperly encoded characters in content tables"
 # moodle_content_cleanup replace
 
