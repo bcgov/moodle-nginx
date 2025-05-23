@@ -1,5 +1,5 @@
 <?php
-require_once('config.php');
+require_once('/var/www/html/config.php');
 
 $course = get_course(1);
 $courses = get_courses();

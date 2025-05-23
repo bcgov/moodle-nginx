@@ -9,7 +9,9 @@ fi
 # Source the utility script
 source /scripts/_utils.sh
 
-echo "Checking pod logs..."
+current_namespace=$(oc project -q)
+
+echo "Checking pod logs in $current_namespace..."
 
 # Ensure kubeconfig is in a writeable location
 export KUBECONFIG=/tmp/kubeconfig
@@ -61,6 +63,7 @@ for tag in "Testing" "Production"; do
 
   # 1. Find courses to migrate (in current env)
   for courseid in $(find_courses_with_tag "$tag" "$current_namespace"); do
+    echo "Migrating course $courseid from $current_namespace to $target_ns"
     # 2. Backup course in current env
     backup_course "$courseid" "$current_namespace"
     # 3. Copy backup out to local

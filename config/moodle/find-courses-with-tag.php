@@ -5,7 +5,7 @@
 // in Moodle and outputs their IDs.
 
 define('CLI_SCRIPT', true);
-require_once('config.php');
+require_once('/var/www/html/config.php');
 
 $tag = $argv[1] ?? '';
 

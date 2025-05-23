@@ -3,7 +3,7 @@
 // Example: php migrate-courses.php test
 
 define('CLI_SCRIPT', true);
-require_once('config.php');
+require_once('/var/www/html/config.php');
 
 $target_env = $argv[1] ?? '';
 if (!$target_env) {

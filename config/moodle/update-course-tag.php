@@ -1,6 +1,6 @@
 <?php
 define('CLI_SCRIPT', true);
-require_once('config.php');
+require_once('/var/www/html/config.php');
 $courseid = $argv[1] ?? '';
 $newtag = $argv[2] ?? '';
 
