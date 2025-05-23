@@ -27,7 +27,7 @@ services:
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
       - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
-      - ./openshift/scripts/includes/content_replacement_columns.csv:/usr/local/bin/includes/content_replacement_columns.csv
+      - ./openshift/scripts/includes/content_replacement_columns.csv:/scripts/content_replacement_columns.csv
 
   db-0:
     extends:
@@ -72,7 +72,7 @@ services:
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
       - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
-      - ./openshift/scripts/includes/content_replacement_columns.csv:/usr/local/bin/includes/content_replacement_columns.csv
+      - ./openshift/scripts/includes/content_replacement_columns.csv:/scripts/content_replacement_columns.csv
       - ./config/moodle/fix-mojibake.php:/var/www/html/fix-mojibake.php:delegated
       - ./config/moodle/fix-mojibake-sql-file.php:/var/www/html/fix-mojibake-sql-file.php:delegated
       - ./config/moodle/fix-mojibake-mbz-file.php:/var/www/html/fix-mojibake-mbz-file.php:delegated
@@ -113,7 +113,7 @@ services:
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
       - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
-      - ./openshift/scripts/includes/content_replacement_columns.csv:/usr/local/bin/includes/content_replacement_columns.csv
+      - ./openshift/scripts/includes/content_replacement_columns.csv:/scripts/content_replacement_columns.csv
       - ./temp/courses:/tmp/courses:delegated
     links:
       - db-0

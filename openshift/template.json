@@ -507,6 +507,10 @@
                     "name": "${CRON_NAME}-shell",
                     "mountPath": "/usr/local/bin/cron.sh",
                     "subPath": "cron.sh"
+                  },
+                  {
+                    "name": "migrate-courses",
+                    "mountPath": "/var/www/html"
                   }
                 ],
                 "resources": {
@@ -632,6 +636,13 @@
                 }
               },
               {
+                "name": "${CRON_NAME}-shell",
+                "configMap": {
+                  "name": "${CRON_NAME}-shell",
+                  "defaultMode": 420
+                }
+              },
+              {
                 "name": "${APP_NAME}-env",
                 "configMap": {
                   "name": "${APP_NAME}-env",
@@ -641,6 +652,13 @@
                       "path": "./.env"
                     }
                   ]
+                }
+              },
+              {
+                "name": "migrate-courses",
+                "configMap": {
+                  "name": "migrate-courses",
+                  "defaultMode": 493
                 }
               }
             ]

@@ -900,8 +900,16 @@ deploy_resource_from_template() {
     oc delete deployment "$deployment_name"
   fi
 
-  # Apply the processed template
-  echo "$processed_template" | oc apply -f -
+  # Apply the processed template and capture output
+  local apply_output
+  apply_output=$(echo "$processed_template" | oc apply -f - 2>&1)
+
+  # Check for "invalid" in the apply output (post-apply)
+  if echo "$apply_output" | grep -qi "invalid"; then
+    echo "❌ ERROR: 'oc apply' has detected an 'invalid' deployment. Aborting."
+    echo "$apply_output"
+    exit 1
+  fi
 }
 
 check_logs_for_pattern() {
@@ -1382,7 +1390,7 @@ read_csv_file() {
 
 process_moodle_content_columns() {
   local action_func="$1"  # e.g., find_db_characters or replace_db_characters_from_csv
-  local columns_csv="/usr/local/bin/includes/content_replacement_columns.csv"
+  local columns_csv="/scripts/content_replacement_columns.csv"
 
   # Skip header, then for each line call the action function
   tail -n +2 "$columns_csv" | while IFS=',' read -r table column; do
@@ -1406,4 +1414,50 @@ moodle_content_cleanup() {
     echo "Unknown mode: $mode"
     return 1
   fi
+}
+
+# Find courses with a given tag
+find_courses_with_tag() {
+  local tag="$1"
+  local namespace="$2"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/find-courses-with-tag.php "$tag"
+}
+
+# Backup a course by ID
+backup_course() {
+  local courseid="$1"
+  local namespace="$2"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/admin/cli/backup.php --courseid="$courseid" --destination="/tmp/file-backups/transfer"
+}
+
+copy_backup_out() {
+  local namespace="$1"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  local file="$2"
+  local local_dest="$3"
+  oc cp "$namespace/$cron_pod:$file" "$local_dest"
+}
+
+copy_backup_in() {
+  local namespace="$1"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  local local_file="$2"
+  local pod_dest="$3"
+  oc cp "$local_file" "$namespace/$cron_pod:$pod_dest"
+}
+
+# Update course tag
+update_course_tag() {
+  local courseid="$1"
+  local newtag="$2"
+  local namespace="$3"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/update-course-tag.php "$courseid" "$newtag"
 }

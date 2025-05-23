@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 backup_dir="/tmp/file-backups/moodledata"
 src_dir="/var/www/moodledata"
 
