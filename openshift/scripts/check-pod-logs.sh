@@ -53,7 +53,16 @@ for tag in "Testing" "Production"; do
   fi
 
   # 1. Find courses to migrate (in current env)
-  for courseid in $(find_courses_with_tag "$tag" "$current_namespace"); do
+  echo "DEBUG: Running find_courses_with_tag \"$tag\" \"$current_namespace\""
+  course_ids=$(find_courses_with_tag "$tag" "$current_namespace")
+  echo "DEBUG: Courses found for tag '$tag': $course_ids"
+
+  if [[ -z "$course_ids" ]]; then
+    echo "No courses found with tag '$tag' in namespace $current_namespace"
+    continue
+  fi
+
+  for courseid in $course_ids; do
     echo "Migrating course $courseid from $current_namespace to $target_ns"
     # 2. Backup course in current env
     backup_course "$courseid" "$current_namespace"
