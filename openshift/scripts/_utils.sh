@@ -1203,37 +1203,37 @@ get_pods_for_resource() {
 
   echo "Getting pods for: $resource_type / $resource_name" >&2
 
-  local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
-  if [[ -z "$labels" ]]; then
-    echo "❌ No labels found for resource: $resource_name. Exiting..." >&2
-    return 1
-  fi
-
-  # Extract a single label (preferably app.kubernetes.io/name) for selector
-  local label_selector
-  label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
-    -o jsonpath="{.spec.selector.matchLabels['app.kubernetes.io/name']}")
-
-  if [[ -n "$label_selector" ]]; then
-    label_selector="app.kubernetes.io/name=$label_selector"
+  local pods=""
+  if [[ "$resource_type" == "statefulset" ]]; then
+    # Try common label selectors for Helm/Operator-managed statefulsets
+    pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$resource_name" -o jsonpath='{.items[*].metadata.name}')
+    if [[ -z "$pods" ]]; then
+      pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/instance=$resource_name" -o jsonpath='{.items[*].metadata.name}')
+    fi
+    # Fallback: match pod names by prefix
+    if [[ -z "$pods" ]]; then
+      pods=$(oc get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep "^${resource_name}-")
+    fi
   else
-    # After extracting label_selector, clean it up:
-    label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
+    # For deployments, use the label selector as before
+    local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
+    local label_selector
+    label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
+      -o jsonpath="{.spec.selector.matchLabels['app.kubernetes.io/name']}")
+    if [[ -n "$label_selector" ]]; then
+      label_selector="app.kubernetes.io/name=$label_selector"
+    else
+      label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
+    fi
+    pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
   fi
 
-  # echo "Using label selector: $label_selector" >&2
-
-  local pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
-
-  # Do NOT treat empty pod list as an error
   if [[ -z "$pods" ]]; then
-    echo "No pods found for resource: $resource_name using selector: $label_selector." >&2
-    # Return success (0) with empty pod list
+    echo "No pods found for resource: $resource_name." >&2
     echo ""
     return 0
   fi
 
-  # Only output the pod names to stdout
   echo "$pods"
   return 0
 }
