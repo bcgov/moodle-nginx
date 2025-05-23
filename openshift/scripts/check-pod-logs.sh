@@ -9,10 +9,6 @@ fi
 # Source the utility script
 source /scripts/_utils.sh
 
-current_namespace=$(oc project -q)
-
-echo "Checking pod logs in $current_namespace..."
-
 # Ensure kubeconfig is in a writeable location
 export KUBECONFIG=/tmp/kubeconfig
 
@@ -21,6 +17,8 @@ if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
   oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
   oc project "$DEPLOY_NAMESPACE"
 fi
+
+echo "Checking pod logs for errors..."
 
 # Define the list of deployments and their corresponding error messages and handling functions
 declare -A DEPLOYMENTS
@@ -33,17 +31,8 @@ DEPLOYMENTS=(
   # ["app=cron"]="error"
 )
 
-# Convert the DEPLOYMENTS array to a string and pass it to the function
-# deployments_str=$(declare -p DEPLOYMENTS)
-# check_deployment_logs "$deployments_str" "$DEPLOY_NAMESPACE"
-
-# echo "Searching for encoding issues in content tables..."
-# moodle_content_cleanup find
-# echo "Replace improperly encoded characters in content tables"
-# moodle_content_cleanup replace
-
-# handle Moodle course miggrations between environments
-# Based on course tags: Development, Testing, Production
+# Handle Moodle course miggrations between environments (dev > test > production)
+# Based on course tags: Testing, Production
 current_namespace=$(oc project -q)
 prefix=$(echo "$current_namespace" | sed -E 's/-.*//')
 course_transfer_dir="/tmp/file-backups/transfer"
@@ -55,6 +44,8 @@ tag_env_map["Production"]="prod"
 for tag in "Testing" "Production"; do
   target_env="${tag_env_map[$tag]}"
   target_ns="${prefix}-${target_env}"
+
+  echo "Migrating courses with tag $tag from $current_namespace to $target_ns"
 
   # Only migrate if not already in the target environment
   if [[ "$current_namespace" == *"$target_env" ]]; then
