@@ -510,7 +510,7 @@
                   },
                   {
                     "name": "migrate-courses",
-                    "mountPath": "/var/www/html"
+                    "mountPath": "/var/www/html/migrate-courses"
                   }
                 ],
                 "resources": {

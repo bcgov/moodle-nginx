@@ -1422,7 +1422,7 @@ find_courses_with_tag() {
   local namespace="$2"
   local cron_pod
   cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/find-courses-with-tag.php "$tag"
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/migrate-courses/find-courses-with-tag.php "$tag"
 }
 
 # Backup a course by ID
@@ -1459,5 +1459,5 @@ update_course_tag() {
   local namespace="$3"
   local cron_pod
   cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/update-course-tag.php "$courseid" "$newtag"
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/migrate-courses/update-course-tag.php "$courseid" "$newtag"
 }

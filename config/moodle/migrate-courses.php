@@ -54,7 +54,7 @@ if (!is_dir($backup_dir)) {
 
 foreach ($courses as $course) {
     echo "Backing up course: {$course->fullname} (ID: {$course->id})\n";
-    $cmd = "php admin/cli/backup.php --courseid={$course->id} --destination={$backup_dir}";
+    $cmd = "php /var/www/html/admin/cli/backup.php --courseid={$course->id} --destination={$backup_dir}";
     passthru($cmd);
 }
 
