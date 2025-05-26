@@ -67,8 +67,12 @@ for tag in "Testing" "Production"; do
     # 2. Backup course in current env
     backup_course "$courseid" "$current_namespace"
     # 3. Copy backup out to local
-    backup_file="/tmp/file-backups/transfer/course-${courseid}.mbz"
-    local_file="${course_transfer_dir}/${target_env}/course-${courseid}.mbz"
+    backup_file=$(ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1)
+    if [[ -z "$backup_file" ]]; then
+      echo "Backup file for course $courseid not found!"
+      continue
+    fi
+    local_file="${course_transfer_dir}/${target_env}/$(basename "$backup_file")"
     mkdir -p "$(dirname "$local_file")"
     copy_backup_out "$current_namespace" "$backup_file" "$local_file"
     # 4. Copy backup in to target env

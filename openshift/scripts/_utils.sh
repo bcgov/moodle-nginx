@@ -1421,11 +1421,8 @@ find_courses_with_tag() {
   local tag="$1"
   local namespace="$2"
   local cron_pod
-  local migrate_log
   cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-  echo "Finding courses in $cron_pod with tag: $tag..."
-  migrate_log=$(oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/migrate-courses/find-courses-with-tag.php "$tag")
-  echo "Migration: $migrate_log"
+  oc exec -n "$namespace" "$cron_pod" -- php /var/www/html/migrate-courses/find-courses-with-tag.php "$tag"
 }
 
 # Backup a course by ID

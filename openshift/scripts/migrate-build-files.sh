@@ -28,7 +28,7 @@ else
     if [ $count_difference -gt 2 ]; then
       echo "Source has $count_difference more files than destination. Proceeding with migration..."
     else
-      if [ "${FORCE_MIGRATE,,}" != "false" ]; then
+      if [ "${FORCE_MIGRATE,,}" != "no" ]; then
         echo "Source has $count_difference more files than destination. FORCE_MIGRATE set to TRUE. Proceeding with migration..."
       else
         echo "Destination has $((count_difference * -1)) different files than source. Likely just hidden files and config. Skipping migration."
