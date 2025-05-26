@@ -1441,6 +1441,8 @@ copy_backup_out() {
   local file="$2"
   local local_dest="$3"
   oc cp "$namespace/$cron_pod:$file" "$local_dest"
+  # After successful migration/copy
+  oc exec -n "$namespace" "$cron_pod" -- rm -f "$file"
 }
 
 copy_backup_in() {
@@ -1450,6 +1452,18 @@ copy_backup_in() {
   local local_file="$2"
   local pod_dest="$3"
   oc cp "$local_file" "$namespace/$cron_pod:$pod_dest"
+}
+
+cleanup_old_backups() {
+  local namespace="$1"
+  local cron_pod
+  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  oc exec -n "$namespace" "$cron_pod" -- bash -c '
+    cd /tmp/file-backups/transfer
+    for course in $(ls backup-moodle2-course-*-*.mbz 2>/dev/null | sed "s/backup-moodle2-course-\([0-9]*\)-.*/\1/" | sort -u); do
+      ls -t backup-moodle2-course-${course}-*.mbz | tail -n +2 | xargs -r rm --
+    done
+  '
 }
 
 # Update course tag

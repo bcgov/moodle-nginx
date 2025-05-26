@@ -83,5 +83,6 @@ for tag in "Testing" "Production"; do
     # update_course_tag "$courseid" "Imported-${tag}" "$target_ns"
     # 7. Clean up local file
     rm "$local_file"
+    cleanup_old_backups "$current_namespace"
   done
 done
