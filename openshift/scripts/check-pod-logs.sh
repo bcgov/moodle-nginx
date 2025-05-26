@@ -64,24 +64,34 @@ for tag in "Testing" "Production"; do
 
   for courseid in $course_ids; do
     echo "Migrating course $courseid from $current_namespace to $target_ns"
-    # 2. Backup course in current env
+    # Backup course in current namespace
     backup_course "$courseid" "$current_namespace"
-    # 3. Copy backup out to local
-    backup_file=$(ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1)
-    if [[ -z "$backup_file" ]]; then
-      echo "Backup file for course $courseid not found!"
+    # Copy backup out to local
+    # Find the backup file on the remote cron pod
+    cron_pod=$(oc get pods -n "$current_namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+    remote_backup_file=$(oc exec -n "$current_namespace" "$cron_pod" -- ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1)
+    if [[ -z "$remote_backup_file" ]]; then
+      echo "Backup file for course $courseid not found in pod $cron_pod!"
       continue
     fi
-    local_file="${course_transfer_dir}/${target_env}/$(basename "$backup_file")"
+
+    # 2. Copy the backup file from the remote pod to local
+    local_file="${course_transfer_dir}/${target_env}/$(basename "$remote_backup_file")"
     mkdir -p "$(dirname "$local_file")"
-    copy_backup_out "$current_namespace" "$backup_file" "$local_file"
-    # 4. Copy backup in to target env
-    copy_backup_in "$target_ns" "$local_file" "$backup_file"
-    # 5. Update tag in current env
+    oc cp "$current_namespace/$cron_pod:$remote_backup_file" "$local_file"
+
+    # Continue with your logic (copy to target, update tag, etc.)
+    copy_backup_in "$target_ns" "$local_file" "$remote_backup_file"
     update_course_tag "$courseid" "Transferred-${tag}" "$current_namespace"
-    # 6. Optionally, update tag in target env to mark as imported
+    rm "$local_file"
+    cleanup_old_backups "$current_namespace"
+    # Copy backup in to target env
+    copy_backup_in "$target_ns" "$local_file" "$backup_file"
+    # Update tag in current env
+    update_course_tag "$courseid" "Transferred-${tag}" "$current_namespace"
+    # Optionally, update tag in target env to mark as imported
     # update_course_tag "$courseid" "Imported-${tag}" "$target_ns"
-    # 7. Clean up local file
+    # Clean up local file
     rm "$local_file"
     cleanup_old_backups "$current_namespace"
   done
