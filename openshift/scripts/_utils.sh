@@ -1436,28 +1436,59 @@ backup_course() {
 
 copy_backup_out() {
   local namespace="$1"
-  local cron_pod
-  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-  local file="$2"
-  local local_dest="$3"
+  local cron_pod="$2"
+  local file="$3"
+  local local_dest="$4"
+
+  echo "DEBUG: [copy_backup_out] namespace='$namespace'"
+  echo "DEBUG: [copy_backup_out] cron_pod='$cron_pod'"
+  echo "DEBUG: [copy_backup_out] file='$file'"
+  echo "DEBUG: [copy_backup_out] local_dest='$local_dest'"
+
+  # Check if all required parameters are set
+  if [[ -z "$namespace" || -z "$cron_pod" || -z "$file" || -z "$local_dest" ]]; then
+    echo "ERROR: One or more required parameters are empty in copy_backup_out!"
+    return 1
+  fi
+
+  # Check if the file exists in the pod before copying
+  echo "DEBUG: [copy_backup_out] Checking if file exists in pod..."
+  oc exec -n "$namespace" "$cron_pod" -- ls -l "$file"
+
+  echo "DEBUG: [copy_backup_out] Running: oc cp '$namespace/$cron_pod:$file' '$local_dest'"
   oc cp "$namespace/$cron_pod:$file" "$local_dest"
-  # After successful migration/copy
+  local cp_status=$?
+  if [[ $cp_status -ne 0 ]]; then
+    echo "ERROR: oc cp failed with status $cp_status"
+    return $cp_status
+  fi
+
+  echo "DEBUG: [copy_backup_out] Running: oc exec -n '$namespace' '$cron_pod' -- rm -f '$file'"
   oc exec -n "$namespace" "$cron_pod" -- rm -f "$file"
 }
 
 copy_backup_in() {
   local namespace="$1"
-  local cron_pod
-  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-  local local_file="$2"
-  local pod_dest="$3"
+  local cron_pod="$2"
+  local local_file="$3"
+  local pod_dest="$4"
+
+  echo "DEBUG: [copy_backup_in] namespace='$namespace'"
+  echo "DEBUG: [copy_backup_in] cron_pod='$cron_pod'"
+  echo "DEBUG: [copy_backup_in] local_file='$local_file'"
+  echo "DEBUG: [copy_backup_in] pod_dest='$pod_dest'"
+
+  if [[ -z "$namespace" || -z "$cron_pod" || -z "$local_file" || -z "$pod_dest" ]]; then
+    echo "ERROR: One or more required parameters are empty in copy_backup_in!"
+    return 1
+  fi
+
   oc cp "$local_file" "$namespace/$cron_pod:$pod_dest"
 }
 
 cleanup_old_backups() {
   local namespace="$1"
-  local cron_pod
-  cron_pod=$(oc get pods -n "$namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+  local cron_pod="$2"
   oc exec -n "$namespace" "$cron_pod" -- bash -c '
     cd /tmp/file-backups/transfer
     for course in $(ls backup-moodle2-course-*-*.mbz 2>/dev/null | sed "s/backup-moodle2-course-\([0-9]*\)-.*/\1/" | sort -u); do

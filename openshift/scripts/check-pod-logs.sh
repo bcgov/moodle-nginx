@@ -64,35 +64,48 @@ for tag in "Testing" "Production"; do
 
   for courseid in $course_ids; do
     echo "Migrating course $courseid from $current_namespace to $target_ns"
-    # Backup course in current namespace
     backup_course "$courseid" "$current_namespace"
-    # Copy backup out to local
+
     # Find the backup file on the remote cron pod
     cron_pod=$(oc get pods -n "$current_namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-    remote_backup_file=$(oc exec -n "$current_namespace" "$cron_pod" -- ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1)
-    if [[ -z "$remote_backup_file" ]]; then
-      echo "Backup file for course $courseid not found in pod $cron_pod!"
+    echo "DEBUG: cron_pod='$cron_pod'"
+    if [[ -z "$cron_pod" ]]; then
+      echo "No cron pod found in namespace $current_namespace"
       continue
     fi
 
-    # 2. Copy the backup file from the remote pod to local
-    local_file="${course_transfer_dir}/${target_env}/$(basename "$remote_backup_file")"
-    mkdir -p "$(dirname "$local_file")"
-    oc cp "$current_namespace/$cron_pod:$remote_backup_file" "$local_file"
+    remote_backup_file=$(oc exec -n "$current_namespace" "$cron_pod" -- bash -c "ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1")
+    echo "DEBUG: remote_backup_file='$remote_backup_file'"
+    if [[ -z "$remote_backup_file" ]]; then
+      echo "Backup file for course $courseid not found in pod $cron_pod"
+      continue
+    fi
 
-    # Continue with your logic (copy to target, update tag, etc.)
-    copy_backup_in "$target_ns" "$local_file" "$remote_backup_file"
-    update_course_tag "$courseid" "Transferred-${tag}" "$current_namespace"
-    rm "$local_file"
-    cleanup_old_backups "$current_namespace"
+    # Copy the backup file from the remote pod to local
+    local_file="${course_transfer_dir}/${target_env}/$(basename "$remote_backup_file")"
+    echo "DEBUG: local_file='$local_file'"
+    mkdir -p "$(dirname "$local_file")"
+
+    # Copy backup out of cron pod to checck-pod-logs
+    copy_backup_out "$current_namespace" "$cron_pod" "$remote_backup_file" "$local_file"
+
     # Copy backup in to target env
-    copy_backup_in "$target_ns" "$local_file" "$backup_file"
+    target_cron_pod=$(oc get pods -n "$target_ns" -l app=cron -o jsonpath='{.items[0].metadata.name}')
+    echo "DEBUG: target_cron_pod='$target_cron_pod'"
+    if [[ -z "$target_cron_pod" ]]; then
+      echo "No cron pod found in namespace $target_ns"
+      continue
+    fi
+
+    copy_backup_in "$target_ns" "$target_cron_pod" "$local_file" "$remote_backup_file"
+
     # Update tag in current env
     update_course_tag "$courseid" "Transferred-${tag}" "$current_namespace"
-    # Optionally, update tag in target env to mark as imported
-    # update_course_tag "$courseid" "Imported-${tag}" "$target_ns"
     # Clean up local file
-    rm "$local_file"
-    cleanup_old_backups "$current_namespace"
+    if [[ -f "$local_file" ]]; then
+      rm "$local_file"
+    fi
+    # Clean up old backups in the cron pod
+    cleanup_old_backups "$current_namespace" "$cron_pod"
   done
 done
