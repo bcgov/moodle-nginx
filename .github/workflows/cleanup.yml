@@ -97,6 +97,7 @@ jobs:
           else
             echo "No AUTH_TOKEN found for ${{ github.ref_name }} branch"
           fi
+          oc project ${{ inputs.DEPLOY_NAMESPACE }}
 
       - name: 🧹️ Clean ${{ inputs.REDIS_NAME }}
         run: |
