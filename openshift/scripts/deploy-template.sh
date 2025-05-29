@@ -45,7 +45,7 @@ create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./c
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "$CRON_NAME-php-config" "moodle-php.ini=./config/php/php.ini"
 create_or_update_configmap "$CRON_NAME-shell" "cron.sh=./config/cron/cron.sh"
-create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh" "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv"
+create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh" "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 create_or_update_configmap "migrate-courses" "update-course-tag.php=./config/moodle/update-course-tag.php" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 
 # Annotate the web deployment to trigger a restart if it already exists

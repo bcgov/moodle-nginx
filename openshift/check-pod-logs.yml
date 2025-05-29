@@ -47,9 +47,15 @@ objects:
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts
+                    - name: migrate-courses
+                      mountPath: /var/www/html/migrate-courses
               restartPolicy: OnFailure
               volumes:
                 - name: script-volume
                   configMap:
                     name: check-pod-logs-script
+                    defaultMode: 0755
+                - name: migrate-courses
+                  configMap:
+                    name: migrate-courses
                     defaultMode: 0755
