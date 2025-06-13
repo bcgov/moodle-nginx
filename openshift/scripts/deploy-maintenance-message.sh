@@ -56,3 +56,9 @@ if ! oc get route "$ROUTE_NAME" &> /dev/null; then
 else
   patch_route $ROUTE_NAME $BUILD_NAME
 fi
+# Redirct main URL (https://learning.gww.gov.bc.ca) to maintenance-message
+if ! oc get route "moodle-custom" &> /dev/null; then
+  echo "⚠️ Route moodle-custom does not exist. Skipping route patch."
+else
+  patch_route "moodle-custom" $BUILD_NAME
+fi

@@ -153,6 +153,7 @@ sleep 30
 
 echo "Directing traffic / route to Moodle..."
 patch_route "$APP-$WEB_DEPLOYMENT_NAME" "$WEB_DEPLOYMENT_NAME"
+patch_route "moodle-custom" "$WEB_DEPLOYMENT_NAME"
 
 echo "Waiting for route to be ready..."
 sleep 60
