@@ -343,6 +343,7 @@ manage_maintenance_mode() {
 
   local script_action="--$action"
   local expected_output=""
+  local expected_output_first_run="Could not open input file"
 
   if [[ $action == "enable" ]]; then
     enable_maintenance_mode $deployment_name $route_name
@@ -369,6 +370,9 @@ manage_maintenance_mode() {
 
     if echo "$maintenance_output" | grep -q "$expected_output"; then
       echo "✔️ Maintenance mode has been successfully ${action}d."
+      return 0
+    elif echo "$maintenance_output" | grep -q "$expected_output_first_run"; then
+      echo "⚠️ Maintenance cannot be set on first run, skipping."
       return 0
     elif echo "$maintenance_output" | grep -q "Exception"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
