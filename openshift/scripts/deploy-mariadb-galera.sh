@@ -12,7 +12,7 @@ echo "Creating ConfigMap mariadb-galera-configuration..."
 create_or_update_configmap "mariadb-galera-configuration" "./config/mariadb/my.cnf"
 oc label configmap mariadb-galera-configuration app.kubernetes.io/managed-by=Helm --overwrite
 oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-name=mariadb-galera --overwrite
-oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace=950003-dev --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace="${DEPLOY_NAMESPACE}" --overwrite
 
 # Create or update the ConfigMap from the prestop.sh script
 create_or_update_configmap "${DB_DEPLOYMENT_NAME}-prestop-script" "mariadb-prestop.sh=./openshift/scripts/mariadb-prestop.sh"
