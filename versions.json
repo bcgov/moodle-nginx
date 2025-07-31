@@ -15,7 +15,7 @@
       "deployed_date": "2025-05-01T10:00:00Z"
     },
     "psaelmsync": {
-      "version": "1",
+      "version": "1.0",
       "branch": "main",
       "commit": "",
       "last_updated": "2025-07-18T19:05:38Z",
