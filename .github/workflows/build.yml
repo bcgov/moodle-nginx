@@ -27,13 +27,6 @@ on:
     - cron: "0 3 * * 6"
   push:
     branches:
-      - e66ac2-dev
-      - 950003-dev
-      - 950003-test
-      - 950003-prod
-  pull_request:
-    branches:
-      - e66ac2-dev
       - 950003-dev
       - 950003-test
       - 950003-prod
