@@ -60,6 +60,10 @@ jobs:
       HVP_BRANCH_VERSION: ${{ env.HVP_BRANCH_VERSION }}
       THEME_URL: ${{ env.THEME_URL }}
       THEME_BRANCH_VERSION: ${{ env.THEME_BRANCH_VERSION }}
+      COURSESEARCH_URL: ${{ env.COURSESEARCH_URL }}
+      COURSESEARCH_BRANCH_VERSION: ${{ env.COURSESEARCH_BRANCH_VERSION }}
+      PCURATOR_URL: ${{ env.outputs.PCURATOR_URL }}
+      PCURATOR_BRANCH_VERSION: ${{ env.PCURATOR_BRANCH_VERSION }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ env.IMAGE_REBUILD_TIME_LIMIT }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
@@ -184,6 +188,10 @@ jobs:
       REPORT_ALL_BACKUPS_BRANCH_VERSION: ${{ needs.checkEnv.outputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
       THEME_URL: ${{ needs.checkEnv.outputs.THEME_URL }}
       THEME_BRANCH_VERSION: ${{ needs.checkEnv.outputs.THEME_BRANCH_VERSION }}
+      COURSESEARCH_URL: ${{ needs.checkEnv.outputs.COURSESEARCH_URL }}
+      COURSESEARCH_BRANCH_VERSION: ${{ needs.checkEnv.outputs.COURSESEARCH_BRANCH_VERSION }}
+      PCURATOR_URL: ${{ needs.checkEnv.outputs.PCURATOR_URL }}
+      PCURATOR_BRANCH_VERSION: ${{ needs.checkEnv.outputs.PCURATOR_BRANCH_VERSION }}
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml

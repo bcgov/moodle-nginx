@@ -18,6 +18,14 @@ ARG MOODLE_BRANCH_VERSION=MOODLE_401_STABLE
 ARG PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
+
+ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
+ARG PCURATOR_BRANCH_VERSION=main
+ENV PCURATOR_DIR=$MOODLE_APP_DIR/mod/pathcurator
+ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
+ARG COURSESEARCH_BRANCH_VERSION=main
+ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
+
 ARG THEME_URL="https://github.com/bcgov/bcgovpsa-moodle"
 ARG THEME_BRANCH_VERSION=main
 ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
@@ -89,8 +97,13 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
 RUN mkdir -p $PSAELMSYNC_DIR
+RUN mkdir -p $PCURATOR_DIR
+RUN mkdir -p $COURSESEARCH_DIR
+
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $PCURATOR_BRANCH_VERSION --single-branch $PCURATOR_URL $PCURATOR_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $COURSESEARCH_BRANCH_VERSION --single-branch $COURSESEARCH_URL $COURSESEARCH_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
 
