@@ -41,6 +41,18 @@ on:
       THEME_BRANCH_VERSION:
         required: true
         type: string
+      COURSESEARCH_URL:
+        required: true
+        type: string
+      COURSESEARCH_BRANCH_VERSION:
+        required: true
+        type: string
+      PCURATOR_URL:
+        required: true
+        type: string
+      PCURATOR_BRANCH_VERSION:
+        required: true
+        type: string
 
 jobs:
   build-images:
@@ -78,6 +90,10 @@ jobs:
             --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
             --build-arg THEME_URL=${{ inputs.THEME_URL }} \
             --build-arg THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }} \
+            --build-arg PCURATOR_URL=${{ inputs.PCURATOR_URL }} \
+            --build-arg PCURATOR_BRANCH_VERSION=${{ inputs.PCURATOR_BRANCH_VERSION }} \
+            --build-arg COURSESEARCH_URL=${{ inputs.COURSESEARCH_URL }} \
+            --build-arg COURSESEARCH_BRANCH_VERSION=${{ inputs.COURSESEARCH_BRANCH_VERSION }} \
             --build-arg HVP_URL=${{ inputs.HVP_URL }} \
             --build-arg HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }} \
             --build-arg PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }} \
