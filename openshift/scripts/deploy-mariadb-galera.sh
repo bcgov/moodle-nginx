@@ -97,7 +97,7 @@ else
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
-    --set persistence.size=6Gi \
+    --set persistence.size=10Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
     --set readinessProbe.enabled=true \
