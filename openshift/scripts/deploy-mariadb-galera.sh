@@ -12,7 +12,7 @@ echo "Creating ConfigMap mariadb-galera-configuration..."
 create_or_update_configmap "mariadb-galera-configuration" "./config/mariadb/my.cnf"
 oc label configmap mariadb-galera-configuration app.kubernetes.io/managed-by=Helm --overwrite
 oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-name=mariadb-galera --overwrite
-oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace=950003-dev --overwrite
+oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespace="${DEPLOY_NAMESPACE}" --overwrite
 
 # Create or update the ConfigMap from the prestop.sh script
 create_or_update_configmap "${DB_DEPLOYMENT_NAME}-prestop-script" "mariadb-prestop.sh=./openshift/scripts/mariadb-prestop.sh"
@@ -59,6 +59,8 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+    --set image.repository=bitnamilegacy/mariadb-galera \
+    --set global.security.allowInsecureImages=true \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
     --reuse-values 2>&1)
@@ -85,8 +87,10 @@ else
   # --atomic \
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+    --set image.repository=bitnamilegacy/mariadb-galera \
     --set image.tag=10.6 \
     --set image.pullPolicy=Always \
+    --set global.security.allowInsecureImages=true \
     --set podManagementPolicy=Parallel \
     --set galera.bootstrap.forceSafeToBootstrap=true \
     --set galera.bootstrap.forceBootstrap=true \
@@ -97,7 +101,7 @@ else
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=$DB_REPLICAS \
-    --set persistence.size=6Gi \
+    --set persistence.size=10Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
     --set readinessProbe.enabled=true \

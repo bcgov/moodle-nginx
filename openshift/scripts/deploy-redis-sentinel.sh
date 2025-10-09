@@ -79,16 +79,19 @@ redis:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
     limits:
-      cpu: null
-      memory: null
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
   resources:
     requests:
-      cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
+    limits:
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
 sentinel:
   enabled: true
   externalAccess:
@@ -104,8 +107,8 @@ sentinel:
       memory: 32Mi
       cpu: 5m
     limits:
-      cpu: null
-      memory: null
+      memory: 256Mi
+      cpu: 25m
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -123,9 +126,14 @@ fi
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# Define Redis-specific legacy image overrides
+REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true"
+
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "install.yaml" \
-  "upgrade.yaml"
+  "upgrade.yaml" \
+  "$REDIS_LEGACY_ARGS"
 if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
@@ -153,7 +161,7 @@ if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   exit 1
 fi
 
-# Deploy Redis Insight (removed due to decurity flags)
+# Deploy Redis Insight (removed due to security flags)
 # echo "Deploying Redis Insight..."
 # oc apply -f ./openshift/redis-insight.yml
 
