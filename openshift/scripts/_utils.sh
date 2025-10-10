@@ -327,7 +327,7 @@ wait_for_deployment_without_errors() {
   fi
 
   # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
+  if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
     echo "❌ Errors detected in pods for $resource. Exiting..."
     return 1
   fi
@@ -548,11 +548,17 @@ handle_deployment_status() {
   local max_retries=$4
   local retry_count=$5
   local wait_time=$6
+  local resource_type=${7:-""}  # Optional resource type parameter
 
   while true; do
     # Get the list of pods for the resource
     local pods
-    pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    # If resource_type is provided, use full resource identifier
+    if [[ -n "$resource_type" ]]; then
+      pods=$(get_pods_for_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE")
+    else
+      pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    fi
     local status=$?
 
     # echo "Pods for resource $resource_name: $pods"
@@ -654,7 +660,7 @@ wait_for() {
   if [[ $resource_type == "job" ]]; then
     handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
   else
-    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time"
+    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
   fi
 }
 
@@ -1669,11 +1675,14 @@ get_pods_for_resource() {
     echo "DEBUG: Normalized resource_type='$resource_type'" >&2
   fi
 
-  if is_docker; then
-    # For Docker, assume container names include the resource name as a substring
-    docker ps --filter "name=$resource_name" --filter "status=running" --format '{{.Names}}'
-    resource_type="docker"
-  elif is_openshift; then
+  # Debug platform detection
+  echo "DEBUG: Checking platform - Docker available: $(command -v docker >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+  echo "DEBUG: Checking platform - OpenShift available: $(command -v oc >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+  echo "DEBUG: Checking platform - oc whoami works: $(oc whoami >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+
+  # Prioritize OpenShift detection - if oc is available and we can authenticate, use OpenShift
+  if is_openshift; then
+    echo "DEBUG: Using OpenShift platform" >&2
     if [[ -z "$resource_type" ]]; then
       if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
         resource_type="statefulset"
@@ -1701,6 +1710,13 @@ get_pods_for_resource() {
         return 1
       fi
     fi
+  elif is_docker; then
+    echo "DEBUG: Using Docker platform" >&2
+    # For Docker, assume container names include the resource name as a substring
+    local containers=$(docker ps --filter "name=$resource_name" --filter "status=running" --format '{{.Names}}')
+    echo "DEBUG: Found Docker containers: '$containers'" >&2
+    echo "$containers"
+    return 0
   else
     echo "ERROR: Unknown platform (neither OpenShift nor Docker detected)"
     return 1
@@ -1730,16 +1746,43 @@ get_pods_for_resource() {
     fi
 
     local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
+    echo "DEBUG: Raw labels from deployment: '$labels'" >&2
+
     local label_selector
     label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
       -o jsonpath="{.spec.selector.matchLabels['app.kubernetes.io/name']}")
+    echo "DEBUG: app.kubernetes.io/name label: '$label_selector'" >&2
+
     if [[ -n "$label_selector" ]]; then
       label_selector="app.kubernetes.io/name=$label_selector"
     else
       label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
     fi
-    pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    echo "DEBUG: Final label selector: '$label_selector'" >&2
+
+    if [[ -z "$label_selector" || "$label_selector" == "=" ]]; then
+      echo "DEBUG: No valid label selector found, falling back to deployment name matching" >&2
+      # Fallback: get pods that are owned by this deployment's replicaset
+      local replicasets=$(oc get replicaset -n "$namespace" -l "app=$resource_name" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      if [[ -n "$replicasets" ]]; then
+        for rs in $replicasets; do
+          local rs_pods=$(oc get pods -n "$namespace" -l "pod-template-hash" --field-selector="metadata.ownerReferences[0].name=$rs" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+          pods="$pods $rs_pods"
+        done
+      fi
+      # Another fallback: match by deployment name prefix
+      if [[ -z "$pods" ]]; then
+        pods=$(oc get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep "^${resource_name}-" | tr '\n' ' ')
+      fi
+    else
+      pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    fi
+    echo "DEBUG: Found pods: '$pods'" >&2
   fi
+
+  # Clean up any extra spaces and filter out empty results
+  pods=$(echo "$pods" | xargs)
+  echo "DEBUG: Final cleaned pods: '$pods'" >&2
 
   if [[ -z "$pods" ]]; then
     echo "No pods found for resource: $resource_name." >&2
