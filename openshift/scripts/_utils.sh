@@ -1871,18 +1871,19 @@ should_migrate_by_version() {
 get_mariadb_env_vars() {
   local pod_name="$1"
 
-  if is_docker; then
-    # For Docker, assume container names include the resource name as a substring
-    MARIADB_USER=$(docker exec "$pod_name" printenv MARIADB_USER)
-    MARIADB_PASSWORD_FILE=$(docker exec "$pod_name" printenv MARIADB_PASSWORD_FILE)
-    MARIADB_PASSWORD=$(docker exec "$pod_name" cat "$MARIADB_PASSWORD_FILE")
-    MARIADB_DATABASE=$(docker exec "$pod_name" printenv MARIADB_DATABASE)
-  elif is_openshift; then
+  # Prioritize OpenShift detection - if oc is available and we can authenticate, use OpenShift
+  if is_openshift; then
     # Get the environment variables from the pod
     MARIADB_USER=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_USER)
     MARIADB_PASSWORD_FILE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_PASSWORD_FILE)
     MARIADB_PASSWORD=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- cat "$MARIADB_PASSWORD_FILE")
     MARIADB_DATABASE=$(oc exec -n "$DEPLOY_NAMESPACE" "$pod_name" -- printenv MARIADB_DATABASE)
+  elif is_docker; then
+    # For Docker, assume container names include the resource name as a substring
+    MARIADB_USER=$(docker exec "$pod_name" printenv MARIADB_USER)
+    MARIADB_PASSWORD_FILE=$(docker exec "$pod_name" printenv MARIADB_PASSWORD_FILE)
+    MARIADB_PASSWORD=$(docker exec "$pod_name" cat "$MARIADB_PASSWORD_FILE")
+    MARIADB_DATABASE=$(docker exec "$pod_name" printenv MARIADB_DATABASE)
   else
     echo "ERROR: Unknown platform (neither OpenShift nor Docker detected)"
     return 1
@@ -2094,10 +2095,11 @@ platform_exec() {
   local namespace="$1"
   local pod_or_container="$2"
   shift 2
-  if is_docker; then
-    docker exec "$pod_or_container" "$@"
-  elif is_openshift; then
+  # Prioritize OpenShift detection
+  if is_openshift; then
     oc exec -n "$namespace" "$pod_or_container" -- "$@"
+  elif is_docker; then
+    docker exec "$pod_or_container" "$@"
   else
     echo "ERROR: Unknown platform (neither OpenShift nor Docker detected)"
     return 1
@@ -2108,13 +2110,14 @@ platform_cp() {
   local src="$1"
   local dest="$2"
   local namespace="$3"
-  if is_docker; then
-    echo "Copying from $src to $dest using Docker..."
-    docker cp "$src" "$dest"
-  elif is_openshift; then
+  # Prioritize OpenShift detection
+  if is_openshift; then
     # src or dest may be pod:filepath
     echo "Copying from $src to $dest using OpenShift..."
     oc cp "$src" "$dest" -n "$namespace"
+  elif is_docker; then
+    echo "Copying from $src to $dest using Docker..."
+    docker cp "$src" "$dest"
   else
     echo "ERROR: Unknown platform (neither OpenShift nor Docker detected)"
     return 1
