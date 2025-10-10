@@ -81,8 +81,6 @@ redis:
     limits:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
-  # Disable service environment variable injection to prevent REDIS_PORT override
-  enableServiceLinks: false
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -94,6 +92,18 @@ replicas:
     limits:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+  # Fix startup probe to use explicit port instead of REDIS_PORT env var
+  customStartupProbe:
+    exec:
+      command:
+        - /bin/bash
+        - -ec
+        - redis-cli -h localhost -p 6379 ping
+    initialDelaySeconds: 90
+    timeoutSeconds: 5
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 22
 sentinel:
   enabled: true
   externalAccess:
@@ -111,20 +121,6 @@ sentinel:
     limits:
       memory: 256Mi
       cpu: 25m
-  # Disable service environment variable injection to prevent REDIS_PORT override
-  enableServiceLinks: false
-  # Fix startup probe to use explicit port instead of REDIS_PORT env var
-  customStartupProbe:
-    exec:
-      command:
-        - /bin/bash
-        - -ec
-        - redis-cli -h localhost -p 26379 ping
-    initialDelaySeconds: 90
-    timeoutSeconds: 5
-    periodSeconds: 10
-    successThreshold: 1
-    failureThreshold: 22
 EOF
 
 # Scale down the Redis deployment if it exists
