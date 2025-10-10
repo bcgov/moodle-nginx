@@ -478,7 +478,7 @@ patch_route() {
   local retry_count=0
   local wait_time=5
 
-  echo "DEBUG: Entering patch_route for $route_name $target_service"
+  # echo "DEBUG: Entering patch_route for $route_name $target_service"
 
   while true; do
     # If the route is deleted or not yet created, skip waiting
@@ -1658,12 +1658,12 @@ get_pods_for_resource() {
   local resource_type=""
 
   # Debug information
-  echo "DEBUG: get_pods_for_resource called with resource_name='$resource_name', namespace='$namespace'" >&2
+  # echo "DEBUG: get_pods_for_resource called with resource_name='$resource_name', namespace='$namespace'" >&2
 
   if [[ "$resource_name" == */* ]]; then
     resource_type=${resource_name%%/*}
     resource_name=${resource_name##*/}
-    echo "DEBUG: Extracted resource_type='$resource_type', resource_name='$resource_name'" >&2
+    # echo "DEBUG: Extracted resource_type='$resource_type', resource_name='$resource_name'" >&2
 
     # Handle full API resource names (e.g., deployment.apps -> deployment)
     case "$resource_type" in
@@ -1672,17 +1672,17 @@ get_pods_for_resource() {
       "service.v1" | "services.v1") resource_type="service" ;;
       "job.batch" | "jobs.batch") resource_type="job" ;;
     esac
-    echo "DEBUG: Normalized resource_type='$resource_type'" >&2
+    # echo "DEBUG: Normalized resource_type='$resource_type'" >&2
   fi
 
   # Debug platform detection
-  echo "DEBUG: Checking platform - Docker available: $(command -v docker >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
-  echo "DEBUG: Checking platform - OpenShift available: $(command -v oc >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
-  echo "DEBUG: Checking platform - oc whoami works: $(oc whoami >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+  # echo "DEBUG: Checking platform - Docker available: $(command -v docker >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+  # echo "DEBUG: Checking platform - OpenShift available: $(command -v oc >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
+  # echo "DEBUG: Checking platform - oc whoami works: $(oc whoami >/dev/null 2>&1 && echo 'yes' || echo 'no')" >&2
 
   # Prioritize OpenShift detection - if oc is available and we can authenticate, use OpenShift
   if is_openshift; then
-    echo "DEBUG: Using OpenShift platform" >&2
+    # echo "DEBUG: Using OpenShift platform" >&2
     if [[ -z "$resource_type" ]]; then
       if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
         resource_type="statefulset"
@@ -1703,7 +1703,7 @@ get_pods_for_resource() {
         "sts") resource_type="statefulset" ;;
         "deploy") resource_type="deployment" ;;
       esac
-      echo "DEBUG: Final normalized resource_type='$resource_type'" >&2
+      # echo "DEBUG: Final normalized resource_type='$resource_type'" >&2
       # Verify the resource actually exists
       if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
         echo "❌ Resource $resource_type/$resource_name not found in namespace $namespace. Exiting..." >&2
@@ -1711,10 +1711,10 @@ get_pods_for_resource() {
       fi
     fi
   elif is_docker; then
-    echo "DEBUG: Using Docker platform" >&2
+    # echo "DEBUG: Using Docker platform" >&2
     # For Docker, assume container names include the resource name as a substring
     local containers=$(docker ps --filter "name=$resource_name" --filter "status=running" --format '{{.Names}}')
-    echo "DEBUG: Found Docker containers: '$containers'" >&2
+    # echo "DEBUG: Found Docker containers: '$containers'" >&2
     echo "$containers"
     return 0
   else
@@ -1726,7 +1726,7 @@ get_pods_for_resource() {
 
   local pods=""
   if [[ "$resource_type" == "statefulset" ]]; then
-    echo "DEBUG: Processing as statefulset" >&2
+    # echo "DEBUG: Processing as statefulset" >&2
     # Try common label selectors for Helm/Operator-managed statefulsets
     pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$resource_name" -o jsonpath='{.items[*].metadata.name}')
     if [[ -z "$pods" ]]; then
@@ -1738,7 +1738,7 @@ get_pods_for_resource() {
     fi
   else
     # For deployments, use the label selector as before
-    echo "DEBUG: Processing as deployment/other resource type" >&2
+    # echo "DEBUG: Processing as deployment/other resource type" >&2
     # Ensure resource_type is not empty to avoid "server doesn't have a resource type" error
     if [[ -z "$resource_type" ]]; then
       echo "❌ Resource type could not be determined for $resource_name in namespace $namespace" >&2
@@ -1746,22 +1746,22 @@ get_pods_for_resource() {
     fi
 
     local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
-    echo "DEBUG: Raw labels from deployment: '$labels'" >&2
+    # echo "DEBUG: Raw labels from deployment: '$labels'" >&2
 
     local label_selector
     label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
       -o jsonpath="{.spec.selector.matchLabels['app.kubernetes.io/name']}")
-    echo "DEBUG: app.kubernetes.io/name label: '$label_selector'" >&2
+    # echo "DEBUG: app.kubernetes.io/name label: '$label_selector'" >&2
 
     if [[ -n "$label_selector" ]]; then
       label_selector="app.kubernetes.io/name=$label_selector"
     else
       label_selector=$(echo "$labels" | tr -d '{}"' | sed 's/[:=]/=/g')
     fi
-    echo "DEBUG: Final label selector: '$label_selector'" >&2
+    # echo "DEBUG: Final label selector: '$label_selector'" >&2
 
     if [[ -z "$label_selector" || "$label_selector" == "=" ]]; then
-      echo "DEBUG: No valid label selector found, falling back to deployment name matching" >&2
+      # echo "DEBUG: No valid label selector found, falling back to deployment name matching" >&2
       # Fallback: get pods that are owned by this deployment's replicaset
       local replicasets=$(oc get replicaset -n "$namespace" -l "app=$resource_name" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
       if [[ -n "$replicasets" ]]; then
@@ -1777,12 +1777,12 @@ get_pods_for_resource() {
     else
       pods=$(oc get pods -n "$namespace" --selector="$label_selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
     fi
-    echo "DEBUG: Found pods: '$pods'" >&2
+    # echo "DEBUG: Found pods: '$pods'" >&2
   fi
 
   # Clean up any extra spaces and filter out empty results
   pods=$(echo "$pods" | xargs)
-  echo "DEBUG: Final cleaned pods: '$pods'" >&2
+  # echo "DEBUG: Final cleaned pods: '$pods'" >&2
 
   if [[ -z "$pods" ]]; then
     echo "No pods found for resource: $resource_name." >&2
@@ -2023,10 +2023,10 @@ copy_backup_out() {
   local file="$3"
   local local_dest="$4"
 
-  echo "DEBUG: [copy_backup_out] namespace='$namespace'"
-  echo "DEBUG: [copy_backup_out] pod_or_container='$pod_or_container'"
-  echo "DEBUG: [copy_backup_out] file='$file'"
-  echo "DEBUG: [copy_backup_out] local_dest='$local_dest'"
+  # echo "DEBUG: [copy_backup_out] namespace='$namespace'"
+  # echo "DEBUG: [copy_backup_out] pod_or_container='$pod_or_container'"
+  # echo "DEBUG: [copy_backup_out] file='$file'"
+  # echo "DEBUG: [copy_backup_out] local_dest='$local_dest'"
 
   # Check if all required parameters are set
   if [[ -z "$namespace" || -z "$cron_pod" || -z "$file" || -z "$local_dest" ]]; then
@@ -2035,7 +2035,7 @@ copy_backup_out() {
   fi
 
   # Check if the file exists in the pod before copying
-  echo "DEBUG: [copy_backup_out] Checking if file exists in pod..."
+  # echo "DEBUG: [copy_backup_out] Checking if file exists in pod..."
   oc exec -n "$namespace" "$cron_pod" -- ls -l "$file"
 
   platform_cp "$namespace/$pod_or_container:$file" "$local_dest" "$namespace"
@@ -2048,10 +2048,10 @@ copy_backup_in() {
   local local_file="$3"
   local pod_dest="$4"
 
-  echo "DEBUG: [copy_backup_in] namespace='$namespace'"
-  echo "DEBUG: [copy_backup_in] pod_or_container='$pod_or_container'"
-  echo "DEBUG: [copy_backup_in] local_file='$local_file'"
-  echo "DEBUG: [copy_backup_in] pod_dest='$pod_dest'"
+  # echo "DEBUG: [copy_backup_in] namespace='$namespace'"
+  # echo "DEBUG: [copy_backup_in] pod_or_container='$pod_or_container'"
+  # echo "DEBUG: [copy_backup_in] local_file='$local_file'"
+  # echo "DEBUG: [copy_backup_in] pod_dest='$pod_dest'"
 
   if [[ -z "$namespace" || -z "$pod_or_container" || -z "$local_file" || -z "$pod_dest" ]]; then
     echo "ERROR: One or more required parameters are empty in copy_backup_in!"
