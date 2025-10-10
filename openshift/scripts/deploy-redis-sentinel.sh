@@ -81,6 +81,10 @@ redis:
     limits:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+  # Override environment variables that might be injected by services
+  extraEnvVars:
+    - name: REDIS_PORT
+      value: "6379"
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -92,18 +96,6 @@ replicas:
     limits:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
-  # Fix startup probe to use explicit port instead of REDIS_PORT env var
-  customStartupProbe:
-    exec:
-      command:
-        - /bin/bash
-        - -ec
-        - redis-cli -h localhost -p 6379 ping
-    initialDelaySeconds: 90
-    timeoutSeconds: 5
-    periodSeconds: 10
-    successThreshold: 1
-    failureThreshold: 22
 sentinel:
   enabled: true
   externalAccess:
