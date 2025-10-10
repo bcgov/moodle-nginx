@@ -297,6 +297,20 @@ wait_for_deployment_without_errors() {
   local resource_type=${resource%%/*}
   local resource_name=${resource##*/}
 
+  # Validate that resource was properly split
+  if [[ -z "$resource_type" || -z "$resource_name" || "$resource_type" == "$resource" ]]; then
+    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>" >&2
+    return 1
+  fi
+
+  # Handle full API resource names (e.g., deployment.apps -> deployment)
+  case "$resource_type" in
+    "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+    "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+    "service.v1" | "services.v1") resource_type="service" ;;
+    "job.batch" | "jobs.batch") resource_type="job" ;;
+  esac
+
   echo "Waiting for $resource to be ready and error-free..."
 
   # Check if the resource exists
@@ -612,6 +626,14 @@ wait_for() {
   if [[ $resource == */* ]]; then
     local resource_type=${resource%%/*}
     local resource_name=${resource##*/}
+
+    # Handle full API resource names (e.g., deployment.apps -> deployment)
+    case "$resource_type" in
+      "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+      "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+      "service.v1" | "services.v1") resource_type="service" ;;
+      "job.batch" | "jobs.batch") resource_type="job" ;;
+    esac
   else
     echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>"
     return 1
@@ -624,8 +646,8 @@ wait_for() {
   echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
   # Check if the resource exists before attempting to scale
-  if ! oc get $resource &> /dev/null; then
-    echo "⚠️ $resource does not exist. Skipping..."
+  if ! oc get $resource_type $resource_name &> /dev/null; then
+    echo "⚠️ $resource_type/$resource_name does not exist. Skipping..."
     return 0
   fi
 
@@ -1629,14 +1651,28 @@ get_pods_for_resource() {
   local namespace=$2
   local resource_type=""
 
+  # Debug information
+  echo "DEBUG: get_pods_for_resource called with resource_name='$resource_name', namespace='$namespace'" >&2
+
   if [[ "$resource_name" == */* ]]; then
     resource_type=${resource_name%%/*}
     resource_name=${resource_name##*/}
+    echo "DEBUG: Extracted resource_type='$resource_type', resource_name='$resource_name'" >&2
+
+    # Handle full API resource names (e.g., deployment.apps -> deployment)
+    case "$resource_type" in
+      "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+      "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+      "service.v1" | "services.v1") resource_type="service" ;;
+      "job.batch" | "jobs.batch") resource_type="job" ;;
+    esac
+    echo "DEBUG: Normalized resource_type='$resource_type'" >&2
   fi
 
   if is_docker; then
     # For Docker, assume container names include the resource name as a substring
     docker ps --filter "name=$resource_name" --filter "status=running" --format '{{.Names}}'
+    resource_type="docker"
   elif is_openshift; then
     if [[ -z "$resource_type" ]]; then
       if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
@@ -1645,6 +1681,23 @@ get_pods_for_resource() {
         resource_type="deployment"
       else
         echo "❌ Resource $resource_name not found in namespace $namespace. Exiting..." >&2
+        return 1
+      fi
+    else
+      # Validate that the provided resource type is supported and exists
+      if [[ "$resource_type" != "statefulset" && "$resource_type" != "deployment" && "$resource_type" != "sts" && "$resource_type" != "deploy" && "$resource_type" != "service" && "$resource_type" != "job" ]]; then
+        echo "❌ Unsupported resource type: $resource_type. Supported types: statefulset, deployment, sts, deploy, service, job" >&2
+        return 1
+      fi
+      # Normalize resource type
+      case "$resource_type" in
+        "sts") resource_type="statefulset" ;;
+        "deploy") resource_type="deployment" ;;
+      esac
+      echo "DEBUG: Final normalized resource_type='$resource_type'" >&2
+      # Verify the resource actually exists
+      if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
+        echo "❌ Resource $resource_type/$resource_name not found in namespace $namespace. Exiting..." >&2
         return 1
       fi
     fi
@@ -1657,6 +1710,7 @@ get_pods_for_resource() {
 
   local pods=""
   if [[ "$resource_type" == "statefulset" ]]; then
+    echo "DEBUG: Processing as statefulset" >&2
     # Try common label selectors for Helm/Operator-managed statefulsets
     pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$resource_name" -o jsonpath='{.items[*].metadata.name}')
     if [[ -z "$pods" ]]; then
@@ -1668,6 +1722,13 @@ get_pods_for_resource() {
     fi
   else
     # For deployments, use the label selector as before
+    echo "DEBUG: Processing as deployment/other resource type" >&2
+    # Ensure resource_type is not empty to avoid "server doesn't have a resource type" error
+    if [[ -z "$resource_type" ]]; then
+      echo "❌ Resource type could not be determined for $resource_name in namespace $namespace" >&2
+      return 1
+    fi
+
     local labels=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}')
     local label_selector
     label_selector=$(oc get "$resource_type" "$resource_name" -n "$namespace" \
