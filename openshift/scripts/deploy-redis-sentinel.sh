@@ -54,6 +54,17 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 10
       failureThreshold: 30
+    # Custom startup probe to override defaults
+    customStartupProbe:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - /health/ping_liveness_local.sh 5
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
   replica:
     # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
@@ -70,6 +81,17 @@ redis:
       failureThreshold: 5
     startupProbe:
       enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
+    # Custom startup probe to override defaults
+    customStartupProbe:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - /health/ping_liveness_local.sh 5
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -158,6 +180,17 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 10
       failureThreshold: 30
+    # Custom startup probe to override defaults
+    customStartupProbe:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - /health/ping_liveness_local.sh 5
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
   replica:
     # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
@@ -174,6 +207,17 @@ redis:
       failureThreshold: 5
     startupProbe:
       enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
+    # Custom startup probe to override defaults
+    customStartupProbe:
+      exec:
+        command:
+          - /bin/bash
+          - -ec
+          - /health/ping_liveness_local.sh 5
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -232,6 +276,17 @@ sentinel:
     failureThreshold: 5
   startupProbe:
     enabled: true
+    initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 30
+  # Custom startup probe to override defaults
+  customStartupProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - /health/ping_sentinel.sh 5
     initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
