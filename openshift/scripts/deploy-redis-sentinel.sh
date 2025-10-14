@@ -25,7 +25,7 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
 
 # Create a temporary values file
 cat <<EOF > install.yaml
-## Redis(R) architecture. Allowed values: `standalone` or `replication`
+# Redis architecture configuration
 architecture: replication
 global:
   redis:
@@ -48,12 +48,9 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
+    # Disable default startup probe to use custom one only
     startupProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      enabled: false
     # Custom startup probe to override defaults
     customStartupProbe:
       exec:
@@ -79,12 +76,9 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
+    # Disable default startup probe to use custom one only
     startupProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      enabled: false
     # Custom startup probe to override defaults
     customStartupProbe:
       exec:
@@ -133,8 +127,16 @@ sentinel:
     timeoutSeconds: 10
     periodSeconds: 5
     failureThreshold: 5
+  # Disable default startup probe to use custom one only
   startupProbe:
-    enabled: true
+    enabled: false
+  # Custom startup probe to override defaults
+  customStartupProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - /health/ping_sentinel.sh 5
     initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
@@ -152,7 +154,7 @@ EOF
 
 # Create minimal file for updates (or it will fail)
 cat <<EOF > upgrade.yaml
-## Redis(R) architecture. Allowed values: `standalone` or `replication`
+# Redis architecture configuration
 architecture: replication
 persistence:
   enabled: false
@@ -174,12 +176,9 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
+    # Disable default startup probe to use custom one only
     startupProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      enabled: false
     # Custom startup probe to override defaults
     customStartupProbe:
       exec:
@@ -205,12 +204,9 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
+    # Disable default startup probe to use custom one only
     startupProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      enabled: false
     # Custom startup probe to override defaults
     customStartupProbe:
       exec:
@@ -274,12 +270,9 @@ sentinel:
     timeoutSeconds: 10
     periodSeconds: 5
     failureThreshold: 5
+  # Disable default startup probe to use custom one only
   startupProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 30
+    enabled: false
   # Custom startup probe to override defaults
   customStartupProbe:
     exec:
