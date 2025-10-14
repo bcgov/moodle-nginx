@@ -31,6 +31,43 @@ global:
     extraEnvVars:
       - name: REDIS_PORT
         value: "6379"
+redis:
+  master:
+    # Increase probe timeouts for better reliability
+    livenessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+    readinessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 5
+      failureThreshold: 5
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
+  replica:
+    # Increase probe timeouts for better reliability
+    livenessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+    readinessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 5
+      failureThreshold: 5
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
@@ -44,23 +81,6 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
-  # Increase probe timeouts for better reliability
-  livenessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 5
-    failureThreshold: 5
-  startupProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 30
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -110,6 +130,42 @@ persistence:
   storageClassName: "-"
   size: 0Mi
 redis:
+  master:
+    # Increase probe timeouts for better reliability
+    livenessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+    readinessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 5
+      failureThreshold: 5
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
+  replica:
+    # Increase probe timeouts for better reliability
+    livenessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+    readinessProbe:
+      enabled: true
+      timeoutSeconds: 10
+      periodSeconds: 5
+      failureThreshold: 5
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
   persistence:
     enabled: false
     storageClass: "-"
@@ -130,23 +186,6 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
-  # Increase probe timeouts for better reliability
-  livenessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 5
-    failureThreshold: 5
-  startupProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 30
   resources:
     requests:
       memory: $REDIS_REQUEST_MEMORY
