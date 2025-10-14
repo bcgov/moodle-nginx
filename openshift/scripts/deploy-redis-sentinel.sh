@@ -63,6 +63,7 @@ sentinel:
     failureThreshold: 5
   startupProbe:
     enabled: true
+    initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
     failureThreshold: 30
@@ -122,6 +123,7 @@ replicas:
     failureThreshold: 5
   startupProbe:
     enabled: true
+    initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
     failureThreshold: 30
@@ -155,6 +157,7 @@ sentinel:
     failureThreshold: 5
   startupProbe:
     enabled: true
+    initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
     failureThreshold: 30
