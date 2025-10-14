@@ -50,6 +50,22 @@ sentinel:
   persistence:
     enabled: false
     size: 5Mi
+  # Increase probe timeouts for better reliability
+  livenessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 5
+    failureThreshold: 5
+  startupProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 30
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -85,32 +101,30 @@ redis:
   extraEnvVars:
     - name: REDIS_PORT
       value: "6379"
-  # Configure probes with longer timeouts
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 5
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 5
-  startupProbe:
-    enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 22
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
+  resources:
+    requests:
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
+  # Increase probe timeouts for better reliability
+  livenessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 5
+    failureThreshold: 5
+  startupProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 30
   resources:
     requests:
       memory: $REDIS_REQUEST_MEMORY
@@ -128,6 +142,22 @@ sentinel:
     storageClass: "-"
     storageClassName: "-"
     size: 0Mi
+  # Increase probe timeouts for better reliability
+  livenessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 5
+    failureThreshold: 5
+  startupProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 30
   resources:
     requests:
       memory: 32Mi
@@ -135,28 +165,6 @@ sentinel:
     limits:
       memory: 256Mi
       cpu: 25m
-  # Configure sentinel probes with longer timeouts
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 5
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 5
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 20
-    periodSeconds: 10
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 6
-  startupProbe:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 10
-    successThreshold: 1
-    failureThreshold: 22
 EOF
 
 # Scale down the Redis deployment if it exists
