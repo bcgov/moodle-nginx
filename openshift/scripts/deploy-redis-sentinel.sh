@@ -25,6 +25,8 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
 
 # Create a temporary values file
 cat <<EOF > install.yaml
+## Redis(R) architecture. Allowed values: `standalone` or `replication`
+architecture: replication
 global:
   redis:
     password: ""
@@ -33,6 +35,8 @@ global:
         value: "6379"
 redis:
   master:
+    # Disable service links to prevent environment variable injection issues
+    enableServiceLinks: false
     # Increase probe timeouts for better reliability
     livenessProbe:
       enabled: true
@@ -51,6 +55,8 @@ redis:
       periodSeconds: 10
       failureThreshold: 30
   replica:
+    # Disable service links to prevent environment variable injection issues  
+    enableServiceLinks: false
     # Increase probe timeouts for better reliability
     livenessProbe:
       enabled: true
@@ -124,6 +130,8 @@ EOF
 
 # Create minimal file for updates (or it will fail)
 cat <<EOF > upgrade.yaml
+## Redis(R) architecture. Allowed values: `standalone` or `replication`
+architecture: replication
 persistence:
   enabled: false
   storageClass: "-"
@@ -131,6 +139,8 @@ persistence:
   size: 0Mi
 redis:
   master:
+    # Disable service links to prevent environment variable injection issues
+    enableServiceLinks: false
     # Increase probe timeouts for better reliability
     livenessProbe:
       enabled: true
@@ -149,6 +159,8 @@ redis:
       periodSeconds: 10
       failureThreshold: 30
   replica:
+    # Disable service links to prevent environment variable injection issues
+    enableServiceLinks: false
     # Increase probe timeouts for better reliability
     livenessProbe:
       enabled: true
