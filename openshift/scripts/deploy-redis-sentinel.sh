@@ -85,6 +85,28 @@ redis:
   extraEnvVars:
     - name: REDIS_PORT
       value: "6379"
+  # Configure probes with longer timeouts
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 5
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 5
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 22
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -113,6 +135,28 @@ sentinel:
     limits:
       memory: 256Mi
       cpu: 25m
+  # Configure sentinel probes with longer timeouts
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 5
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 6
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 22
 EOF
 
 # Scale down the Redis deployment if it exists
