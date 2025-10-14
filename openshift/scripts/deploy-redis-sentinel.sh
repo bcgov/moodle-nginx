@@ -55,7 +55,7 @@ redis:
       periodSeconds: 10
       failureThreshold: 30
   replica:
-    # Disable service links to prevent environment variable injection issues  
+    # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
     # Increase probe timeouts for better reliability
     livenessProbe:
