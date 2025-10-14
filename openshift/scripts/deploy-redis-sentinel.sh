@@ -28,6 +28,9 @@ cat <<EOF > install.yaml
 global:
   redis:
     password: ""
+    extraEnvVars:
+      - name: REDIS_PORT
+        value: "6379"
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
@@ -41,6 +44,23 @@ replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
+  # Increase probe timeouts for better reliability
+  livenessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    timeoutSeconds: 10
+    periodSeconds: 5
+    failureThreshold: 5
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 30
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -50,6 +70,10 @@ sentinel:
   persistence:
     enabled: false
     size: 5Mi
+  # Override environment variables that might be injected by services - Sentinel specific
+  extraEnvVars:
+    - name: REDIS_SENTINEL_PORT
+      value: "26379"
   # Increase probe timeouts for better reliability
   livenessProbe:
     enabled: true
@@ -91,6 +115,10 @@ redis:
     storageClass: "-"
     storageClassName: "-"
     size: 0Mi
+  # Override environment variables that might be injected by services - Redis specific
+  extraEnvVars:
+    - name: REDIS_PORT
+      value: "6379"
   resources:
     requests:
       memory: $REDIS_REQUEST_MEMORY
@@ -98,18 +126,10 @@ redis:
     limits:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
-  # Override environment variables that might be injected by services
-  extraEnvVars:
-    - name: REDIS_PORT
-      value: "6379"
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
-  resources:
-    requests:
-      memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
   # Increase probe timeouts for better reliability
   livenessProbe:
     enabled: true
@@ -144,6 +164,10 @@ sentinel:
     storageClass: "-"
     storageClassName: "-"
     size: 0Mi
+  # Override environment variables that might be injected by services - Sentinel specific
+  extraEnvVars:
+    - name: REDIS_SENTINEL_PORT
+      value: "26379"
   # Increase probe timeouts for better reliability
   livenessProbe:
     enabled: true
