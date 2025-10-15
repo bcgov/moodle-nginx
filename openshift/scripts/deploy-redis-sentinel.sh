@@ -25,76 +25,28 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
 
 # Create a temporary values file
 cat <<EOF > install.yaml
-# Redis architecture configuration
-architecture: replication
 global:
   redis:
     password: ""
-    extraEnvVars:
-      - name: REDIS_PORT
-        value: "6379"
 redis:
   master:
-    # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
-    # Increase probe timeouts for better reliability
     livenessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
+      initialDelaySeconds: 30
     readinessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 5
-      failureThreshold: 5
-    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-    startupProbe:
-      enabled: true
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      initialDelaySeconds: 20
   replica:
-    # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
-    # Increase probe timeouts for better reliability
     livenessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
+      initialDelaySeconds: 30
     readinessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 5
-      failureThreshold: 5
-    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-    startupProbe:
-      enabled: true
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      initialDelaySeconds: 20
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
     memory: $REDIS_REQUEST_MEMORY
 persistence:
   enabled: false
-  storageClass: "-"
-  storageClassName: "-"
-  size: 0Mi
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -107,116 +59,37 @@ sentinel:
   enabled: true
   persistence:
     enabled: false
-    size: 5Mi
-  # Override environment variables that might be injected by services - Sentinel specific
-  extraEnvVars:
-    - name: REDIS_SENTINEL_PORT
-      value: "26379"
-  # Increase probe timeouts for better reliability
   livenessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
+    initialDelaySeconds: 30
   readinessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 5
-    failureThreshold: 5
-  # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-  startupProbe:
-    enabled: true
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 5'
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 30
+    initialDelaySeconds: 20
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
 auth:
   enabled: false
-  sentinel: false
-  password: ""
-  usePasswordFileFromSecret: false
 EOF
 
 # Create minimal file for updates (or it will fail)
 cat <<EOF > upgrade.yaml
-# Redis architecture configuration
-architecture: replication
 persistence:
   enabled: false
-  storageClass: "-"
-  storageClassName: "-"
-  size: 0Mi
 redis:
   master:
-    # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
-    # Increase probe timeouts for better reliability
     livenessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
+      initialDelaySeconds: 30
     readinessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 5
-      failureThreshold: 5
-    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-    startupProbe:
-      enabled: true
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      initialDelaySeconds: 20
   replica:
-    # Disable service links to prevent environment variable injection issues
     enableServiceLinks: false
-    # Increase probe timeouts for better reliability
     livenessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
+      initialDelaySeconds: 30
     readinessProbe:
-      enabled: true
-      timeoutSeconds: 10
-      periodSeconds: 5
-      failureThreshold: 5
-    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-    startupProbe:
-      enabled: true
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 30
+      initialDelaySeconds: 20
   persistence:
     enabled: false
-    storageClass: "-"
-    storageClassName: "-"
-    size: 0Mi
-  # Override environment variables that might be injected by services - Redis specific
-  extraEnvVars:
-    - name: REDIS_PORT
-      value: "6379"
   resources:
     requests:
       memory: $REDIS_REQUEST_MEMORY
@@ -237,41 +110,12 @@ replicas:
       cpu: $REDIS_REQUEST_CPU
 sentinel:
   enabled: true
-  externalAccess:
-    enabled: false
-  automateClusterRecovery: true
   persistence:
     enabled: false
-    storageClass: "-"
-    storageClassName: "-"
-    size: 0Mi
-  # Override environment variables that might be injected by services - Sentinel specific
-  extraEnvVars:
-    - name: REDIS_SENTINEL_PORT
-      value: "26379"
-  # Increase probe timeouts for better reliability
   livenessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
+    initialDelaySeconds: 30
   readinessProbe:
-    enabled: true
-    timeoutSeconds: 10
-    periodSeconds: 5
-    failureThreshold: 5
-  # Fix startup probe by removing problematic -ec flag and properly quoting the script call
-  startupProbe:
-    enabled: true
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 5'
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 30
+    initialDelaySeconds: 20
   resources:
     requests:
       memory: 32Mi
