@@ -32,15 +32,15 @@ redis:
   master:
     enableServiceLinks: false
     livenessProbe:
-      initialDelaySeconds: 30
+      initialDelaySeconds: 180
     readinessProbe:
-      initialDelaySeconds: 20
+      initialDelaySeconds: 180
   replica:
     enableServiceLinks: false
     livenessProbe:
-      initialDelaySeconds: 30
+      initialDelaySeconds: 180
     readinessProbe:
-      initialDelaySeconds: 20
+      initialDelaySeconds: 180
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
@@ -60,9 +60,9 @@ sentinel:
   persistence:
     enabled: false
   livenessProbe:
-    initialDelaySeconds: 30
+    initialDelaySeconds: 180
   readinessProbe:
-    initialDelaySeconds: 20
+    initialDelaySeconds: 180
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -79,15 +79,15 @@ redis:
   master:
     enableServiceLinks: false
     livenessProbe:
-      initialDelaySeconds: 30
+      initialDelaySeconds: 180
     readinessProbe:
-      initialDelaySeconds: 20
+      initialDelaySeconds: 180
   replica:
     enableServiceLinks: false
     livenessProbe:
-      initialDelaySeconds: 30
+      initialDelaySeconds: 180
     readinessProbe:
-      initialDelaySeconds: 20
+      initialDelaySeconds: 180
   persistence:
     enabled: false
   resources:
@@ -113,9 +113,9 @@ sentinel:
   persistence:
     enabled: false
   livenessProbe:
-    initialDelaySeconds: 30
+    initialDelaySeconds: 180
   readinessProbe:
-    initialDelaySeconds: 20
+    initialDelaySeconds: 180
   resources:
     requests:
       memory: 32Mi
