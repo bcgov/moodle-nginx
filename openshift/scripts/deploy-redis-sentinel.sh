@@ -32,15 +32,51 @@ redis:
   master:
     enableServiceLinks: false
     livenessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_liveness_local.sh 5'
     readinessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_readiness_local.sh 1'
   replica:
     enableServiceLinks: false
     livenessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_liveness_local.sh 5'
     readinessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_readiness_local.sh 1'
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
@@ -60,9 +96,27 @@ sentinel:
   persistence:
     enabled: false
   livenessProbe:
+    enabled: true
     initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - '/health/ping_sentinel.sh 10'
   readinessProbe:
+    enabled: true
     initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - '/health/ping_sentinel.sh 10'
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -79,15 +133,51 @@ redis:
   master:
     enableServiceLinks: false
     livenessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_liveness_local.sh 5'
     readinessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_readiness_local.sh 1'
   replica:
     enableServiceLinks: false
     livenessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_liveness_local.sh 5'
     readinessProbe:
+      enabled: true
       initialDelaySeconds: 180
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 5
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - '/health/ping_readiness_local.sh 1'
   persistence:
     enabled: false
   resources:
@@ -113,9 +203,27 @@ sentinel:
   persistence:
     enabled: false
   livenessProbe:
+    enabled: true
     initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - '/health/ping_sentinel.sh 10'
   readinessProbe:
+    enabled: true
     initialDelaySeconds: 180
+    timeoutSeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - '/health/ping_sentinel.sh 10'
   resources:
     requests:
       memory: 32Mi
