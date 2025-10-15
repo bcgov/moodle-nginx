@@ -9,7 +9,7 @@ oc project $OC_PROJECT
 export REDIS_STS_NAME="$REDIS_NAME-node"
 export REDIS_STATS_NAME="$REDIS_NAME-stats"
 
-# Create or update the ConfigMap for Redis stats
+# Create or update the ConfigMap
 create_or_update_configmap "$REDIS_STATS_NAME" \
   "./config/redis/redis-stats.php"
 
@@ -48,16 +48,14 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
-    # Disable default startup probe to use custom one only
+    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
     startupProbe:
-      enabled: false
-    # Custom startup probe to override defaults
-    customStartupProbe:
+      enabled: true
       exec:
         command:
           - /bin/bash
-          - -ec
-          - /health/ping_liveness_local.sh 5
+          - -c
+          - '/health/ping_liveness_local.sh 5'
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -76,16 +74,14 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
-    # Disable default startup probe to use custom one only
+    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
     startupProbe:
-      enabled: false
-    # Custom startup probe to override defaults
-    customStartupProbe:
+      enabled: true
       exec:
         command:
           - /bin/bash
-          - -ec
-          - /health/ping_liveness_local.sh 5
+          - -c
+          - '/health/ping_liveness_local.sh 5'
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -127,16 +123,14 @@ sentinel:
     timeoutSeconds: 10
     periodSeconds: 5
     failureThreshold: 5
-  # Disable default startup probe to use custom one only
+  # Fix startup probe by removing problematic -ec flag and properly quoting the script call
   startupProbe:
-    enabled: false
-  # Custom startup probe to override defaults
-  customStartupProbe:
+    enabled: true
     exec:
       command:
-        - sh
+        - /bin/bash
         - -c
-        - /health/ping_sentinel.sh 5
+        - '/health/ping_sentinel.sh 5'
     initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
@@ -176,16 +170,14 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
-    # Disable default startup probe to use custom one only
+    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
     startupProbe:
-      enabled: false
-    # Custom startup probe to override defaults
-    customStartupProbe:
+      enabled: true
       exec:
         command:
           - /bin/bash
-          - -ec
-          - /health/ping_liveness_local.sh 5
+          - -c
+          - '/health/ping_liveness_local.sh 5'
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -204,16 +196,14 @@ redis:
       timeoutSeconds: 10
       periodSeconds: 5
       failureThreshold: 5
-    # Disable default startup probe to use custom one only
+    # Fix startup probe by removing problematic -ec flag and properly quoting the script call
     startupProbe:
-      enabled: false
-    # Custom startup probe to override defaults
-    customStartupProbe:
+      enabled: true
       exec:
         command:
           - /bin/bash
-          - -ec
-          - /health/ping_liveness_local.sh 5
+          - -c
+          - '/health/ping_liveness_local.sh 5'
       initialDelaySeconds: 180
       timeoutSeconds: 10
       periodSeconds: 10
@@ -270,16 +260,14 @@ sentinel:
     timeoutSeconds: 10
     periodSeconds: 5
     failureThreshold: 5
-  # Disable default startup probe to use custom one only
+  # Fix startup probe by removing problematic -ec flag and properly quoting the script call
   startupProbe:
-    enabled: false
-  # Custom startup probe to override defaults
-  customStartupProbe:
+    enabled: true
     exec:
       command:
-        - sh
+        - /bin/bash
         - -c
-        - /health/ping_sentinel.sh 5
+        - '/health/ping_sentinel.sh 5'
     initialDelaySeconds: 180
     timeoutSeconds: 10
     periodSeconds: 10
@@ -320,6 +308,60 @@ if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
 fi
+
+# Fix: Remove the problematic master startup probe that Bitnami chart ignores in configuration
+echo "🔧 Applying post-deployment fix: Removing problematic Redis master startup probe..."
+remove_redis_master_startup_probe() {
+  local statefulset_name="$1"
+
+  echo "Checking if Redis master startup probe exists and needs removal..."
+
+  # Check if startup probe exists on the redis container (first container)
+  local has_startup_probe
+  has_startup_probe=$(oc get statefulset "$statefulset_name" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
+
+  if [[ -n "$has_startup_probe" && "$has_startup_probe" != "null" ]]; then
+    echo "⚠️  Found problematic startup probe on Redis master container. Removing..."
+
+    # Create a patch to remove the startup probe from the redis container
+    cat > /tmp/remove-startup-probe-patch.json << 'EOF'
+[
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/startupProbe"
+  }
+]
+EOF
+
+    # Apply the patch to remove the startup probe
+    if oc patch statefulset "$statefulset_name" --type=json --patch-file=/tmp/remove-startup-probe-patch.json; then
+      echo "✅ Successfully removed Redis master startup probe"
+
+      # Wait a moment for the change to be applied
+      sleep 2
+
+      # Verify the probe was removed
+      local probe_check
+      probe_check=$(oc get statefulset "$statefulset_name" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
+      if [[ -z "$probe_check" || "$probe_check" == "null" ]]; then
+        echo "✅ Verified: Redis master startup probe successfully removed"
+      else
+        echo "⚠️  Warning: Startup probe removal verification failed, but continuing deployment"
+      fi
+
+      # Clean up the temporary patch file
+      rm -f /tmp/remove-startup-probe-patch.json
+    else
+      echo "⚠️  Warning: Failed to remove startup probe, but continuing deployment"
+      rm -f /tmp/remove-startup-probe-patch.json
+    fi
+  else
+    echo "✅ No problematic startup probe found on Redis master container"
+  fi
+}
+
+# Apply the startup probe fix
+remove_redis_master_startup_probe "$redis_node_name"
 
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
