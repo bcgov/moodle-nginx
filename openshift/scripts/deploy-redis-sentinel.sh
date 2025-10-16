@@ -120,6 +120,7 @@ create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
 echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
 apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
 
+# Scale to desired replicas
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Now wait for the StatefulSet to be ready with the correct probe configurations
