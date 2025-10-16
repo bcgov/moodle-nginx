@@ -49,11 +49,26 @@ else
   echo "Skipping Moodle upgrade as it has been run within $IMAGE_REBUILD_TIME_LIMIT seconds."
 fi
 
-echo "Purging cache..."
-php /var/www/html/admin/cli/purge_caches.php
+echo "Cache clearing across all pods..."
 
-echo "Rebuilding theme cache..."
-php /var/www/html/admin/cli/build_theme_css.php --themes=bcgovpsa
+# Clear cache on the current pod and all PHP pods (which have PHP installed)
+# This addresses RAM disk cache issues where each pod has its own local cache
+echo "🚀 Starting cache clearing..."
+
+# Set the PHP resource name based on your deployment
+# Common names: php, moodle-php, app-php
+PHP_RESOURCE_NAME="${PHP_RESOURCE_NAME:-php}"
+DEPLOY_NAMESPACE="${DEPLOY_NAMESPACE:-950003-dev}"
+
+echo "📍 Clearing cache in namespace: $DEPLOY_NAMESPACE"
+echo "🔍 Using PHP resource: $PHP_RESOURCE_NAME"
+
+if moodle_cache_clear "$DEPLOY_NAMESPACE" "$PHP_RESOURCE_NAME" "bcgovpsa" "true"; then
+  echo "✅ Cache clearing completed successfully"
+else
+  echo "⚠️  Cache clearing completed with some issues"
+  echo "🔄 This is normal if some pods were busy or restarting"
+fi
 
 echo "Disabling Moodle maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --disable

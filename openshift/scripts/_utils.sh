@@ -2247,28 +2247,32 @@ remove_redis_startup_probe() {
   fi
 }
 
-# Function to fix Redis container probe timing and commands
-fix_redis_container_probes() {
+# Generic function to fix container probe timing and commands
+fix_container_probes() {
   local statefulset_name="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-  local initial_delay="${3:-180}"
-  local timeout="${4:-10}"
-  local period="${5:-10}"
-  local failure_threshold="${6:-5}"
+  local container_index="$2"
+  local container_name="$3"
+  local liveness_script="$4"
+  local readiness_script="$5"
+  local namespace="${6:-$DEPLOY_NAMESPACE}"
+  local initial_delay="${7:-180}"
+  local timeout="${8:-10}"
+  local period="${9:-10}"
+  local failure_threshold="${10:-5}"
 
-  echo "🔧 Updating Redis container probe configurations (${initial_delay}s delay)..."
+  echo "🔧 Updating $container_name container probe configurations (${initial_delay}s delay)..."
 
   # Create a comprehensive patch to fix both liveness and readiness probes
   local patch_content='[
   {
     "op": "replace",
-    "path": "/spec/template/spec/containers/0/livenessProbe",
+    "path": "/spec/template/spec/containers/'${container_index}'/livenessProbe",
     "value": {
       "exec": {
         "command": [
           "/bin/bash",
           "-c",
-          "/health/ping_liveness_local.sh 5"
+          "'${liveness_script}'"
         ]
       },
       "initialDelaySeconds": '${initial_delay}',
@@ -2280,13 +2284,13 @@ fix_redis_container_probes() {
   },
   {
     "op": "replace",
-    "path": "/spec/template/spec/containers/0/readinessProbe",
+    "path": "/spec/template/spec/containers/'${container_index}'/readinessProbe",
     "value": {
       "exec": {
         "command": [
           "/bin/bash",
           "-c",
-          "/health/ping_readiness_local.sh 1"
+          "'${readiness_script}'"
         ]
       },
       "initialDelaySeconds": '${initial_delay}',
@@ -2299,22 +2303,35 @@ fix_redis_container_probes() {
 ]'
 
   # Use generic apply_resource_patch function
-  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Updating Redis container probe configurations"; then
-    echo "✅ Successfully updated Redis container probe configurations"
+  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Updating $container_name container probe configurations"; then
+    echo "✅ Successfully updated $container_name container probe configurations"
 
     # Verify the probes were updated using verify_patch_result
-    local verification_checks="{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}:${initial_delay},{.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds}:${initial_delay}"
+    local verification_checks="{.spec.template.spec.containers[${container_index}].livenessProbe.initialDelaySeconds}:${initial_delay},{.spec.template.spec.containers[${container_index}].readinessProbe.initialDelaySeconds}:${initial_delay}"
     if verify_patch_result "statefulset" "$statefulset_name" "$verification_checks" "$namespace"; then
-      echo "✅ Verified: Redis probes updated with ${initial_delay}s delay"
+      echo "✅ Verified: $container_name probes updated with ${initial_delay}s delay"
     else
-      echo "⚠️  Warning: Redis probe verification failed"
+      echo "⚠️  Warning: $container_name probe verification failed"
     fi
 
     return 0
   else
-    echo "⚠️  Warning: Failed to update Redis container probes"
+    echo "⚠️  Warning: Failed to update $container_name container probes"
     return 1
   fi
+}
+
+# Function to fix Redis container probe timing and commands
+fix_redis_container_probes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local initial_delay="${3:-180}"
+  local timeout="${4:-10}"
+  local period="${5:-10}"
+  local failure_threshold="${6:-5}"
+
+  # Use the generic function with Redis-specific parameters
+  fix_container_probes "$statefulset_name" "0" "Redis" "/health/ping_liveness_local.sh 5" "/health/ping_readiness_local.sh 1" "$namespace" "$initial_delay" "$timeout" "$period" "$failure_threshold"
 }
 
 # Function to fix Sentinel container probe timing and commands
@@ -2326,65 +2343,8 @@ fix_sentinel_container_probes() {
   local period="${5:-10}"
   local failure_threshold="${6:-5}"
 
-  echo "🔧 Updating Sentinel container probe configurations (${initial_delay}s delay)..."
-
-  # Create a comprehensive patch to fix liveness and readiness probes
-  local patch_content='[
-  {
-    "op": "replace",
-    "path": "/spec/template/spec/containers/1/livenessProbe",
-    "value": {
-      "exec": {
-        "command": [
-          "/bin/bash",
-          "-c",
-          "/health/ping_sentinel.sh 10"
-        ]
-      },
-      "initialDelaySeconds": '${initial_delay}',
-      "timeoutSeconds": '${timeout}',
-      "periodSeconds": '${period}',
-      "failureThreshold": '${failure_threshold}',
-      "successThreshold": 1
-    }
-  },
-  {
-    "op": "replace",
-    "path": "/spec/template/spec/containers/1/readinessProbe",
-    "value": {
-      "exec": {
-        "command": [
-          "/bin/bash",
-          "-c",
-          "/health/ping_sentinel.sh 10"
-        ]
-      },
-      "initialDelaySeconds": '${initial_delay}',
-      "timeoutSeconds": '${timeout}',
-      "periodSeconds": '${period}',
-      "failureThreshold": '${failure_threshold}',
-      "successThreshold": 1
-    }
-  }
-]'
-
-  # Use generic apply_resource_patch function
-  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Updating Sentinel container probe configurations"; then
-    echo "✅ Successfully updated Sentinel container probe configurations"
-
-    # Verify the probes were updated using verify_patch_result
-    local verification_checks="{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}:${initial_delay},{.spec.template.spec.containers[1].readinessProbe.initialDelaySeconds}:${initial_delay}"
-    if verify_patch_result "statefulset" "$statefulset_name" "$verification_checks" "$namespace"; then
-      echo "✅ Verified: Sentinel probes updated with ${initial_delay}s delay"
-    else
-      echo "⚠️  Warning: Sentinel probe verification failed"
-    fi
-
-    return 0
-  else
-    echo "⚠️  Warning: Failed to update Sentinel container probes"
-    return 1
-  fi
+  # Use the generic function with Sentinel-specific parameters
+  fix_container_probes "$statefulset_name" "1" "Sentinel" "/health/ping_sentinel.sh 10" "/health/ping_sentinel.sh 10" "$namespace" "$initial_delay" "$timeout" "$period" "$failure_threshold"
 }
 
 # Combined function to apply all Redis probe fixes
@@ -2403,4 +2363,303 @@ apply_redis_probe_fixes() {
   fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
 
   echo "✅ Redis probe fixes completed"
+}
+
+# Moodle cache management function with dynamic path detection
+moodle_cache_purge() {
+  local web_root="${1:-/var/www/html}"
+  local data_root="${2:-}"  # Will be auto-detected if not provided
+  local theme_name="${3:-bcgovpsa}"
+  local verbose="${4:-false}"
+
+  echo "🧹 Starting robust Moodle cache purge..."
+
+  # Auto-detect Moodle data root and cache directories from config
+  if [[ -z "$data_root" ]]; then
+    echo "🔍 Auto-detecting Moodle cache directories from config..."
+    data_root=$(get_moodle_config_value "dataroot" "$web_root")
+    if [[ -z "$data_root" ]]; then
+      echo "⚠️  Could not detect dataroot from config, using default: /var/www/moodledata"
+      data_root="/var/www/moodledata"
+    else
+      echo "✅ Detected dataroot: $data_root"
+    fi
+  fi
+
+  # Get all cache-related directories from Moodle config
+  local cache_dirs=()
+  local filecache_dir cachedir_dir tempdir_dir localrequest_dir backuptemp_dir
+
+  filecache_dir=$(get_moodle_config_value "filecache" "$web_root")
+  cachedir_dir=$(get_moodle_config_value "cachedir" "$web_root")
+  tempdir_dir=$(get_moodle_config_value "tempdir" "$web_root")
+  localrequest_dir=$(get_moodle_config_value "localrequestdir" "$web_root")
+  backuptemp_dir=$(get_moodle_config_value "backuptempdir" "$web_root")
+
+  # Add default dataroot cache if no specific dirs found
+  cache_dirs+=("$data_root/cache")
+  cache_dirs+=("$data_root/localcache")
+
+  # Add configured cache directories if they exist
+  [[ -n "$filecache_dir" ]] && cache_dirs+=("$filecache_dir")
+  [[ -n "$cachedir_dir" ]] && cache_dirs+=("$cachedir_dir")
+  [[ -n "$tempdir_dir" ]] && cache_dirs+=("$tempdir_dir")
+  [[ -n "$localrequest_dir" ]] && cache_dirs+=("$localrequest_dir")
+  [[ -n "$backuptemp_dir" ]] && cache_dirs+=("$backuptemp_dir")
+
+  echo "📁 Cache directories to process: ${#cache_dirs[@]}"
+  for dir in "${cache_dirs[@]}"; do
+    echo "   - $dir"
+  done
+
+  # Add verbose flag if requested
+  local verbose_flag=""
+  if [[ "$verbose" == "true" ]]; then
+    verbose_flag="--verbose"
+  fi
+
+  # Function to debug cache state
+  debug_cache_state() {
+    local stage="$1"
+    echo "=== Cache Debug - $stage ==="
+
+    for cache_dir in "${cache_dirs[@]}"; do
+      if [[ -d "$cache_dir" ]]; then
+        echo "📁 Cache directory: $cache_dir"
+        local file_count
+        file_count=$(find "$cache_dir" -type f 2>/dev/null | wc -l)
+        echo "📊 Files in $cache_dir: $file_count"
+        ls -la "$cache_dir/" 2>/dev/null | head -3
+      else
+        echo "❌ Cache directory not found: $cache_dir"
+      fi
+    done
+
+    echo "👤 Current user: $(whoami) ($(id -u):$(id -g))"
+  }
+
+  # Step 1: Debug initial state
+  if [[ "$verbose" == "true" ]]; then
+    debug_cache_state "BEFORE"
+  fi
+
+  # Step 2: Standard Moodle cache purge
+  echo "🔄 Step 1: Standard Moodle cache purge..."
+  if php "$web_root/admin/cli/purge_caches.php" $verbose_flag; then
+    echo "✅ Standard cache purge completed"
+  else
+    echo "⚠️  Standard cache purge had issues"
+  fi
+
+  # Step 3: Manual cache directory cleanup
+  echo "🗑️  Step 2: Manual cache cleanup for all configured directories..."
+  for cache_dir in "${cache_dirs[@]}"; do
+    if [[ -d "$cache_dir" ]]; then
+      echo "🧹 Cleaning cache directory: $cache_dir"
+      # Clear various cache file types
+      find "$cache_dir" -type f -name "*.cache" -delete 2>/dev/null || true
+      find "$cache_dir" -type f -name "*.lock" -delete 2>/dev/null || true
+      find "$cache_dir" -type f -name "*.tmp" -delete 2>/dev/null || true
+
+      # Clear theme cache specifically if it exists in this directory
+      if [[ -d "$cache_dir/theme" ]]; then
+        echo "🎨 Clearing theme cache in: $cache_dir/theme"
+        rm -rf "$cache_dir/theme"/* 2>/dev/null || true
+      fi
+
+      # Clear other common cache subdirectories
+      for cache_subdir in "cachestore_file" "htmlpurifier" "lang" "javascript" "scss"; do
+        if [[ -d "$cache_dir/$cache_subdir" ]]; then
+          echo "🧹 Clearing $cache_subdir cache in: $cache_dir"
+          rm -rf "$cache_dir/$cache_subdir"/* 2>/dev/null || true
+        fi
+      done
+    else
+      echo "⚠️  Cache directory not accessible: $cache_dir"
+    fi
+  done
+
+  # Step 4: Rebuild theme cache
+  echo "🎨 Step 3: Rebuilding theme cache..."
+  if php "$web_root/admin/cli/build_theme_css.php" --themes="$theme_name" $verbose_flag; then
+    echo "✅ Theme cache rebuild completed"
+  else
+    echo "⚠️  Theme cache rebuild had issues"
+  fi
+
+  # Step 5: Final cache purge
+  echo "🔄 Step 4: Final cache purge..."
+  php "$web_root/admin/cli/purge_caches.php" 2>/dev/null || true
+
+  # Step 6: Fix permissions for all cache directories
+  echo "🔐 Step 5: Setting cache permissions..."
+  for cache_dir in "${cache_dirs[@]}"; do
+    if [[ -d "$cache_dir" ]]; then
+      echo "🔐 Setting permissions for: $cache_dir"
+      if command -v chown >/dev/null 2>&1; then
+        chown -R www-data:www-data "$cache_dir/" 2>/dev/null || true
+        chmod -R 755 "$cache_dir/" 2>/dev/null || true
+      fi
+    fi
+  done
+
+  # Step 7: Verification
+  if [[ "$verbose" == "true" ]]; then
+    debug_cache_state "AFTER"
+
+    # Verify theme cache was rebuilt in any of the cache directories
+    local theme_files_found=false
+    for cache_dir in "${cache_dirs[@]}"; do
+      if [[ -d "$cache_dir/theme" ]]; then
+        local theme_files
+        theme_files=$(find "$cache_dir/theme" -type f 2>/dev/null | wc -l)
+        if [[ $theme_files -gt 0 ]]; then
+          echo "✅ Theme cache verification: $theme_files files found in $cache_dir/theme"
+          theme_files_found=true
+        fi
+      fi
+    done
+
+    if [[ "$theme_files_found" == "false" ]]; then
+      echo "⚠️  WARNING: No theme cache files found in any cache directory after rebuild!"
+      return 1
+    fi
+  fi
+
+  echo "✅ Robust Moodle cache purge completed"
+  return 0
+}
+
+# Helper function to extract Moodle config values
+get_moodle_config_value() {
+  local config_key="$1"
+  local web_root="${2:-/var/www/html}"
+  local config_file="$web_root/config.php"
+
+  if [[ ! -f "$config_file" ]]; then
+    echo ""
+    return 1
+  fi
+
+  # Extract the config value using grep and sed
+  # This handles both quoted strings and variables
+  local value
+  value=$(grep -E "^\s*\\\$CFG->$config_key\s*=" "$config_file" | head -1 | sed -E "s/.*=\s*['\"]?([^'\";\s]+)['\"]?\s*;.*/\1/")
+
+  # Handle variable references like $_SERVER['VARIABLE']
+  if [[ "$value" =~ ^\$_SERVER\[.*\] ]]; then
+    # For server variables, we can't easily resolve them, return empty
+    echo ""
+    return 1
+  fi
+
+  echo "$value"
+}
+
+# Function to clear Moodle cache on a single pod
+clear_cache_on_pod() {
+  local pod_name="$1"
+  local namespace="$2"
+  local theme_name="${3:-bcgovpsa}"
+
+  echo "🧹 Clearing cache on pod: $pod_name"
+
+  # Step 1: Purge cache
+  echo "🔄 Purging cache..."
+  if ! oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/purge_caches.php; then
+    echo "❌ Cache purge failed on $pod_name"
+    return 1
+  fi
+
+  # Step 2: Rebuild theme cache
+  echo "🎨 Rebuilding theme cache..."
+  if ! oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/build_theme_css.php --themes="$theme_name"; then
+    echo "⚠️  Theme rebuild failed on $pod_name (not critical)"
+  fi
+
+  # Step 3: Final cache purge
+  echo "🔄 Final cache purge..."
+  oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/purge_caches.php >/dev/null 2>&1 || true
+
+  echo "✅ Cache clearing completed on $pod_name"
+  return 0
+}
+
+# Function to clear Moodle cache across all PHP pods
+clear_moodle_cache_across_pods() {
+  local php_resource_name="${1:-php}"  # Default to 'php' deployment/statefulset
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local theme_name="${3:-bcgovpsa}"
+  local max_retries="${4:-30}"
+  local wait_time="${5:-10}"
+
+  echo "🌐 Clearing Moodle cache across all PHP pods..."
+  echo "📍 Namespace: $namespace"
+  echo "🔍 PHP resource: $php_resource_name"
+  echo "🎨 Theme: $theme_name"
+
+  # Use existing handle_pods_in_resource function
+  if handle_pods_in_resource "$php_resource_name" "$namespace" "clear_cache_on_pod" "$theme_name" "" "$max_retries" "$wait_time"; then
+    echo "🎉 Cache clearing completed across all PHP pods!"
+    return 0
+  else
+    echo "⚠️  Cache clearing completed with some issues on PHP pods"
+    return 1
+  fi
+}
+
+# Function that combines local and distributed cache clearing
+moodle_cache_clear() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  local php_resource_name="${2:-php}"
+  local theme_name="${3:-bcgovpsa}"
+  local use_distributed="${4:-true}"  # Whether to clear cache across PHP pods
+
+  echo "🚀 Starting Moodle cache clearing..."
+
+  local overall_success=true
+
+  # Step 1: Clear cache locally (current pod)
+  echo ""
+  echo "📍 Step 1: Clearing cache locally (current pod)..."
+  if moodle_cache_purge "/var/www/html" "" "$theme_name" "true"; then
+    echo "✅ Local cache clearing completed"
+  else
+    echo "⚠️  Local cache clearing had issues"
+    overall_success=false
+  fi
+
+  # Step 2: Clear cache across all PHP pods (for RAM disk caches)
+  if [[ "$use_distributed" == "true" ]]; then
+    echo ""
+    echo "📍 Step 2: Clearing cache across all PHP pods..."
+    local distributed_result
+    clear_moodle_cache_across_pods "$php_resource_name" "$namespace" "$theme_name"
+    distributed_result=$?
+
+    case $distributed_result in
+      0)
+        echo "✅ Distributed cache clearing completed successfully"
+        ;;
+      *)
+        echo "❌ Distributed cache clearing failed"
+        overall_success=false
+        ;;
+    esac
+  else
+    echo "📍 Step 2: Skipping distributed cache clearing (disabled)"
+  fi
+
+  # Step 3: Wait for cache changes to propagate
+  echo ""
+  echo "📍 Step 3: Waiting for cache changes to propagate..."
+  sleep 10
+
+  if [[ "$overall_success" == "true" ]]; then
+    echo "🎉 Moodle cache clearing completed successfully!"
+    return 0
+  else
+    echo "⚠️  Moodle cache clearing completed with some issues"
+    return 1
+  fi
 }
