@@ -146,6 +146,10 @@ deploy_resource_from_template ./openshift/check-pod-logs.yml \
 
 sleep 60
 
+# Clear Moodle cache across all PHP pods after successful deployment
+echo "🧹 Clearing Moodle cache across PHP deployment..."
+clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
+
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
 

@@ -115,16 +115,18 @@ create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "install.yaml" \
   "upgrade.yaml" \
   "$REDIS_LEGACY_ARGS"
+
+# Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)
+echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
+apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
+
+scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
+
+# Now wait for the StatefulSet to be ready with the correct probe configurations
 if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
 fi
-
-# Apply Redis probe fixes using utility functions
-echo "🔧 Applying post-deployment Redis probe fixes..."
-apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
-
-scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"

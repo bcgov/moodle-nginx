@@ -2412,11 +2412,6 @@ moodle_cache_purge() {
     echo "   - $dir"
   done
 
-  # Add verbose flag if requested
-  local verbose_flag=""
-  if [[ "$verbose" == "true" ]]; then
-    verbose_flag="--verbose"
-  fi
 
   # Function to debug cache state
   debug_cache_state() {
@@ -2445,7 +2440,7 @@ moodle_cache_purge() {
 
   # Step 2: Standard Moodle cache purge
   echo "🔄 Step 1: Standard Moodle cache purge..."
-  if php "$web_root/admin/cli/purge_caches.php" $verbose_flag; then
+  if php "$web_root/admin/cli/purge_caches.php"; then
     echo "✅ Standard cache purge completed"
   else
     echo "⚠️  Standard cache purge had issues"
@@ -2481,7 +2476,7 @@ moodle_cache_purge() {
 
   # Step 4: Rebuild theme cache
   echo "🎨 Step 3: Rebuilding theme cache..."
-  if php "$web_root/admin/cli/build_theme_css.php" --themes="$theme_name" $verbose_flag; then
+  if php "$web_root/admin/cli/build_theme_css.php" --themes="$theme_name"; then
     echo "✅ Theme cache rebuild completed"
   else
     echo "⚠️  Theme cache rebuild had issues"
@@ -2491,19 +2486,7 @@ moodle_cache_purge() {
   echo "🔄 Step 4: Final cache purge..."
   php "$web_root/admin/cli/purge_caches.php" 2>/dev/null || true
 
-  # Step 6: Fix permissions for all cache directories
-  echo "🔐 Step 5: Setting cache permissions..."
-  for cache_dir in "${cache_dirs[@]}"; do
-    if [[ -d "$cache_dir" ]]; then
-      echo "🔐 Setting permissions for: $cache_dir"
-      if command -v chown >/dev/null 2>&1; then
-        chown -R www-data:www-data "$cache_dir/" 2>/dev/null || true
-        chmod -R 755 "$cache_dir/" 2>/dev/null || true
-      fi
-    fi
-  done
-
-  # Step 7: Verification
+  # Step 6: Verification
   if [[ "$verbose" == "true" ]]; then
     debug_cache_state "AFTER"
 
@@ -2544,11 +2527,10 @@ get_moodle_config_value() {
   # Extract the config value using grep and sed
   # This handles both quoted strings and variables
   local value
-  value=$(grep -E "^\s*\\\$CFG->$config_key\s*=" "$config_file" | head -1 | sed -E "s/.*=\s*['\"]?([^'\";\s]+)['\"]?\s*;.*/\1/")
+  value=$(grep -E "^\s*\\\$CFG->$config_key\s*=" "$config_file" | head -1 | sed -E "s/.*=\s*['\"]([^'\"]+)['\"].*;\s*$/\1/")
 
-  # Handle variable references like $_SERVER['VARIABLE']
-  if [[ "$value" =~ ^\$_SERVER\[.*\] ]]; then
-    # For server variables, we can't easily resolve them, return empty
+  # Handle variable references like $_SERVER['VARIABLE'] - return empty as we can't resolve them
+  if [[ "$value" =~ ^\$_SERVER\[.*\]$ ]] || [[ "$value" =~ ^\$CFG-> ]]; then
     echo ""
     return 1
   fi
@@ -2604,6 +2586,36 @@ clear_moodle_cache_across_pods() {
     return 0
   else
     echo "⚠️  Cache clearing completed with some issues on PHP pods"
+    return 1
+  fi
+}
+
+# Cache clearing function for deployment-time use
+clear_moodle_cache_deployment() {
+  local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local theme_name="${3:-bcgovpsa}"
+
+  echo ""
+  echo "🚀 Clearing Moodle cache and rebuilding theme across PHP deployments..."
+  echo "📍 Namespace: $namespace"
+  echo "🔍 PHP deployment: $php_deployment_name"
+  echo "🎨 Theme: $theme_name"
+  echo "🔄 Process: Cache purge → Theme rebuild → Final cache purge (per pod)"
+
+  # Wait for PHP deployment to be fully ready
+  echo "⏳ Ensuring PHP deployment is ready..."
+  if ! wait_for "deployment/$php_deployment_name" "ready" "300s"; then
+    echo "❌ PHP deployment not ready, skipping cache clearing"
+    return 1
+  fi
+
+  # Use the distributed cache clearing function
+  if clear_moodle_cache_across_pods "$php_deployment_name" "$namespace" "$theme_name"; then
+    echo "✅ Deployment-time cache clearing and theme rebuilding completed successfully!"
+    return 0
+  else
+    echo "⚠️  Cache clearing and theme rebuilding had issues, but deployment can continue"
     return 1
   fi
 }

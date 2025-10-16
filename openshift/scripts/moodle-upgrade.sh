@@ -35,8 +35,8 @@ if check_timestamp; then
   echo "Ensuring database encoding is utf8..."
   php /var/www/html/admin/cli/mysql_collation.php --collation=utf8mb4_unicode_ci  > /dev/null
 
-  echo "Searching for encoding issues in content tables..."
-  moodle_content_cleanup find
+  # echo "Searching for encoding issues in content tables..."
+  # moodle_content_cleanup find
   # echo "Replace improperly encoded characters in content tables"
   # moodle_content_cleanup replace
 
@@ -47,27 +47,6 @@ if check_timestamp; then
   php /var/www/html/info/phpconfigcheck.php
 else
   echo "Skipping Moodle upgrade as it has been run within $IMAGE_REBUILD_TIME_LIMIT seconds."
-fi
-
-echo "Cache clearing across all pods..."
-
-# Clear cache on the current pod and all PHP pods (which have PHP installed)
-# This addresses RAM disk cache issues where each pod has its own local cache
-echo "🚀 Starting cache clearing..."
-
-# Set the PHP resource name based on your deployment
-# Common names: php, moodle-php, app-php
-PHP_RESOURCE_NAME="${PHP_RESOURCE_NAME:-php}"
-DEPLOY_NAMESPACE="${DEPLOY_NAMESPACE:-950003-dev}"
-
-echo "📍 Clearing cache in namespace: $DEPLOY_NAMESPACE"
-echo "🔍 Using PHP resource: $PHP_RESOURCE_NAME"
-
-if moodle_cache_clear "$DEPLOY_NAMESPACE" "$PHP_RESOURCE_NAME" "bcgovpsa" "true"; then
-  echo "✅ Cache clearing completed successfully"
-else
-  echo "⚠️  Cache clearing completed with some issues"
-  echo "🔄 This is normal if some pods were busy or restarting"
 fi
 
 echo "Disabling Moodle maintenance mode..."
