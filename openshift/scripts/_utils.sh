@@ -2442,7 +2442,7 @@ clear_moodle_cache_across_pods() {
   fi
 }
 
-# Cache clearing function for deployment-time use
+# Deployment-time cache clearing function
 clear_moodle_cache_deployment() {
   local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
   local namespace="${2:-$DEPLOY_NAMESPACE}"

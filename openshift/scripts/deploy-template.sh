@@ -148,6 +148,28 @@ sleep 60
 
 # Clear Moodle cache across all PHP pods after successful deployment
 echo "🧹 Clearing Moodle cache across PHP deployment..."
+
+# Debug: Check if the function exists before calling it
+echo "🔍 Debugging function availability..."
+if declare -f clear_moodle_cache_deployment > /dev/null 2>&1; then
+  echo "✅ Function clear_moodle_cache_deployment is available"
+else
+  echo "❌ Function clear_moodle_cache_deployment is NOT available"
+  echo "📋 Available cache-related functions:"
+  declare -F | grep -i cache || echo "   No cache functions found"
+  echo "📋 All available functions from _utils.sh:"
+  declare -F | grep -E "(moodle|cache|clear)" || echo "   No matching functions found"
+fi
+
+# Syntax check of _utils.sh
+echo "🔍 Validating _utils.sh syntax..."
+if bash -n ./openshift/scripts/_utils.sh; then
+  echo "✅ _utils.sh syntax is valid"
+else
+  echo "❌ _utils.sh has syntax errors"
+  exit 1
+fi
+
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
 # Disable maintenance mode and verify output
