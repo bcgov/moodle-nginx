@@ -2382,7 +2382,7 @@ get_moodle_config_value() {
   value=$(grep -E "^\s*\\\$CFG->$config_key\s*=" "$config_file" | head -1 | sed -E "s/.*=\s*['\"]([^'\"]+)['\"].*;\s*$/\1/")
 
   # Handle variable references like $_SERVER['VARIABLE'] - return empty as we can't resolve them
-  if [[ "$value" =~ ^\$_SERVER\[.*\]$ ]] || [[ "$value" =~ ^\$CFG-> ]]; then
+  if [[ "$value" =~ ^\$_SERVER\[.*\]$ ]] || [[ "$value" == \$CFG->* ]]; then
     echo ""
     return 1
   fi
