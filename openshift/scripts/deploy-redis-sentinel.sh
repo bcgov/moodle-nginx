@@ -9,7 +9,7 @@ oc project $OC_PROJECT
 export REDIS_STS_NAME="$REDIS_NAME-node"
 export REDIS_STATS_NAME="$REDIS_NAME-stats"
 
-# Create or update the ConfigMap for Redis stats
+# Create or update the ConfigMap
 create_or_update_configmap "$REDIS_STATS_NAME" \
   "./config/redis/redis-stats.php"
 
@@ -23,20 +23,16 @@ generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
-# Create a temporary values file
+# Create a minimal installation values file
 cat <<EOF > install.yaml
-global:
-  redis:
-    password: ""
+redis:
+  enableServiceLinks: false
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
     memory: $REDIS_REQUEST_MEMORY
 persistence:
   enabled: false
-  storageClass: "-"
-  storageClassName: "-"
-  size: 0Mi
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -49,31 +45,22 @@ sentinel:
   enabled: true
   persistence:
     enabled: false
-    size: 5Mi
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
 auth:
   enabled: false
-  sentinel: false
-  password: ""
-  usePasswordFileFromSecret: false
 EOF
 
-# Create minimal file for updates (or it will fail)
+# Create minimal upgrade file
 cat <<EOF > upgrade.yaml
 persistence:
   enabled: false
-  storageClass: "-"
-  storageClassName: "-"
-  size: 0Mi
 redis:
+  enableServiceLinks: false
   persistence:
     enabled: false
-    storageClass: "-"
-    storageClassName: "-"
-    size: 0Mi
   resources:
     requests:
       memory: $REDIS_REQUEST_MEMORY
@@ -94,14 +81,8 @@ replicas:
       cpu: $REDIS_REQUEST_CPU
 sentinel:
   enabled: true
-  externalAccess:
-    enabled: false
-  automateClusterRecovery: true
   persistence:
     enabled: false
-    storageClass: "-"
-    storageClassName: "-"
-    size: 0Mi
   resources:
     requests:
       memory: 32Mi
@@ -126,15 +107,27 @@ fi
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# Define Redis-specific legacy image overrides
+REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true"
+
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "install.yaml" \
-  "upgrade.yaml"
+  "upgrade.yaml" \
+  "$REDIS_LEGACY_ARGS"
+
+# Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)
+echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
+apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
+
+# Scale to desired replicas
+scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
+
+# Now wait for the StatefulSet to be ready with the correct probe configurations
 if ! wait_for "statefulset/$redis_node_name"; then
   echo "Failed to deploy Redis. Exiting..."
   exit 1
 fi
-
-scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Create a service for each redis pod
 create_redis_services "$REDIS_NAME"
@@ -156,7 +149,7 @@ if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   exit 1
 fi
 
-# Deploy Redis Insight (removed due to decurity flags)
+# Deploy Redis Insight (removed due to security flags)
 # echo "Deploying Redis Insight..."
 # oc apply -f ./openshift/redis-insight.yml
 

@@ -45,7 +45,7 @@ create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./c
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "$CRON_NAME-php-config" "moodle-php.ini=./config/php/php.ini"
 create_or_update_configmap "$CRON_NAME-shell" "cron.sh=./config/cron/cron.sh"
-create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh" "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
+create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh" "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv"
 create_or_update_configmap "migrate-courses" "update-course-tag.php=./config/moodle/update-course-tag.php" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 
 # Annotate the web deployment to trigger a restart if it already exists
@@ -145,6 +145,32 @@ deploy_resource_from_template ./openshift/check-pod-logs.yml \
   DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE
 
 sleep 60
+
+# Clear Moodle cache across all PHP pods after successful deployment
+echo "🧹 Clearing Moodle cache across PHP deployment..."
+
+# Debug: Check if the function exists before calling it
+echo "🔍 Debugging function availability..."
+if declare -f clear_moodle_cache_deployment > /dev/null 2>&1; then
+  echo "✅ Function clear_moodle_cache_deployment is available"
+else
+  echo "❌ Function clear_moodle_cache_deployment is NOT available"
+  echo "📋 Available cache-related functions:"
+  declare -F | grep -i cache || echo "   No cache functions found"
+  echo "📋 All available functions from _utils.sh:"
+  declare -F | grep -E "(moodle|cache|clear)" || echo "   No matching functions found"
+fi
+
+# Syntax check of _utils.sh
+echo "🔍 Validating _utils.sh syntax..."
+if bash -n ./openshift/scripts/_utils.sh; then
+  echo "✅ _utils.sh syntax is valid"
+else
+  echo "❌ _utils.sh has syntax errors"
+  exit 1
+fi
+
+clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"

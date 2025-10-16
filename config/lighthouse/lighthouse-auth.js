@@ -7,11 +7,63 @@ const options = {
   output: 'json'
 };
 
+async function retryNavigation(page, url, options = {}, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Navigation attempt ${attempt} to: ${url}`);
+      await page.goto(url, { waitUntil: 'networkidle0', timeout: 90000, ...options });
+      console.log(`✅ Successfully navigated to: ${url}`);
+      return;
+    } catch (error) {
+      console.log(`❌ Navigation attempt ${attempt} failed for: ${url}`);
+      console.log(`Error: ${error.message}`);
+
+      if (attempt === maxRetries) {
+        console.log(`🚫 All navigation attempts failed for: ${url}`);
+        throw new Error(`Failed to navigate to ${url} after ${maxRetries} attempts. Last error: ${error.message}`);
+      }
+
+      // Wait before retrying (exponential backoff)
+      const waitTime = Math.pow(2, attempt) * 1000;
+      console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+}
+
+async function waitForSiteReadiness(page, url, maxWaitTime = 300000) {
+  console.log(`🔍 Checking site readiness for: ${url}`);
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitTime) {
+    try {
+      const response = await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
+
+      if (response && response.status() === 200) {
+        console.log(`✅ Site is ready! Status: ${response.status()}`);
+        return true;
+      } else {
+        console.log(`⚠️ Site returned status: ${response ? response.status() : 'no response'}`);
+      }
+    } catch (error) {
+      console.log(`⚠️ Site not ready yet: ${error.message}`);
+    }
+
+    console.log(`⏳ Waiting 10 seconds before next readiness check...`);
+    await new Promise(resolve => setTimeout(resolve, 10000));
+  }
+
+  throw new Error(`Site was not ready within ${maxWaitTime / 1000} seconds`);
+}
+
 async function getDynamicPaths(page, baseUrl, maxPages = 5) {
   const paths = [];
 
   // 1. Go to "my/courses.php"
-  await page.goto(`${baseUrl}/my/courses.php`, { waitUntil: 'networkidle0' });
+  await retryNavigation(page, `${baseUrl}/my/courses.php`);
 
   // 2. Find the first course link
   const courseLinks = await page.$$eval('.course-info-container a', links =>
@@ -24,7 +76,7 @@ async function getDynamicPaths(page, baseUrl, maxPages = 5) {
   paths.push(new URL(courseUrl).pathname + new URL(courseUrl).search);
 
   // 3. Go to the course page
-  await page.goto(courseUrl, { waitUntil: 'networkidle0' });
+  await retryNavigation(page, courseUrl);
 
   // 4. Find up to 5 resource/page links
   const pageLinks = await page.$$eval(
@@ -77,7 +129,10 @@ async function runLighthouse(url, options, config = null) {
   const fs = (await import('fs')).default;
   const fsp = (await import('fs')).promises;
 
-  await page.goto(url, { waitUntil: 'networkidle0' }); // Use the APP_HOST_URL environment variable
+  // Wait for site to be ready before starting tests
+  await waitForSiteReadiness(page, url);
+
+  await retryNavigation(page, url); // Use the APP_HOST_URL environment variable
 
   // Check that the username and password are set and are strings
   if (typeof username !== 'string' || typeof password !== 'string') {
@@ -90,13 +145,13 @@ async function runLighthouse(url, options, config = null) {
 
   try {
     // Wait for the login button to be available
-    await page.waitForSelector('.loginform', { timeout: 10000 });
+    await page.waitForSelector('.loginform', { timeout: 30000 });
 
     // Click the link to open the form
     await page.click('.loginform>details summary');
 
     // Wait for the login button to be available and visible
-    await page.waitForSelector('#loginbtn', { visible: true, timeout: 10000 });
+    await page.waitForSelector('#loginbtn', { visible: true, timeout: 30000 });
 
     // Ensure the login button is visible and scroll it into view
     await page.evaluate(() => {
@@ -127,12 +182,31 @@ async function runLighthouse(url, options, config = null) {
     // Wait for both the click and navigation
     await Promise.all([
       page.click('#loginbtn'),
-      page.waitForNavigation({ timeout: 60000 }),
+      page.waitForNavigation({ timeout: 90000 }),
     ]);
   } catch (error) {
-    console.error('Error: Login button not found or not clickable within 10 seconds.');
-    console.error(error);
-    console.error('Content: ', content);
+    console.error('❌ Login process failed:');
+    console.error(`Error: ${error.message}`);
+    console.error(`URL: ${url}`);
+
+    // Take a diagnostic screenshot
+    try {
+      await page.screenshot({path: 'login_error_debug.png', fullPage: true});
+      console.log('📸 Debug screenshot saved as login_error_debug.png');
+    } catch (screenshotError) {
+      console.error('Failed to take debug screenshot:', screenshotError.message);
+    }
+
+    // Log page content for debugging
+    try {
+      const currentContent = await page.content();
+      await require('fs').promises.writeFile('login_error_debug.html', currentContent);
+      console.log('📄 Debug HTML saved as login_error_debug.html');
+    } catch (contentError) {
+      console.error('Failed to save debug HTML:', contentError.message);
+    }
+
+    console.error('Login button not found or not clickable within timeout period.');
     process.exit(1); // Fail the test
   }
 
@@ -159,7 +233,7 @@ async function runLighthouse(url, options, config = null) {
     const url = 'https://' + process.env.APP_HOST_URL + path;
     // await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
-    await page.goto(url, { waitUntil: 'networkidle0' }); // Navigate to the new URL
+    await retryNavigation(page, url); // Navigate to the new URL
 
     // Get the scores
     const accessibilityScore = lhr.categories.accessibility.score * 100;
