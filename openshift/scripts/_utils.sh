@@ -455,51 +455,119 @@ manage_maintenance_mode() {
   done
 }
 
-# Function to patch route and verify changes
-patch_route() {
-  local route_name=$1
-  local target_service=$2
+# Generic function to apply JSON patches to Kubernetes resources
+apply_resource_patch() {
+  local resource_type="$1"    # e.g., "statefulset", "deployment", "route"
+  local resource_name="$2"    # e.g., "redis-node"
+  local patch_operations="$3" # JSON array of patch operations as string
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local description="${5:-Applying patch}"
 
-  # Check if the route exists before attempting to patch
-  # if [[ $(oc get route "$route_name" 2>&1) =~ "NotFound" ]]; then
-  if ! oc get route "$route_name" &> /dev/null; then
-    echo "⚠️ Route $route_name does not exist. Skipping route patch."
-    return 0
+  echo "🔧 $description for $resource_type/$resource_name..."
+
+  # Check if the resource exists
+  if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
+    echo "⚠️ $resource_type $resource_name does not exist. Skipping patch."
+    return 1
   fi
 
-  echo "Patching route $route_name to point to $target_service..."
-  echo "Current route: $(oc get route $route_name -o jsonpath='{.spec.to.name}')"
+  # Create temporary patch file
+  local patch_file="/tmp/patch-${resource_type}-${resource_name}-$$.json"
+  echo "$patch_operations" > "$patch_file"
 
-  # Patch the route
-  oc patch route $route_name --type=json -p '[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
+  # Apply the patch
+  if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
+    echo "✅ Successfully applied patch to $resource_type/$resource_name"
+    rm -f "$patch_file"
+    return 0
+  else
+    echo "⚠️ Warning: Failed to apply patch to $resource_type/$resource_name"
+    rm -f "$patch_file"
+    return 1
+  fi
+}
 
-  # Wait for the route change to take effect
-  local max_retries=30
-  local retry_count=0
-  local wait_time=5
+# Generic function to verify patch results using JSONPath
+verify_patch_result() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local jsonpath_checks="$3"  # Array of "jsonpath:expected_value" pairs
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
 
-  # echo "DEBUG: Entering patch_route for $route_name $target_service"
+  echo "🔍 Verifying patch results for $resource_type/$resource_name..."
 
-  while true; do
-    # If the route is deleted or not yet created, skip waiting
-    if ! oc get route "$route_name" &> /dev/null; then
-      echo "⚠️ Route $route_name no longer exists during patch wait. Skipping further checks."
-      return 0
+  # Parse jsonpath_checks (format: "path1:value1,path2:value2")
+  IFS=',' read -ra checks <<< "$jsonpath_checks"
+
+  local all_verified=true
+  for check in "${checks[@]}"; do
+    IFS=':' read -ra parts <<< "$check"
+    local jsonpath="${parts[0]}"
+    local expected="${parts[1]}"
+
+    local actual
+    actual=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath="$jsonpath" 2>/dev/null)
+
+    if [[ "$actual" == "$expected" ]]; then
+      echo "✅ Verified: $jsonpath = $expected"
+    else
+      echo "⚠️ Failed verification: $jsonpath = '$actual' (expected '$expected')"
+      all_verified=false
     fi
-
-    current_target=$(oc get route $route_name -o jsonpath='{.spec.to.name}')
-    if [[ "$current_target" == "$target_service" ]]; then
-      echo "✔️ Route $route_name successfully updated to $target_service."
-      break
-    fi
-    if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds. Exiting..."
-      return 1
-    fi
-    echo "Waiting for route $route_name to update to $target_service..."
-    sleep $wait_time
-    retry_count=$((retry_count + 1))
   done
+
+  [[ "$all_verified" == "true" ]]
+}
+
+# Updated patch_route function using generic approach
+patch_route() {
+  local route_name="$1"
+  local target_service="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  echo "Patching route $route_name to point to $target_service..."
+
+  # Show current route target
+  if oc get route "$route_name" -n "$namespace" &> /dev/null; then
+    local current_target
+    current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
+    echo "Current route: $current_target"
+  fi
+
+  # Create patch operation
+  local patch_ops='[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
+
+  # Apply the patch using generic function
+  if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
+    # Wait for the route change to take effect
+    local max_retries=30
+    local retry_count=0
+    local wait_time=5
+
+    while [[ $retry_count -lt $max_retries ]]; do
+      # If the route is deleted or not yet created, skip waiting
+      if ! oc get route "$route_name" -n "$namespace" &> /dev/null; then
+        echo "⚠️ Route $route_name no longer exists during patch wait. Skipping further checks."
+        return 0
+      fi
+
+      local current_target
+      current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}')
+      if [[ "$current_target" == "$target_service" ]]; then
+        echo "✔️ Route $route_name successfully updated to $target_service."
+        return 0
+      fi
+
+      echo "Waiting for route $route_name to update to $target_service... (attempt $((retry_count + 1))/$max_retries)"
+      sleep $wait_time
+      retry_count=$((retry_count + 1))
+    done
+
+    echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds."
+    return 1
+  else
+    return 1
+  fi
 }
 
 # Function to handle job-specific logic
@@ -2129,37 +2197,52 @@ remove_redis_startup_probe() {
   local statefulset_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  echo "🔧 Checking for problematic Redis startup probe..."
+  echo "🔧 Checking for problematic startup probes..."
 
-  # Check if startup probe exists on the redis container (first container)
-  local has_startup_probe
-  has_startup_probe=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
+  # Check if startup probes exist on both containers
+  local redis_startup_probe
+  local sentinel_startup_probe
+  redis_startup_probe=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
+  sentinel_startup_probe=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[1].startupProbe}' 2>/dev/null)
 
-  if [[ -n "$has_startup_probe" && "$has_startup_probe" != "null" ]]; then
-    echo "⚠️  Found problematic startup probe on Redis container. Removing..."
+  local patches=()
+  local patch_needed=false
 
-    # Create a patch to remove the startup probe from the redis container
-    cat > /tmp/remove-startup-probe-patch.json << 'EOF'
-[
-  {
-    "op": "remove",
-    "path": "/spec/template/spec/containers/0/startupProbe"
-  }
-]
-EOF
+  # Check Redis container startup probe
+  if [[ -n "$redis_startup_probe" && "$redis_startup_probe" != "null" ]]; then
+    echo "⚠️  Found problematic startup probe on Redis container"
+    patches+=('{"op": "remove", "path": "/spec/template/spec/containers/0/startupProbe"}')
+    patch_needed=true
+  fi
 
-    # Apply the patch to remove the startup probe
-    if oc patch statefulset "$statefulset_name" -n "$namespace" --type=json --patch-file=/tmp/remove-startup-probe-patch.json; then
-      echo "✅ Successfully removed Redis startup probe"
-      rm -f /tmp/remove-startup-probe-patch.json
+  # Check Sentinel container startup probe
+  if [[ -n "$sentinel_startup_probe" && "$sentinel_startup_probe" != "null" ]]; then
+    echo "⚠️  Found problematic startup probe on Sentinel container"
+    patches+=('{"op": "remove", "path": "/spec/template/spec/containers/1/startupProbe"}')
+    patch_needed=true
+  fi
+
+  if [[ "$patch_needed" == "true" ]]; then
+    # Create the JSON patch array
+    local patch_content="["
+    for i in "${!patches[@]}"; do
+      if [[ $i -gt 0 ]]; then
+        patch_content+=","
+      fi
+      patch_content+="${patches[$i]}"
+    done
+    patch_content+="]"
+
+    # Use generic apply_resource_patch function
+    if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Removing problematic startup probes"; then
+      echo "✅ Successfully removed problematic startup probes"
       return 0
     else
-      echo "⚠️  Warning: Failed to remove startup probe"
-      rm -f /tmp/remove-startup-probe-patch.json
+      echo "⚠️  Warning: Failed to remove startup probes"
       return 1
     fi
   else
-    echo "✅ No problematic startup probe found"
+    echo "✅ No problematic startup probes found"
     return 0
   fi
 }
@@ -2176,8 +2259,7 @@ fix_redis_container_probes() {
   echo "🔧 Updating Redis container probe configurations (${initial_delay}s delay)..."
 
   # Create a comprehensive patch to fix both liveness and readiness probes
-  cat > /tmp/fix-redis-probes-patch.json << EOF
-[
+  local patch_content='[
   {
     "op": "replace",
     "path": "/spec/template/spec/containers/0/livenessProbe",
@@ -2189,10 +2271,10 @@ fix_redis_container_probes() {
           "/health/ping_liveness_local.sh 5"
         ]
       },
-      "initialDelaySeconds": ${initial_delay},
-      "timeoutSeconds": ${timeout},
-      "periodSeconds": ${period},
-      "failureThreshold": ${failure_threshold},
+      "initialDelaySeconds": '${initial_delay}',
+      "timeoutSeconds": '${timeout}',
+      "periodSeconds": '${period}',
+      "failureThreshold": '${failure_threshold}',
       "successThreshold": 1
     }
   },
@@ -2207,37 +2289,100 @@ fix_redis_container_probes() {
           "/health/ping_readiness_local.sh 1"
         ]
       },
-      "initialDelaySeconds": ${initial_delay},
-      "timeoutSeconds": ${timeout},
-      "periodSeconds": ${period},
-      "failureThreshold": ${failure_threshold},
+      "initialDelaySeconds": '${initial_delay}',
+      "timeoutSeconds": '${timeout}',
+      "periodSeconds": '${period}',
+      "failureThreshold": '${failure_threshold}',
       "successThreshold": 1
     }
   }
-]
-EOF
+]'
 
-  # Apply the patch to fix the probe configurations
-  if oc patch statefulset "$statefulset_name" -n "$namespace" --type=json --patch-file=/tmp/fix-redis-probes-patch.json; then
+  # Use generic apply_resource_patch function
+  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Updating Redis container probe configurations"; then
     echo "✅ Successfully updated Redis container probe configurations"
 
-    # Verify the probes were updated
-    local liveness_delay
-    local readiness_delay
-    liveness_delay=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}' 2>/dev/null)
-    readiness_delay=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds}' 2>/dev/null)
-
-    if [[ "$liveness_delay" == "$initial_delay" && "$readiness_delay" == "$initial_delay" ]]; then
+    # Verify the probes were updated using verify_patch_result
+    local verification_checks="{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}:${initial_delay},{.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds}:${initial_delay}"
+    if verify_patch_result "statefulset" "$statefulset_name" "$verification_checks" "$namespace"; then
       echo "✅ Verified: Redis probes updated with ${initial_delay}s delay"
     else
-      echo "⚠️  Warning: Probe verification failed (liveness: $liveness_delay, readiness: $readiness_delay)"
+      echo "⚠️  Warning: Redis probe verification failed"
     fi
 
-    rm -f /tmp/fix-redis-probes-patch.json
     return 0
   else
     echo "⚠️  Warning: Failed to update Redis container probes"
-    rm -f /tmp/fix-redis-probes-patch.json
+    return 1
+  fi
+}
+
+# Function to fix Sentinel container probe timing and commands
+fix_sentinel_container_probes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local initial_delay="${3:-180}"
+  local timeout="${4:-10}"
+  local period="${5:-10}"
+  local failure_threshold="${6:-5}"
+
+  echo "🔧 Updating Sentinel container probe configurations (${initial_delay}s delay)..."
+
+  # Create a comprehensive patch to fix liveness and readiness probes
+  local patch_content='[
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/1/livenessProbe",
+    "value": {
+      "exec": {
+        "command": [
+          "/bin/bash",
+          "-c",
+          "/health/ping_sentinel.sh 10"
+        ]
+      },
+      "initialDelaySeconds": '${initial_delay}',
+      "timeoutSeconds": '${timeout}',
+      "periodSeconds": '${period}',
+      "failureThreshold": '${failure_threshold}',
+      "successThreshold": 1
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/1/readinessProbe",
+    "value": {
+      "exec": {
+        "command": [
+          "/bin/bash",
+          "-c",
+          "/health/ping_sentinel.sh 10"
+        ]
+      },
+      "initialDelaySeconds": '${initial_delay}',
+      "timeoutSeconds": '${timeout}',
+      "periodSeconds": '${period}',
+      "failureThreshold": '${failure_threshold}',
+      "successThreshold": 1
+    }
+  }
+]'
+
+  # Use generic apply_resource_patch function
+  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Updating Sentinel container probe configurations"; then
+    echo "✅ Successfully updated Sentinel container probe configurations"
+
+    # Verify the probes were updated using verify_patch_result
+    local verification_checks="{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}:${initial_delay},{.spec.template.spec.containers[1].readinessProbe.initialDelaySeconds}:${initial_delay}"
+    if verify_patch_result "statefulset" "$statefulset_name" "$verification_checks" "$namespace"; then
+      echo "✅ Verified: Sentinel probes updated with ${initial_delay}s delay"
+    else
+      echo "⚠️  Warning: Sentinel probe verification failed"
+    fi
+
+    return 0
+  else
+    echo "⚠️  Warning: Failed to update Sentinel container probes"
     return 1
   fi
 }
@@ -2253,8 +2398,9 @@ apply_redis_probe_fixes() {
   # Remove startup probe first
   remove_redis_startup_probe "$statefulset_name" "$namespace"
 
-  # Fix liveness and readiness probes
+  # Fix liveness and readiness probes for both Redis and Sentinel containers
   fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+  fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
 
   echo "✅ Redis probe fixes completed"
 }
