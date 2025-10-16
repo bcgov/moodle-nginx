@@ -23,60 +23,10 @@ generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
-# Create a temporary values file
+# Create a minimal installation values file
 cat <<EOF > install.yaml
-global:
-  redis:
-    password: ""
 redis:
-  master:
-    enableServiceLinks: false
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_readiness_local.sh 1'
-  replica:
-    enableServiceLinks: false
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_readiness_local.sh 1'
+  enableServiceLinks: false
 resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
@@ -95,28 +45,6 @@ sentinel:
   enabled: true
   persistence:
     enabled: false
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 10'
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 10'
   resources:
     requests:
       cpu: $REDIS_REQUEST_CPU
@@ -125,59 +53,12 @@ auth:
   enabled: false
 EOF
 
-# Create minimal file for updates (or it will fail)
+# Create minimal upgrade file
 cat <<EOF > upgrade.yaml
 persistence:
   enabled: false
 redis:
-  master:
-    enableServiceLinks: false
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_readiness_local.sh 1'
-  replica:
-    enableServiceLinks: false
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_liveness_local.sh 5'
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 180
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-      exec:
-        command:
-          - /bin/bash
-          - -c
-          - '/health/ping_readiness_local.sh 1'
+  enableServiceLinks: false
   persistence:
     enabled: false
   resources:
@@ -202,28 +83,6 @@ sentinel:
   enabled: true
   persistence:
     enabled: false
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 10'
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    timeoutSeconds: 10
-    periodSeconds: 10
-    failureThreshold: 5
-    exec:
-      command:
-        - /bin/bash
-        - -c
-        - '/health/ping_sentinel.sh 10'
   resources:
     requests:
       memory: 32Mi
@@ -261,59 +120,9 @@ if ! wait_for "statefulset/$redis_node_name"; then
   exit 1
 fi
 
-# Fix: Remove the problematic master startup probe that Bitnami chart ignores in configuration
-echo "🔧 Applying post-deployment fix: Removing problematic Redis master startup probe..."
-remove_redis_master_startup_probe() {
-  local statefulset_name="$1"
-
-  echo "Checking if Redis master startup probe exists and needs removal..."
-
-  # Check if startup probe exists on the redis container (first container)
-  local has_startup_probe
-  has_startup_probe=$(oc get statefulset "$statefulset_name" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
-
-  if [[ -n "$has_startup_probe" && "$has_startup_probe" != "null" ]]; then
-    echo "⚠️  Found problematic startup probe on Redis master container. Removing..."
-
-    # Create a patch to remove the startup probe from the redis container
-    cat > /tmp/remove-startup-probe-patch.json << 'EOF'
-[
-  {
-    "op": "remove",
-    "path": "/spec/template/spec/containers/0/startupProbe"
-  }
-]
-EOF
-
-    # Apply the patch to remove the startup probe
-    if oc patch statefulset "$statefulset_name" --type=json --patch-file=/tmp/remove-startup-probe-patch.json; then
-      echo "✅ Successfully removed Redis master startup probe"
-
-      # Wait a moment for the change to be applied
-      sleep 2
-
-      # Verify the probe was removed
-      local probe_check
-      probe_check=$(oc get statefulset "$statefulset_name" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
-      if [[ -z "$probe_check" || "$probe_check" == "null" ]]; then
-        echo "✅ Verified: Redis master startup probe successfully removed"
-      else
-        echo "⚠️  Warning: Startup probe removal verification failed, but continuing deployment"
-      fi
-
-      # Clean up the temporary patch file
-      rm -f /tmp/remove-startup-probe-patch.json
-    else
-      echo "⚠️  Warning: Failed to remove startup probe, but continuing deployment"
-      rm -f /tmp/remove-startup-probe-patch.json
-    fi
-  else
-    echo "✅ No problematic startup probe found on Redis master container"
-  fi
-}
-
-# Apply the startup probe fix
-remove_redis_master_startup_probe "$redis_node_name"
+# Apply Redis probe fixes using utility functions
+echo "🔧 Applying post-deployment Redis probe fixes..."
+apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
 
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 

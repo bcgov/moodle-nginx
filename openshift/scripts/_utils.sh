@@ -2123,3 +2123,138 @@ platform_cp() {
     return 1
   fi
 }
+
+# Function to remove problematic Redis startup probe
+remove_redis_startup_probe() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🔧 Checking for problematic Redis startup probe..."
+
+  # Check if startup probe exists on the redis container (first container)
+  local has_startup_probe
+  has_startup_probe=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null)
+
+  if [[ -n "$has_startup_probe" && "$has_startup_probe" != "null" ]]; then
+    echo "⚠️  Found problematic startup probe on Redis container. Removing..."
+
+    # Create a patch to remove the startup probe from the redis container
+    cat > /tmp/remove-startup-probe-patch.json << 'EOF'
+[
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/startupProbe"
+  }
+]
+EOF
+
+    # Apply the patch to remove the startup probe
+    if oc patch statefulset "$statefulset_name" -n "$namespace" --type=json --patch-file=/tmp/remove-startup-probe-patch.json; then
+      echo "✅ Successfully removed Redis startup probe"
+      rm -f /tmp/remove-startup-probe-patch.json
+      return 0
+    else
+      echo "⚠️  Warning: Failed to remove startup probe"
+      rm -f /tmp/remove-startup-probe-patch.json
+      return 1
+    fi
+  else
+    echo "✅ No problematic startup probe found"
+    return 0
+  fi
+}
+
+# Function to fix Redis container probe timing and commands
+fix_redis_container_probes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local initial_delay="${3:-180}"
+  local timeout="${4:-10}"
+  local period="${5:-10}"
+  local failure_threshold="${6:-5}"
+
+  echo "🔧 Updating Redis container probe configurations (${initial_delay}s delay)..."
+
+  # Create a comprehensive patch to fix both liveness and readiness probes
+  cat > /tmp/fix-redis-probes-patch.json << EOF
+[
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/livenessProbe",
+    "value": {
+      "exec": {
+        "command": [
+          "/bin/bash",
+          "-c",
+          "/health/ping_liveness_local.sh 5"
+        ]
+      },
+      "initialDelaySeconds": ${initial_delay},
+      "timeoutSeconds": ${timeout},
+      "periodSeconds": ${period},
+      "failureThreshold": ${failure_threshold},
+      "successThreshold": 1
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/readinessProbe",
+    "value": {
+      "exec": {
+        "command": [
+          "/bin/bash",
+          "-c",
+          "/health/ping_readiness_local.sh 1"
+        ]
+      },
+      "initialDelaySeconds": ${initial_delay},
+      "timeoutSeconds": ${timeout},
+      "periodSeconds": ${period},
+      "failureThreshold": ${failure_threshold},
+      "successThreshold": 1
+    }
+  }
+]
+EOF
+
+  # Apply the patch to fix the probe configurations
+  if oc patch statefulset "$statefulset_name" -n "$namespace" --type=json --patch-file=/tmp/fix-redis-probes-patch.json; then
+    echo "✅ Successfully updated Redis container probe configurations"
+
+    # Verify the probes were updated
+    local liveness_delay
+    local readiness_delay
+    liveness_delay=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}' 2>/dev/null)
+    readiness_delay=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds}' 2>/dev/null)
+
+    if [[ "$liveness_delay" == "$initial_delay" && "$readiness_delay" == "$initial_delay" ]]; then
+      echo "✅ Verified: Redis probes updated with ${initial_delay}s delay"
+    else
+      echo "⚠️  Warning: Probe verification failed (liveness: $liveness_delay, readiness: $readiness_delay)"
+    fi
+
+    rm -f /tmp/fix-redis-probes-patch.json
+    return 0
+  else
+    echo "⚠️  Warning: Failed to update Redis container probes"
+    rm -f /tmp/fix-redis-probes-patch.json
+    return 1
+  fi
+}
+
+# Combined function to apply all Redis probe fixes
+apply_redis_probe_fixes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local initial_delay="${3:-180}"
+
+  echo "🔧 Applying Redis probe fixes to $statefulset_name..."
+
+  # Remove startup probe first
+  remove_redis_startup_probe "$statefulset_name" "$namespace"
+
+  # Fix liveness and readiness probes
+  fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+
+  echo "✅ Redis probe fixes completed"
+}
