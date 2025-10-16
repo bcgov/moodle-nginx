@@ -2365,31 +2365,6 @@ apply_redis_probe_fixes() {
   echo "✅ Redis probe fixes completed"
 }
 
-# Helper function to extract Moodle config values
-get_moodle_config_value() {
-  local config_key="$1"
-  local web_root="${2:-/var/www/html}"
-  local config_file="$web_root/config.php"
-
-  if [[ ! -f "$config_file" ]]; then
-    echo ""
-    return 1
-  fi
-
-  # Extract the config value using grep and sed
-  # This handles both quoted strings and variables
-  local value
-  value=$(grep -E "^\s*\\\$CFG->$config_key\s*=" "$config_file" | head -1 | sed -E "s/.*=\s*['\"]([^'\"]+)['\"].*;\s*$/\1/")
-
-  # Handle variable references like $_SERVER['VARIABLE'] - return empty as we can't resolve them
-  if [[ "$value" =~ ^\$_SERVER\[.*\]$ ]] || [[ "$value" == \$CFG->* ]]; then
-    echo ""
-    return 1
-  fi
-
-  echo "$value"
-}
-
 # Function to clear Moodle cache on a single pod
 clear_cache_on_pod() {
   local pod_name="$1"
