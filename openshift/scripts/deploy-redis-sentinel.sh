@@ -16,9 +16,6 @@ create_or_update_configmap "$REDIS_STATS_NAME" \
 # Delete existing Service for Redis proxy if it exists
 delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
 
-# Generate dynamic sentinel config for the current environment
-generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
-
 # Create the ConfigMap for Redis proxy with the generated config
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
@@ -164,8 +161,10 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
-# Temporary fix: swap 'e66ac2' with '950003' in the image tag for redis-proxy to fix a permissions issue with 950003 version
-# DEPLOY_IMAGE_FIXED=$(echo "$REDIS_PROXY_IMAGE" | sed 's/:e66ac2-dev/:950003-dev/')
+
+# Generate dynamic redis proxy config for the current environment
+generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
+
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
   DEPLOY_IMAGE=${REDIS_PROXY_IMAGE} \
