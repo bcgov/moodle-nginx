@@ -16,12 +16,15 @@ create_or_update_configmap "$REDIS_STATS_NAME" \
 # Delete existing Service for Redis proxy if it exists
 delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
 
-# Generate dynamic sentinel config for the current environment
-generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
-
 # Create the ConfigMap for Redis proxy with the generated config
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
+
+# Ensure resource values are set with defaults if missing
+REDIS_REQUEST_CPU="${REDIS_REQUEST_CPU:-20m}"
+REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
+REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
+REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
 # Create a minimal installation values file
 cat <<EOF > install.yaml
@@ -31,6 +34,9 @@ resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
     memory: $REDIS_REQUEST_MEMORY
+  limits:
+    cpu: $REDIS_LIMIT_CPU
+    memory: $REDIS_LIMIT_MEMORY
 persistence:
   enabled: false
 replicas:
@@ -41,6 +47,9 @@ replicas:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
+    limits:
+      cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 sentinel:
   enabled: true
   persistence:
@@ -49,6 +58,9 @@ sentinel:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
+    limits:
+      cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 auth:
   enabled: false
 EOF
@@ -66,8 +78,8 @@ redis:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -77,19 +89,30 @@ replicas:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 sentinel:
   enabled: true
   persistence:
     enabled: false
   resources:
     requests:
-      memory: 32Mi
-      cpu: 5m
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: 256Mi
-      cpu: 25m
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
+sentinel:
+  enabled: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
+    limits:
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -138,8 +161,10 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
-# Temporary fix: swap 'e66ac2' with '950003' in the image tag for redis-proxy to fix a permissions issue with 950003 version
-# DEPLOY_IMAGE_FIXED=$(echo "$REDIS_PROXY_IMAGE" | sed 's/:e66ac2-dev/:950003-dev/')
+
+# Generate dynamic redis proxy config for the current environment
+generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
+
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
   DEPLOY_IMAGE=${REDIS_PROXY_IMAGE} \

@@ -1862,7 +1862,7 @@ get_pods_for_resource() {
   return 0
 }
 
-generate_sentinel_config_json() {
+generate_redis_proxy_config_json() {
   local namespace="$1"
   local redis_sts_name="$2"
   local headless_service="$3"
