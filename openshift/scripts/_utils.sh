@@ -2375,20 +2375,20 @@ clear_cache_on_pod() {
 
   # Step 1: Purge cache
   echo "🔄 Purging cache..."
-  if ! oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/purge_caches.php; then
+  if ! oc exec -n "$namespace" "$pod_name" -- php /var/www/html/admin/cli/purge_caches.php; then
     echo "❌ Cache purge failed on $pod_name"
     return 1
   fi
 
   # Step 2: Rebuild theme cache
   echo "🎨 Rebuilding theme cache..."
-  if ! oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/build_theme_css.php --themes="$theme_name"; then
+  if ! oc exec -n "$namespace" "$pod_name" -- php /var/www/html/admin/cli/build_theme_css.php --themes="$theme_name"; then
     echo "⚠️  Theme rebuild failed on $pod_name (not critical)"
   fi
 
   # Step 3: Final cache purge
   echo "🔄 Final cache purge..."
-  oc exec -n "$namespace" "$pod_name" --timeout=300s -- php /var/www/html/admin/cli/purge_caches.php >/dev/null 2>&1 || true
+  oc exec -n "$namespace" "$pod_name" -- php /var/www/html/admin/cli/purge_caches.php >/dev/null 2>&1 || true
 
   echo "✅ Cache clearing completed on $pod_name"
   return 0
