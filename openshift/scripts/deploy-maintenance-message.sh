@@ -1,7 +1,6 @@
 #!/bin/bash
 
 DEPLOYMENT_SELECTOR="deployment/$BUILD_NAME"
-ROUTE_NAME="moodle-web"
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh
@@ -50,15 +49,5 @@ if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "1500s"; then
   exit 1
 fi
 
-# Redirect traffic to maintenance-message
-if ! oc get route "$ROUTE_NAME" &> /dev/null; then
-  echo "⚠️ Route $ROUTE_NAME does not exist. Skipping route patch."
-else
-  patch_route $ROUTE_NAME $BUILD_NAME
-fi
-# Redirct main URL (https://learning.gww.gov.bc.ca) to maintenance-message
-if ! oc get route "moodle-custom" &> /dev/null; then
-  echo "⚠️ Route moodle-custom does not exist. Skipping route patch."
-else
-  patch_route "moodle-custom" $BUILD_NAME
-fi
+# Redirect traffic to maintenance-message (auto-detects environment)
+patch_main_route $BUILD_NAME
