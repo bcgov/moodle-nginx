@@ -23,6 +23,12 @@ generate_sentinel_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=./config/redis/sentinel_tunnel.remote.config.json"
 
+# Ensure resource values are set with defaults if missing
+REDIS_REQUEST_CPU="${REDIS_REQUEST_CPU:-20m}"
+REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
+REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
+REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
+
 # Create a minimal installation values file
 cat <<EOF > install.yaml
 redis:
@@ -31,6 +37,9 @@ resources:
   requests:
     cpu: $REDIS_REQUEST_CPU
     memory: $REDIS_REQUEST_MEMORY
+  limits:
+    cpu: $REDIS_LIMIT_CPU
+    memory: $REDIS_LIMIT_MEMORY
 persistence:
   enabled: false
 replicas:
@@ -41,6 +50,9 @@ replicas:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
+    limits:
+      cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 sentinel:
   enabled: true
   persistence:
@@ -49,6 +61,9 @@ sentinel:
     requests:
       cpu: $REDIS_REQUEST_CPU
       memory: $REDIS_REQUEST_MEMORY
+    limits:
+      cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 auth:
   enabled: false
 EOF
@@ -66,8 +81,8 @@ redis:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
@@ -77,19 +92,30 @@ replicas:
       memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 sentinel:
   enabled: true
   persistence:
     enabled: false
   resources:
     requests:
-      memory: 32Mi
-      cpu: 5m
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: 256Mi
-      cpu: 25m
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
+sentinel:
+  enabled: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      memory: $REDIS_REQUEST_MEMORY
+      cpu: $REDIS_REQUEST_CPU
+    limits:
+      memory: $REDIS_LIMIT_MEMORY
+      cpu: $REDIS_LIMIT_CPU
 EOF
 
 # Scale down the Redis deployment if it exists
