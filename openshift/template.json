@@ -884,7 +884,7 @@
       "displayName": "Moodle File backups",
       "name": "BACKUP_VOLUME_SIZE",
       "required": true,
-      "value": "6Gi"
+      "value": "8Gi"
     },
     {
       "description": "Path where the persistent volume will be mounted",
