@@ -1869,21 +1869,43 @@ generate_redis_proxy_config_json() {
   local port="${4:-26379}"
   local output_file="${5:-sentinel_tunnel.remote.config.json}"
 
+  echo "🔧 Generating Redis proxy config for namespace: $namespace"
+  echo "   - StatefulSet: $redis_sts_name"
+  echo "   - Service: $headless_service"
+  echo "   - Port: $port"
+  echo "   - Output: $output_file"
+
   # Get the number of replicas from the StatefulSet
   local replicas
-  replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
+  replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
   if [[ -z "$replicas" ]]; then
-    echo "Could not determine replica count for $redis_sts_name in $namespace"
+    echo "❌ Could not determine replica count for $redis_sts_name in $namespace"
     return 1
+  fi
+
+  echo "   - Detected $replicas replicas"
+
+  # Verify that the StatefulSet pods actually exist
+  local actual_pods
+  actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$redis_sts_name" --no-headers 2>/dev/null | wc -l)
+  if [[ "$actual_pods" != "$replicas" ]]; then
+    echo "⚠️  Warning: Expected $replicas pods but found $actual_pods for StatefulSet $redis_sts_name"
   fi
 
   # Build the sentinels list
   local sentinels=()
   for i in $(seq 0 $((replicas-1))); do
-    sentinels+=("\"${redis_sts_name}-$i.${headless_service}.${namespace}.svc.cluster.local:${port}\"")
+    local sentinel_address="${redis_sts_name}-$i.${headless_service}.${namespace}.svc.cluster.local:${port}"
+    sentinels+=("\"$sentinel_address\"")
+    echo "   - Adding sentinel: $sentinel_address"
   done
   local sentinels_joined
   sentinels_joined=$(IFS=, ; echo "${sentinels[*]}")
+
+  # Create the output directory if it doesn't exist
+  local output_dir
+  output_dir=$(dirname "$output_file")
+  mkdir -p "$output_dir"
 
   # Output the JSON
   cat <<EOF > "$output_file"
@@ -1891,14 +1913,154 @@ generate_redis_proxy_config_json() {
   "Sentinels_addresses_list":[
     $sentinels_joined
   ],
-	"Databases":[
-		{
-			"Name": "mymaster",
-			"Local_port": "6379"
-		}
-	]
+  "Databases":[
+    {
+      "Name": "mymaster",
+      "Local_port": "6379"
+    }
+  ]
 }
 EOF
+
+  if [[ $? -eq 0 ]]; then
+    echo "✅ Successfully generated Redis proxy config: $output_file"
+    return 0
+  else
+    echo "❌ Failed to write Redis proxy config to: $output_file"
+    return 1
+  fi
+}
+
+# Function to validate the generated Redis proxy configuration
+validate_redis_proxy_config() {
+  local config_file="$1"
+  local expected_namespace="$2"
+  local expected_sts_name="$3"
+
+  echo "🔍 Validating Redis proxy configuration: $config_file"
+
+  # Check if file exists and is readable
+  if [[ ! -f "$config_file" ]]; then
+    echo "❌ Config file does not exist: $config_file"
+    return 1
+  fi
+
+  if [[ ! -r "$config_file" ]]; then
+    echo "❌ Config file is not readable: $config_file"
+    return 1
+  fi
+
+  # Check if it's valid JSON
+  if ! jq . "$config_file" >/dev/null 2>&1; then
+    echo "❌ Config file is not valid JSON: $config_file"
+    return 1
+  fi
+
+  # Check required fields exist
+  local sentinels_count
+  sentinels_count=$(jq '.Sentinels_addresses_list | length' "$config_file" 2>/dev/null)
+  if [[ -z "$sentinels_count" || "$sentinels_count" == "null" ]]; then
+    echo "❌ Config file missing Sentinels_addresses_list: $config_file"
+    return 1
+  fi
+
+  if [[ "$sentinels_count" -eq 0 ]]; then
+    echo "❌ Config file has empty Sentinels_addresses_list: $config_file"
+    return 1
+  fi
+
+  # Check that sentinels contain the expected namespace
+  local sentinel_namespace_count
+  sentinel_namespace_count=$(jq -r '.Sentinels_addresses_list[]' "$config_file" | grep -c "$expected_namespace" || true)
+  if [[ "$sentinel_namespace_count" -eq 0 ]]; then
+    echo "❌ Config file sentinels do not contain expected namespace '$expected_namespace'"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check that all sentinels contain the expected namespace (not mixed)
+  if [[ "$sentinel_namespace_count" != "$sentinels_count" ]]; then
+    echo "❌ Config file contains mixed namespaces (expected all to be '$expected_namespace')"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check database configuration
+  local db_name
+  db_name=$(jq -r '.Databases[0].Name' "$config_file" 2>/dev/null)
+  if [[ "$db_name" != "mymaster" ]]; then
+    echo "❌ Config file missing or incorrect database name (expected 'mymaster', got '$db_name')"
+    return 1
+  fi
+
+  local local_port
+  local_port=$(jq -r '.Databases[0].Local_port' "$config_file" 2>/dev/null)
+  if [[ "$local_port" != "6379" ]]; then
+    echo "❌ Config file missing or incorrect local port (expected '6379', got '$local_port')"
+    return 1
+  fi
+
+  echo "✅ Redis proxy configuration validation passed:"
+  echo "   - Found $sentinels_count sentinels for namespace: $expected_namespace"
+  echo "   - Database: $db_name on port $local_port"
+  echo "   - All sentinels correctly reference namespace: $expected_namespace"
+
+  return 0
+}
+
+# Function to check and display the current Redis proxy configuration
+check_redis_proxy_config() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  local redis_proxy_name="${2:-redis-proxy}"
+
+  echo "🔍 Checking current Redis proxy configuration in namespace: $namespace"
+
+  # Check if ConfigMap exists
+  if ! oc get configmap "$redis_proxy_name-config" -n "$namespace" >/dev/null 2>&1; then
+    echo "❌ ConfigMap '$redis_proxy_name-config' does not exist in namespace $namespace"
+    return 1
+  fi
+
+  # Extract and display the configuration
+  echo "📋 Current Redis proxy configuration:"
+  local config_json
+  config_json=$(oc get configmap "$redis_proxy_name-config" -n "$namespace" -o jsonpath='{.data.config\.json}' 2>/dev/null)
+
+  if [[ -z "$config_json" ]]; then
+    echo "❌ Failed to extract config.json from ConfigMap"
+    return 1
+  fi
+
+  # Parse and display sentinels
+  echo "$config_json" | jq . 2>/dev/null || {
+    echo "❌ Configuration is not valid JSON"
+    echo "Raw configuration:"
+    echo "$config_json"
+    return 1
+  }
+
+  # Check namespace consistency
+  local sentinel_namespaces
+  sentinel_namespaces=$(echo "$config_json" | jq -r '.Sentinels_addresses_list[]' | grep -o '\.[^.]*\.svc\.cluster\.local:' | sed 's/\.\([^.]*\)\.svc\.cluster\.local:/\1/' | sort -u)
+
+  echo ""
+  echo "🔍 Analysis:"
+  echo "   - ConfigMap: $redis_proxy_name-config"
+  echo "   - Namespace: $namespace"
+  echo "   - Sentinels found in config namespaces: $sentinel_namespaces"
+
+  if [[ $(echo "$sentinel_namespaces" | wc -w) -gt 1 ]]; then
+    echo "⚠️  WARNING: Configuration contains sentinels from multiple namespaces!"
+  elif [[ "$sentinel_namespaces" != "$namespace" ]]; then
+    echo "❌ ERROR: Configuration namespace ($sentinel_namespaces) does not match deployment namespace ($namespace)"
+    return 1
+  else
+    echo "✅ Configuration namespace matches deployment namespace"
+  fi
+
+  return 0
 }
 
 should_migrate_by_version() {
