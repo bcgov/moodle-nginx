@@ -1885,11 +1885,63 @@ generate_redis_proxy_config_json() {
 
   echo "   - Detected $replicas replicas"
 
+  # Debug: Show the StatefulSet's label selector for troubleshooting
+  local sts_selector
+  sts_selector=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+  if [[ -n "$sts_selector" ]]; then
+    echo "   - StatefulSet uses selector: $sts_selector"
+  fi
+
   # Verify that the StatefulSet pods actually exist
-  local actual_pods
-  actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$redis_sts_name" --no-headers 2>/dev/null | wc -l)
+  echo "   - Checking for actual pods..."
+
+  # Use the StatefulSet's actual label selector (most reliable)
+  local actual_pods=0
+  local label_used=""
+
+  if [[ -n "$sts_selector" ]] && [[ "$sts_selector" != "null" ]] && [[ "$sts_selector" != "{}" ]]; then
+    # Convert the JSON selector to kubectl format
+    local kubectl_selector
+    kubectl_selector=$(echo "$sts_selector" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null)
+
+    if [[ -n "$kubectl_selector" ]] && [[ "$kubectl_selector" != "null" ]]; then
+      actual_pods=$(oc get pods -n "$namespace" -l "$kubectl_selector" --no-headers 2>/dev/null | wc -l)
+      label_used="StatefulSet selector: $kubectl_selector"
+    fi
+  fi
+
+  # Fallback methods if StatefulSet selector didn't work
+  if [[ "$actual_pods" -eq 0 ]]; then
+    # Try app.kubernetes.io/name label
+    actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$redis_sts_name" --no-headers 2>/dev/null | wc -l)
+    if [[ "$actual_pods" -gt 0 ]]; then
+      label_used="app.kubernetes.io/name=$redis_sts_name"
+    else
+      # Try app.kubernetes.io/component=node (common for Bitnami Redis)
+      actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/component=node" --no-headers 2>/dev/null | wc -l)
+      if [[ "$actual_pods" -gt 0 ]]; then
+        label_used="app.kubernetes.io/component=node"
+      else
+        # Try matching by StatefulSet name directly
+        actual_pods=$(oc get pods -n "$namespace" --no-headers 2>/dev/null | grep "^${redis_sts_name}-[0-9]" | wc -l)
+        if [[ "$actual_pods" -gt 0 ]]; then
+          label_used="name pattern matching"
+        else
+          # Last resort: get pods managed by the StatefulSet
+          actual_pods=$(oc get pods -n "$namespace" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.ownerReferences[0].name}{"\n"}{end}' 2>/dev/null | grep "$redis_sts_name" | wc -l)
+          label_used="owner reference matching"
+        fi
+      fi
+    fi
+  fi
+
+  echo "   - Found $actual_pods pods using: $label_used"
+
   if [[ "$actual_pods" != "$replicas" ]]; then
     echo "⚠️  Warning: Expected $replicas pods but found $actual_pods for StatefulSet $redis_sts_name"
+    echo "   - This may indicate pods are still starting or using different labels"
+  else
+    echo "   - ✅ Pod count matches expected replicas"
   fi
 
   # Build the sentinels list
