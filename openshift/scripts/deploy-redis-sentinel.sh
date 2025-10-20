@@ -16,10 +16,6 @@ create_or_update_configmap "$REDIS_STATS_NAME" \
 # Delete existing Service for Redis proxy if it exists
 delete_resource_if_exists "svc" "$REDIS_PROXY_NAME"
 
-# Create the ConfigMap for Redis proxy with the generated config
-create_or_update_configmap "$REDIS_PROXY_NAME-config" \
-  "config.json=./config/redis/sentinel_tunnel.remote.config.json"
-
 # Ensure resource values are set with defaults if missing
 REDIS_REQUEST_CPU="${REDIS_REQUEST_CPU:-20m}"
 REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
@@ -161,9 +157,35 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
-
 # Generate dynamic redis proxy config for the current environment
-generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "./config/redis/sentinel_tunnel.remote.config.json"
+echo "🔧 Generating Redis proxy configuration for namespace: $OC_PROJECT"
+dynamic_config_file="/tmp/sentinel_tunnel.${OC_PROJECT}.config.json"
+
+# Set up cleanup trap
+cleanup_temp_config() {
+  if [[ -f "$dynamic_config_file" ]]; then
+    echo "🧹 Cleaning up temporary config file: $dynamic_config_file"
+    rm -f "$dynamic_config_file"
+  fi
+}
+trap cleanup_temp_config EXIT
+
+if ! generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "$dynamic_config_file"; then
+  echo "❌ Failed to generate Redis proxy configuration. Exiting..."
+  exit 1
+fi
+
+# Validate the generated configuration
+echo "🔍 Validating generated Redis proxy configuration..."
+if ! validate_redis_proxy_config "$dynamic_config_file" "$OC_PROJECT" "$REDIS_NAME-node"; then
+  echo "❌ Generated Redis proxy configuration failed validation. Exiting..."
+  exit 1
+fi
+
+# Create the ConfigMap with the validated dynamic config
+echo "✅ Creating ConfigMap with validated Redis proxy configuration..."
+create_or_update_configmap "$REDIS_PROXY_NAME-config" \
+  "config.json=$dynamic_config_file"
 
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
@@ -185,3 +207,4 @@ if ! wait_for_redis_proxy_ready "$REDIS_PROXY_NAME" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 echo "✔️ Redis Proxy is fully functional."
+echo "✅ Redis deployment completed successfully!"
