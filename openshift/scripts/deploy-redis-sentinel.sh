@@ -22,93 +22,52 @@ REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
 REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
 REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
-# Create a minimal installation values file
-cat <<EOF > install.yaml
-redis:
-  enableServiceLinks: false
-resources:
-  requests:
-    cpu: $REDIS_REQUEST_CPU
-    memory: $REDIS_REQUEST_MEMORY
-  limits:
-    cpu: $REDIS_LIMIT_CPU
-    memory: $REDIS_LIMIT_MEMORY
-persistence:
-  enabled: false
-replicas:
-  replicaCount: $REDIS_REPLICAS
-  persistence:
-    enabled: false
-  resources:
-    requests:
-      cpu: $REDIS_REQUEST_CPU
-      memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: $REDIS_LIMIT_CPU
-      memory: $REDIS_LIMIT_MEMORY
-sentinel:
-  enabled: true
-  persistence:
-    enabled: false
-  resources:
-    requests:
-      cpu: $REDIS_REQUEST_CPU
-      memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: $REDIS_LIMIT_CPU
-      memory: $REDIS_LIMIT_MEMORY
+# Create a comprehensive values file for both install and upgrade
+cat <<EOF > redis-values.yaml
+global:
+  defaultFips: false
+
 auth:
   enabled: false
-EOF
 
-# Create minimal upgrade file
-cat <<EOF > upgrade.yaml
 persistence:
   enabled: false
+
 redis:
   enableServiceLinks: false
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
+
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
+
 sentinel:
   enabled: true
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
-    limits:
-      memory: $REDIS_LIMIT_MEMORY
-      cpu: $REDIS_LIMIT_CPU
-sentinel:
-  enabled: true
-  persistence:
-    enabled: false
-  resources:
-    requests:
       memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -131,8 +90,8 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true"
 
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
-  "install.yaml" \
-  "upgrade.yaml" \
+  "redis-values.yaml" \
+  "redis-values.yaml" \
   "$REDIS_LEGACY_ARGS"
 
 # Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)

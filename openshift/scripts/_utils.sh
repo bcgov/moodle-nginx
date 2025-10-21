@@ -1388,7 +1388,8 @@ create_or_update_helm_deployment() {
     helm_repo_update_response=$(helm repo update 2>&1)
 
     # Build the helm upgrade command with optional additional set arguments
-    local upgrade_cmd="helm upgrade --reuse-values -f $upgrade_file"
+    # Use --reset-values to ensure new values override existing ones
+    local upgrade_cmd="helm upgrade --reset-values -f $upgrade_file"
     if [[ -n "$additional_set_args" ]]; then
       upgrade_cmd="$upgrade_cmd $additional_set_args"
     fi
@@ -1435,9 +1436,15 @@ create_or_update_helm_deployment() {
     eval $install_cmd
   fi
 
-  # Clean up the temporary values file
-  rm $values_file
-  rm $upgrade_file
+  # Clean up the temporary values files
+  if [[ -f "$values_file" ]]; then
+    rm "$values_file"
+  fi
+  
+  # Only remove upgrade file if it's different from values file
+  if [[ "$upgrade_file" != "$values_file" ]] && [[ -f "$upgrade_file" ]]; then
+    rm "$upgrade_file"
+  fi
 
   echo "Helm updates completed for $helm_name."
 }

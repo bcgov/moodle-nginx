@@ -30,8 +30,8 @@ else
   echo "✅ Backup storage secrets already exist"
 fi
 
-# Generate install.yaml for install
-cat <<EOF > install.yaml
+# Generate comprehensive values file for both install and upgrade
+cat <<EOF > backup-values.yaml
 image:
   repository: "$BACKUP_HELM_CHART"
   pullPolicy: Always
@@ -74,38 +74,35 @@ env:
         key: database-password
 EOF
 
-# Generate upgrade.yaml for upgrade
-cat <<EOF > upgrade.yaml
-backupConfig: |
-  mariadb=$DB_HOST:$DB_PORT/$DB_NAME
-  0 1 * * * default ./backup.sh -s
-  0 4 * * * default ./backup.sh -s -v all
-networkPolicy:
-  enabled: true
-env:
-  MARIADB_GALERA_USER:
-    valueFrom:
-      secretKeyRef:
-        name: moodle-secrets
-        key: database-user
-  MARIADB_GALERA_PASSWORD:
-    valueFrom:
-      secretKeyRef:
-        name: moodle-secrets
-        key: database-password
-EOF
+echo "🔍 Verifying generated files..."
+if [[ -f "backup-values.yaml" ]]; then
+  echo "✅ backup-values.yaml created successfully"
+else
+  echo "❌ backup-values.yaml was not created"
+  exit 1
+fi
+
+echo "📋 Generated backup-values.yaml content (environment variables section):"
+echo "--- Environment Variables ---"
+grep -A 10 "env:" backup-values.yaml || echo "No env section found"
+echo "--- End Environment Variables ---"
 
 # Use the utility function for upgrade
-create_or_update_helm_deployment "$DB_BACKUP_DEPLOYMENT_NAME" "$BACKUP_HELM_CHART" "install.yaml" "upgrade.yaml"
+create_or_update_helm_deployment "$DB_BACKUP_DEPLOYMENT_NAME" "$BACKUP_HELM_CHART" "backup-values.yaml" "backup-values.yaml"
 upgrade_rc=$?
-
-# Clean up the temporary values file
-rm upgrade.yaml
-rm install.yaml
 
 if [[ $upgrade_rc -ne 0 ]]; then
   echo "Backup container update FAILED (see above for details)."
   exit 1
+fi
+
+# Debug: Check what values Helm is actually using
+echo "🔍 Checking Helm values for environment variables..."
+if helm get values "$DB_BACKUP_DEPLOYMENT_NAME" | grep -A 10 "env:" &>/dev/null; then
+  echo "📋 Current Helm values (env section):"
+  helm get values "$DB_BACKUP_DEPLOYMENT_NAME" | grep -A 15 "env:" | head -20
+else
+  echo "⚠️  No env section found in Helm values"
 fi
 
 if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound" ]]; then
