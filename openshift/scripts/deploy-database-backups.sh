@@ -62,6 +62,16 @@ env:
     value: "$DB_HOST"
   ENVIRONMENT_FRIENDLY_NAME:
     value: "Backups"
+  MARIADB_GALERA_USER:
+    valueFrom:
+      secretKeyRef:
+        name: moodle-secrets
+        key: database-user
+  MARIADB_GALERA_PASSWORD:
+    valueFrom:
+      secretKeyRef:
+        name: moodle-secrets
+        key: database-password
 EOF
 
 # Generate upgrade.yaml for upgrade
@@ -72,6 +82,17 @@ backupConfig: |
   0 4 * * * default ./backup.sh -s -v all
 networkPolicy:
   enabled: true
+env:
+  MARIADB_GALERA_USER:
+    valueFrom:
+      secretKeyRef:
+        name: moodle-secrets
+        key: database-user
+  MARIADB_GALERA_PASSWORD:
+    valueFrom:
+      secretKeyRef:
+        name: moodle-secrets
+        key: database-password
 EOF
 
 # Use the utility function for upgrade
@@ -108,12 +129,64 @@ if ! wait_for "deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME" "ready" "300s"; then
   oc get events --field-selector involvedObject.kind=Pod --sort-by='.lastTimestamp' | tail -10
 
   echo "📋 Checking required secrets:"
+  echo "🔍 Backup storage secrets:"
   oc get secret moodle-db-backup-storage-secrets || echo "❌ Backup storage secrets missing"
-  oc get secret moodle-secrets || echo "❌ Database secrets missing"
+
+  echo "🔍 Database secrets:"
+  if oc get secret moodle-secrets &> /dev/null; then
+    echo "✅ Database secrets exist"
+    # Check if the required keys exist
+    if oc get secret moodle-secrets -o jsonpath='{.data.database-user}' &> /dev/null; then
+      echo "  ✅ database-user key found"
+    else
+      echo "  ❌ database-user key missing from moodle-secrets"
+    fi
+    if oc get secret moodle-secrets -o jsonpath='{.data.database-password}' &> /dev/null; then
+      echo "  ✅ database-password key found"
+    else
+      echo "  ❌ database-password key missing from moodle-secrets"
+    fi
+  else
+    echo "❌ Database secrets missing"
+  fi
 
   echo "⚠️  Backup storage deployment has issues, but continuing..."
 else
   echo "✅ Backup storage deployment is ready"
+
+  # Verify that the environment variables are properly set
+  echo "🔍 Verifying database credentials configuration..."
+  backup_pod=$(oc get pods -l app.kubernetes.io/name=backup-storage -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+  if [[ -n "$backup_pod" ]]; then
+    echo "  📋 Checking environment variables in pod: $backup_pod"
+
+    # Check if MARIADB_GALERA_USER is set
+    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER &>/dev/null; then
+      db_user=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER 2>/dev/null)
+      if [[ -n "$db_user" ]]; then
+        echo "  ✅ MARIADB_GALERA_USER is set (value: ${db_user})"
+      else
+        echo "  ⚠️  MARIADB_GALERA_USER is empty"
+      fi
+    else
+      echo "  ❌ MARIADB_GALERA_USER environment variable not found"
+    fi
+
+    # Check if MARIADB_GALERA_PASSWORD is set (don't print the value)
+    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD &>/dev/null; then
+      db_password=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD 2>/dev/null)
+      if [[ -n "$db_password" ]]; then
+        echo "  ✅ MARIADB_GALERA_PASSWORD is set (length: ${#db_password} chars)"
+      else
+        echo "  ⚠️  MARIADB_GALERA_PASSWORD is empty"
+      fi
+    else
+      echo "  ❌ MARIADB_GALERA_PASSWORD environment variable not found"
+    fi
+  else
+    echo "  ⚠️  Could not find backup pod to verify environment variables"
+  fi
 fi
 
 echo "Backup container deployment completed."
