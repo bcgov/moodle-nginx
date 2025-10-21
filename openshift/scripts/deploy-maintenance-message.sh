@@ -49,5 +49,6 @@ if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "1500s"; then
   exit 1
 fi
 
-# Redirect traffic to maintenance-message (auto-detects environment)
-patch_main_route $BUILD_NAME
+# Redirect traffic to maintenance-message using environment-aware routing
+echo "Redirecting all routes to maintenance-message..."
+patch_all_routes "$BUILD_NAME"

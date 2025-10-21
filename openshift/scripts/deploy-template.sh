@@ -9,7 +9,7 @@ oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
-manage_maintenance_mode "enable" "$MAINTENANCE_SERVICE_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
+manage_maintenance_mode "enable" "web"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
@@ -173,14 +173,11 @@ fi
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
 # Disable maintenance mode and verify output
-manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
+manage_maintenance_mode "disable" "web"
 
 sleep 30
 
-echo "Directing traffic / route to Moodle..."
-patch_route "$APP-$WEB_DEPLOYMENT_NAME" "$WEB_DEPLOYMENT_NAME"
-
-echo "Waiting for route to be ready..."
+echo "Waiting for route changes to take effect..."
 sleep 60
 
 echo "Shutting down maintenance message..."

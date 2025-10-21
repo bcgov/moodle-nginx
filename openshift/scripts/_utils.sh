@@ -336,13 +336,51 @@ wait_for_deployment_without_errors() {
   return 0
 }
 
+# Helper function to get the standard route name for any environment
+get_standard_route_name() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  echo "${APP:-moodle}-${WEB_DEPLOYMENT_NAME:-web}"
+}
+
+# Function to patch all relevant routes for the environment
+patch_all_routes() {
+  local target_service="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local success=true
+
+  # Always patch the standard route (same format for all environments)
+  local standard_route=$(get_standard_route_name "$namespace")
+  echo "🔄 Patching standard route: $standard_route"
+  if ! patch_route "$standard_route" "$target_service" "$namespace"; then
+    echo "❌ Failed to patch standard route: $standard_route"
+    success=false
+  fi
+
+  # In production, also patch the custom route
+  if [[ "$namespace" == "950003-prod" ]]; then
+    echo "🏭 Production environment - also patching custom route: moodle-custom"
+    if ! patch_route "moodle-custom" "$target_service" "$namespace"; then
+      echo "❌ Failed to patch custom route: moodle-custom"
+      success=false
+    fi
+  fi
+
+  if [[ "$success" == "true" ]]; then
+    echo "✅ Successfully patched all routes for $namespace environment"
+    return 0
+  else
+    echo "❌ Some route patches failed"
+    return 1
+  fi
+}
+
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
   local service_name=$1
-  local route_name=$2
+  local route_mode=${2:-"auto"}  # "auto" means use patch_all_routes, or specific route name
   local route_timeout="60s"
 
-  echo "Deploying maintenance mode: $route_name > $service_name"
+  echo "Deploying maintenance mode for service: $service_name"
 
   # Scale to 1 replica
   scale_deployment "deployment" "$service_name" 1 1
@@ -354,22 +392,32 @@ enable_maintenance_mode() {
     "APP_HOST_URL=$APP_HOST_URL" \
     "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
 
-  # Redirect traffic
-  # echo "Redirecting traffic: $route_name > $service_name"
-  patch_route $route_name $service_name
+  # Redirect traffic to maintenance service
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes to maintenance service..."
+    patch_all_routes "$service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    patch_route "$route_mode" "$service_name"
+  fi
 }
 
 # Function to disable maintenance mode
 disable_maintenance_mode() {
-  local route_name="moodle-web"
-  local service_name="web"
-  local maintenance_service_name="maintenance-message"
+  local service_name="${1:-web}"
+  local maintenance_service_name="${2:-maintenance-message}"
+  local route_mode="${3:-auto}"  # "auto" means use patch_all_routes
 
   echo "Disabling $maintenance_service_name..."
 
   # Redirect traffic back to application
-  # echo "Redirecting traffic to: service/$service_name..."
-  patch_route $route_name $service_name
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes back to application service..."
+    patch_all_routes "$service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    patch_route "$route_mode" "$service_name"
+  fi
 
   sleep 60
 
@@ -404,10 +452,10 @@ manage_maintenance_mode() {
   local expected_output_first_run="Could not open input file"
 
   if [[ $action == "enable" ]]; then
-    enable_maintenance_mode $deployment_name $route_name
+    enable_maintenance_mode $deployment_name ${route_name:-auto}
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    disable_maintenance_mode $deployment_name
+    disable_maintenance_mode "web" "maintenance-message" ${route_name:-auto}
     expected_output="Maintenance mode has been disabled"
   fi
 
