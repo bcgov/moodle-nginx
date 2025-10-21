@@ -339,7 +339,7 @@ wait_for_deployment_without_errors() {
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
   local service_name=$1
-  local route_name=${2:-"auto"}  # "auto" means use patch_all_routes
+  local route_name=$2
   local route_timeout="60s"
 
   echo "Deploying maintenance mode: $route_name > $service_name"
@@ -354,32 +354,22 @@ enable_maintenance_mode() {
     "APP_HOST_URL=$APP_HOST_URL" \
     "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
 
-  # Redirect traffic to maintenance service
-  if [[ "$route_name" == "auto" ]]; then
-    echo "🔄 Redirecting all routes to maintenance service..."
-    patch_all_routes "$service_name"
-  else
-    echo "🔄 Redirecting specific route $route_name to $service_name..."
-    patch_route "$route_name" "$service_name"
-  fi
+  # Redirect traffic
+  # echo "Redirecting traffic: $route_name > $service_name"
+  patch_route $route_name $service_name
 }
 
 # Function to disable maintenance mode
 disable_maintenance_mode() {
-  local service_name="${1:-web}"
-  local maintenance_service_name="${2:-maintenance-message}"
-  local route_name="${3:-auto}"  # "auto" means use patch_all_routes
+  local route_name="moodle-web"
+  local service_name="web"
+  local maintenance_service_name="maintenance-message"
 
   echo "Disabling $maintenance_service_name..."
 
   # Redirect traffic back to application
-  if [[ "$route_name" == "auto" ]]; then
-    echo "🔄 Redirecting all routes back to application service..."
-    patch_all_routes "$service_name"
-  else
-    echo "🔄 Redirecting specific route $route_name to $service_name..."
-    patch_route "$route_name" "$service_name"
-  fi
+  # echo "Redirecting traffic to: service/$service_name..."
+  patch_route $route_name $service_name
 
   sleep 60
 
@@ -417,7 +407,7 @@ manage_maintenance_mode() {
     enable_maintenance_mode $deployment_name $route_name
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    disable_maintenance_mode "web" "maintenance-message" $route_name
+    disable_maintenance_mode $deployment_name
     expected_output="Maintenance mode has been disabled"
   fi
 
@@ -529,53 +519,7 @@ verify_patch_result() {
   [[ "$all_verified" == "true" ]]
 }
 
-# Helper function to get the standard route name for any environment
-get_standard_route_name() {
-  local namespace="${1:-$DEPLOY_NAMESPACE}"
-  echo "${APP:-moodle}-${WEB_DEPLOYMENT_NAME:-web}"
-}
-
-# Function to patch all relevant routes for the environment
-patch_all_routes() {
-  local target_service="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-  local success=true
-
-  # Always patch the standard route (same format for all environments)
-  local standard_route=$(get_standard_route_name "$namespace")
-  echo "🔄 Patching standard route: $standard_route"
-  if ! patch_route "$standard_route" "$target_service" "$namespace"; then
-    echo "❌ Failed to patch standard route: $standard_route"
-    success=false
-  fi
-
-  # In production, also patch the custom route
-  if [[ "$namespace" == "950003-prod" ]]; then
-    echo "🏭 Production environment - also patching custom route: moodle-custom"
-    if ! patch_route "moodle-custom" "$target_service" "$namespace"; then
-      echo "❌ Failed to patch custom route: moodle-custom"
-      success=false
-    fi
-  fi
-
-  if [[ "$success" == "true" ]]; then
-    echo "✅ Successfully patched all routes for $namespace environment"
-    return 0
-  else
-    echo "❌ Some route patches failed"
-    return 1
-  fi
-}
-
-# Convenience function to patch the main application route(s)
-patch_main_route() {
-  local target_service="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-
-  patch_all_routes "$target_service" "$namespace"
-}
-
-# Patch route to specific service with integrated route verification
+# Updated patch_route function using generic approach
 patch_route() {
   local route_name="$1"
   local target_service="$2"
@@ -595,7 +539,7 @@ patch_route() {
 
   # Apply the patch using generic function
   if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
-    # Wait for the route configuration to be updated
+    # Wait for the route change to take effect
     local max_retries=30
     local retry_count=0
     local wait_time=5
@@ -610,8 +554,8 @@ patch_route() {
       local current_target
       current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}')
       if [[ "$current_target" == "$target_service" ]]; then
-        echo "✔️ Route $route_name configuration successfully updated to $target_service."
-        break
+        echo "✔️ Route $route_name successfully updated to $target_service."
+        return 0
       fi
 
       echo "Waiting for route $route_name to update to $target_service... (attempt $((retry_count + 1))/$max_retries)"
@@ -619,48 +563,8 @@ patch_route() {
       retry_count=$((retry_count + 1))
     done
 
-    if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds."
-      return 1
-    fi
-
-    # Now verify the route is ready to serve traffic
-    echo "🔍 Verifying route $route_name is ready to serve traffic..."
-    local route_url
-    route_url=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.host}' 2>/dev/null)
-
-    if [[ -z "$route_url" ]]; then
-      echo "⚠️ Could not get URL for route $route_name, but configuration was updated successfully"
-      return 0
-    fi
-
-    # Test route connectivity with retries
-    local connectivity_max_retries=24  # 2 minutes with 5-second intervals
-    local connectivity_retry_count=0
-    local connectivity_wait_time=5
-
-    while [[ $connectivity_retry_count -lt $connectivity_max_retries ]]; do
-      # Test with curl (expect HTTP response, don't care about content)
-      if curl -s -f -m 10 --connect-timeout 5 "https://$route_url" > /dev/null 2>&1; then
-        echo "✅ Route $route_name is responding correctly and ready to serve traffic"
-        return 0
-      elif curl -s -m 10 --connect-timeout 5 "https://$route_url" > /dev/null 2>&1; then
-        # Got a response but maybe 4xx/5xx - still counts as "ready" from routing perspective
-        echo "✅ Route $route_name is responding (got HTTP response) and ready to serve traffic"
-        return 0
-      fi
-
-      connectivity_retry_count=$((connectivity_retry_count + 1))
-      if [[ $connectivity_retry_count -lt $connectivity_max_retries ]]; then
-        echo "⏳ Route $route_name not ready to serve traffic yet (attempt $connectivity_retry_count/$connectivity_max_retries), waiting..."
-        sleep $connectivity_wait_time
-      fi
-    done
-
-    echo "⚠️ Route $route_name configuration updated but failed to respond after $((connectivity_max_retries * connectivity_wait_time)) seconds"
-    echo "⚠️ Proceeding anyway as the route configuration is correct"
-    return 0  # Return success since the route is configured correctly, even if not responding yet
-
+    echo "❌ Route update to $target_service failed after $((max_retries * wait_time)) seconds."
+    return 1
   else
     return 1
   fi
@@ -1965,21 +1869,95 @@ generate_redis_proxy_config_json() {
   local port="${4:-26379}"
   local output_file="${5:-sentinel_tunnel.remote.config.json}"
 
+  echo "🔧 Generating Redis proxy config for namespace: $namespace"
+  echo "   - StatefulSet: $redis_sts_name"
+  echo "   - Service: $headless_service"
+  echo "   - Port: $port"
+  echo "   - Output: $output_file"
+
   # Get the number of replicas from the StatefulSet
   local replicas
-  replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
+  replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
   if [[ -z "$replicas" ]]; then
-    echo "Could not determine replica count for $redis_sts_name in $namespace"
+    echo "❌ Could not determine replica count for $redis_sts_name in $namespace"
     return 1
+  fi
+
+  echo "   - Detected $replicas replicas"
+
+  # Debug: Show the StatefulSet's label selector for troubleshooting
+  local sts_selector
+  sts_selector=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+  if [[ -n "$sts_selector" ]]; then
+    echo "   - StatefulSet uses selector: $sts_selector"
+  fi
+
+  # Verify that the StatefulSet pods actually exist
+  echo "   - Checking for actual pods..."
+
+  # Use the StatefulSet's actual label selector (most reliable)
+  local actual_pods=0
+  local label_used=""
+
+  if [[ -n "$sts_selector" ]] && [[ "$sts_selector" != "null" ]] && [[ "$sts_selector" != "{}" ]]; then
+    # Convert the JSON selector to kubectl format
+    local kubectl_selector
+    kubectl_selector=$(echo "$sts_selector" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null)
+
+    if [[ -n "$kubectl_selector" ]] && [[ "$kubectl_selector" != "null" ]]; then
+      actual_pods=$(oc get pods -n "$namespace" -l "$kubectl_selector" --no-headers 2>/dev/null | wc -l)
+      label_used="StatefulSet selector: $kubectl_selector"
+    fi
+  fi
+
+  # Fallback methods if StatefulSet selector didn't work
+  if [[ "$actual_pods" -eq 0 ]]; then
+    # Try app.kubernetes.io/name label
+    actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/name=$redis_sts_name" --no-headers 2>/dev/null | wc -l)
+    if [[ "$actual_pods" -gt 0 ]]; then
+      label_used="app.kubernetes.io/name=$redis_sts_name"
+    else
+      # Try app.kubernetes.io/component=node (common for Bitnami Redis)
+      actual_pods=$(oc get pods -n "$namespace" -l "app.kubernetes.io/component=node" --no-headers 2>/dev/null | wc -l)
+      if [[ "$actual_pods" -gt 0 ]]; then
+        label_used="app.kubernetes.io/component=node"
+      else
+        # Try matching by StatefulSet name directly
+        actual_pods=$(oc get pods -n "$namespace" --no-headers 2>/dev/null | grep "^${redis_sts_name}-[0-9]" | wc -l)
+        if [[ "$actual_pods" -gt 0 ]]; then
+          label_used="name pattern matching"
+        else
+          # Last resort: get pods managed by the StatefulSet
+          actual_pods=$(oc get pods -n "$namespace" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.ownerReferences[0].name}{"\n"}{end}' 2>/dev/null | grep "$redis_sts_name" | wc -l)
+          label_used="owner reference matching"
+        fi
+      fi
+    fi
+  fi
+
+  echo "   - Found $actual_pods pods using: $label_used"
+
+  if [[ "$actual_pods" != "$replicas" ]]; then
+    echo "⚠️  Warning: Expected $replicas pods but found $actual_pods for StatefulSet $redis_sts_name"
+    echo "   - This may indicate pods are still starting or using different labels"
+  else
+    echo "   - ✅ Pod count matches expected replicas"
   fi
 
   # Build the sentinels list
   local sentinels=()
   for i in $(seq 0 $((replicas-1))); do
-    sentinels+=("\"${redis_sts_name}-$i.${headless_service}.${namespace}.svc.cluster.local:${port}\"")
+    local sentinel_address="${redis_sts_name}-$i.${headless_service}.${namespace}.svc.cluster.local:${port}"
+    sentinels+=("\"$sentinel_address\"")
+    echo "   - Adding sentinel: $sentinel_address"
   done
   local sentinels_joined
   sentinels_joined=$(IFS=, ; echo "${sentinels[*]}")
+
+  # Create the output directory if it doesn't exist
+  local output_dir
+  output_dir=$(dirname "$output_file")
+  mkdir -p "$output_dir"
 
   # Output the JSON
   cat <<EOF > "$output_file"
@@ -1987,14 +1965,154 @@ generate_redis_proxy_config_json() {
   "Sentinels_addresses_list":[
     $sentinels_joined
   ],
-	"Databases":[
-		{
-			"Name": "mymaster",
-			"Local_port": "6379"
-		}
-	]
+  "Databases":[
+    {
+      "Name": "mymaster",
+      "Local_port": "6379"
+    }
+  ]
 }
 EOF
+
+  if [[ $? -eq 0 ]]; then
+    echo "✅ Successfully generated Redis proxy config: $output_file"
+    return 0
+  else
+    echo "❌ Failed to write Redis proxy config to: $output_file"
+    return 1
+  fi
+}
+
+# Function to validate the generated Redis proxy configuration
+validate_redis_proxy_config() {
+  local config_file="$1"
+  local expected_namespace="$2"
+  local expected_sts_name="$3"
+
+  echo "🔍 Validating Redis proxy configuration: $config_file"
+
+  # Check if file exists and is readable
+  if [[ ! -f "$config_file" ]]; then
+    echo "❌ Config file does not exist: $config_file"
+    return 1
+  fi
+
+  if [[ ! -r "$config_file" ]]; then
+    echo "❌ Config file is not readable: $config_file"
+    return 1
+  fi
+
+  # Check if it's valid JSON
+  if ! jq . "$config_file" >/dev/null 2>&1; then
+    echo "❌ Config file is not valid JSON: $config_file"
+    return 1
+  fi
+
+  # Check required fields exist
+  local sentinels_count
+  sentinels_count=$(jq '.Sentinels_addresses_list | length' "$config_file" 2>/dev/null)
+  if [[ -z "$sentinels_count" || "$sentinels_count" == "null" ]]; then
+    echo "❌ Config file missing Sentinels_addresses_list: $config_file"
+    return 1
+  fi
+
+  if [[ "$sentinels_count" -eq 0 ]]; then
+    echo "❌ Config file has empty Sentinels_addresses_list: $config_file"
+    return 1
+  fi
+
+  # Check that sentinels contain the expected namespace
+  local sentinel_namespace_count
+  sentinel_namespace_count=$(jq -r '.Sentinels_addresses_list[]' "$config_file" | grep -c "$expected_namespace" || true)
+  if [[ "$sentinel_namespace_count" -eq 0 ]]; then
+    echo "❌ Config file sentinels do not contain expected namespace '$expected_namespace'"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check that all sentinels contain the expected namespace (not mixed)
+  if [[ "$sentinel_namespace_count" != "$sentinels_count" ]]; then
+    echo "❌ Config file contains mixed namespaces (expected all to be '$expected_namespace')"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check database configuration
+  local db_name
+  db_name=$(jq -r '.Databases[0].Name' "$config_file" 2>/dev/null)
+  if [[ "$db_name" != "mymaster" ]]; then
+    echo "❌ Config file missing or incorrect database name (expected 'mymaster', got '$db_name')"
+    return 1
+  fi
+
+  local local_port
+  local_port=$(jq -r '.Databases[0].Local_port' "$config_file" 2>/dev/null)
+  if [[ "$local_port" != "6379" ]]; then
+    echo "❌ Config file missing or incorrect local port (expected '6379', got '$local_port')"
+    return 1
+  fi
+
+  echo "✅ Redis proxy configuration validation passed:"
+  echo "   - Found $sentinels_count sentinels for namespace: $expected_namespace"
+  echo "   - Database: $db_name on port $local_port"
+  echo "   - All sentinels correctly reference namespace: $expected_namespace"
+
+  return 0
+}
+
+# Function to check and display the current Redis proxy configuration
+check_redis_proxy_config() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  local redis_proxy_name="${2:-redis-proxy}"
+
+  echo "🔍 Checking current Redis proxy configuration in namespace: $namespace"
+
+  # Check if ConfigMap exists
+  if ! oc get configmap "$redis_proxy_name-config" -n "$namespace" >/dev/null 2>&1; then
+    echo "❌ ConfigMap '$redis_proxy_name-config' does not exist in namespace $namespace"
+    return 1
+  fi
+
+  # Extract and display the configuration
+  echo "📋 Current Redis proxy configuration:"
+  local config_json
+  config_json=$(oc get configmap "$redis_proxy_name-config" -n "$namespace" -o jsonpath='{.data.config\.json}' 2>/dev/null)
+
+  if [[ -z "$config_json" ]]; then
+    echo "❌ Failed to extract config.json from ConfigMap"
+    return 1
+  fi
+
+  # Parse and display sentinels
+  echo "$config_json" | jq . 2>/dev/null || {
+    echo "❌ Configuration is not valid JSON"
+    echo "Raw configuration:"
+    echo "$config_json"
+    return 1
+  }
+
+  # Check namespace consistency
+  local sentinel_namespaces
+  sentinel_namespaces=$(echo "$config_json" | jq -r '.Sentinels_addresses_list[]' | grep -o '\.[^.]*\.svc\.cluster\.local:' | sed 's/\.\([^.]*\)\.svc\.cluster\.local:/\1/' | sort -u)
+
+  echo ""
+  echo "🔍 Analysis:"
+  echo "   - ConfigMap: $redis_proxy_name-config"
+  echo "   - Namespace: $namespace"
+  echo "   - Sentinels found in config namespaces: $sentinel_namespaces"
+
+  if [[ $(echo "$sentinel_namespaces" | wc -w) -gt 1 ]]; then
+    echo "⚠️  WARNING: Configuration contains sentinels from multiple namespaces!"
+  elif [[ "$sentinel_namespaces" != "$namespace" ]]; then
+    echo "❌ ERROR: Configuration namespace ($sentinel_namespaces) does not match deployment namespace ($namespace)"
+    return 1
+  else
+    echo "✅ Configuration namespace matches deployment namespace"
+  fi
+
+  return 0
 }
 
 should_migrate_by_version() {
