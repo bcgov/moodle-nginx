@@ -27,6 +27,9 @@ cat <<EOF > redis-values.yaml
 global:
   defaultFips: false
 
+fips:
+  openssl: false
+
 auth:
   enabled: false
 
@@ -86,8 +89,8 @@ fi
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
-# Define Redis-specific legacy image overrides
-REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true"
+# Define Redis-specific legacy image overrides with FIPS configuration
+REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true --set global.defaultFips=false --set fips.openssl=false"
 
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "redis-values.yaml" \
