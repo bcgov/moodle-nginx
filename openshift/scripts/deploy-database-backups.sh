@@ -9,25 +9,17 @@ echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 # Ensure backup storage secrets exist
 echo "🔍 Checking for backup storage secrets..."
 if ! oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
-  echo "⚠️  Secret 'moodle-db-backup-storage-secrets' not found. Creating with default empty values..."
+  echo "⚠️  Secret 'moodle-db-backup-storage-secrets' not found. Will be created by Helm chart."
+else
+  echo "⚠️  Secret 'moodle-db-backup-storage-secrets' exists but may conflict with Helm management."
+  echo "🔧 Removing existing secret to allow Helm to manage it properly..."
 
-  # Create the secret with empty values (can be updated later with actual credentials)
-  oc create secret generic moodle-db-backup-storage-secrets \
-    --from-literal=ftp-password='' \
-    --from-literal=ftp-url='' \
-    --from-literal=ftp-user='' \
-    --from-literal=mssql-sa-password='' \
-    --from-literal=webhook-url=''
-
-  if [[ $? -eq 0 ]]; then
-    echo "✅ Created backup storage secrets with empty values"
-    echo "📝 Note: Update the secret values later if FTP or webhook functionality is needed"
+  if oc delete secret moodle-db-backup-storage-secrets; then
+    echo "✅ Removed existing secret - Helm will create a new one"
   else
-    echo "❌ Failed to create backup storage secrets"
+    echo "❌ Failed to remove existing secret"
     exit 1
   fi
-else
-  echo "✅ Backup storage secrets already exist"
 fi
 
 # Generate comprehensive values file for both install and upgrade
@@ -94,6 +86,30 @@ upgrade_rc=$?
 if [[ $upgrade_rc -ne 0 ]]; then
   echo "Backup container update FAILED (see above for details)."
   exit 1
+fi
+
+# Ensure backup storage secrets exist after Helm deployment
+echo "🔍 Re-checking backup storage secrets after Helm deployment..."
+if ! oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
+  echo "⚠️  Backup storage secrets not created by Helm. Creating manually..."
+
+  # Create the secret with empty values (can be updated later with actual credentials)
+  oc create secret generic moodle-db-backup-storage-secrets \
+    --from-literal=ftp-password='' \
+    --from-literal=ftp-url='' \
+    --from-literal=ftp-user='' \
+    --from-literal=mssql-sa-password='' \
+    --from-literal=webhook-url=''
+
+  if [[ $? -eq 0 ]]; then
+    echo "✅ Created backup storage secrets with empty values"
+    echo "📝 Note: Update the secret values later if FTP or webhook functionality is needed"
+  else
+    echo "❌ Failed to create backup storage secrets"
+    exit 1
+  fi
+else
+  echo "✅ Backup storage secrets exist"
 fi
 
 # Debug: Check what values Helm is actually using
