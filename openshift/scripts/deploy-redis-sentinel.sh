@@ -26,6 +26,8 @@ REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 cat <<EOF > redis-values.yaml
 global:
   defaultFips: false
+  security:
+    allowInsecureImages: true
 
 fips:
   openssl: false
@@ -71,6 +73,14 @@ sentinel:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
+
+# Additional FIPS configurations
+image:
+  debug: false
+
+# Alternative FIPS structure
+commonConfiguration: |
+  fips-mode no
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -88,9 +98,27 @@ fi
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+echo "🔍 Debug: Redis Helm chart information:"
+helm search repo bitnami/redis --versions | head -5
+
+echo "🔍 Debug: Checking generated redis-values.yaml file..."
+echo "--- FIPS Configuration ---"
+grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
+echo "--- End FIPS Configuration ---"
 
 # Define Redis-specific legacy image overrides with FIPS configuration
-REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true --set global.defaultFips=false --set fips.openssl=false"
+REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.repository=bitnamilegacy/redis-sentinel"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.fips=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.fips=false"
+
+echo "🔍 Debug: Helm command will use these --set arguments:"
+echo "$REDIS_LEGACY_ARGS"
 
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "redis-values.yaml" \
