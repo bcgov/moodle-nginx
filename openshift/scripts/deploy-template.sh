@@ -9,7 +9,7 @@ oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
-manage_maintenance_mode "enable" "maointenance-message"
+manage_maintenance_mode "enable" "maintenance-message"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
