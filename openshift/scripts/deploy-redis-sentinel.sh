@@ -45,7 +45,7 @@ persistence:
   enabled: false
 
 redis:
-  enableServiceLinks: false
+  enableServiceLinks: true
   persistence:
     enabled: false
   resources:
