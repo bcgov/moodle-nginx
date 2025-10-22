@@ -93,11 +93,47 @@ redis_node_name=$REDIS_NAME-node
 if [[ `oc describe statefulset/$redis_node_name 2>&1` =~ "NotFound" ]]; then
   echo "Redis StatefulSet NOT FOUND... Creating new deployment..."
 else
-  echo "Redis StatefulSet found. Scaling down..."
-  scale_deployment "statefulset" "$redis_node_name" "0" "0"
-  if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-    echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-    exit 1
+  echo "Redis StatefulSet found. Checking if image update requires Helm reinstall..."
+  
+  # Get current image tags from the StatefulSet
+  current_redis_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="redis")].image}' 2>/dev/null || echo "")
+  current_sentinel_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="sentinel")].image}' 2>/dev/null || echo "")
+  
+  echo "Current images:"
+  echo "  Redis: $current_redis_image"
+  echo "  Sentinel: $current_sentinel_image"
+  
+  target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
+  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
+  
+  # Check if image changes require Helm reinstall
+  if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
+    echo "Image tags have changed. Helm reinstall required to handle StatefulSet recreation..."
+    echo "Scaling down existing StatefulSet before Helm uninstall..."
+    
+    scale_deployment "statefulset" "$redis_node_name" "0" "0"
+    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+      exit 1
+    fi
+    
+    # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+    echo "Uninstalling Helm release to allow clean recreation..."
+    helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+    
+    # Wait for cleanup
+    echo "Waiting for resources to be cleaned up..."
+    sleep 10
+    
+    # Set flag to force install instead of upgrade
+    FORCE_HELM_INSTALL=true
+  else
+    echo "Image tags unchanged. Performing standard scaling..."
+    scale_deployment "statefulset" "$redis_node_name" "0" "0"
+    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+      exit 1
+    fi
   fi
 fi
 
@@ -137,10 +173,17 @@ echo "$REDIS_LEGACY_ARGS"
 # Use specific chart version and add version to the legacy args
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --version $REDIS_CHART_VERSION"
 
-create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
-  "redis-values.yaml" \
-  "redis-values.yaml" \
-  "$REDIS_LEGACY_ARGS"
+# Handle forced reinstall for StatefulSet image changes
+if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then
+  echo "🔧 Performing Helm install (forced due to image changes)..."
+  helm install --values redis-values.yaml $REDIS_LEGACY_ARGS "$REDIS_NAME" "$REDIS_HELM_CHART"
+else
+  echo "🔧 Performing standard Helm upgrade..."
+  create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
+    "redis-values.yaml" \
+    "redis-values.yaml" \
+    "$REDIS_LEGACY_ARGS"
+fi
 
 # Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)
 echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
