@@ -455,7 +455,7 @@ manage_maintenance_mode() {
     enable_maintenance_mode $deployment_name ${route_name:-auto}
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    disable_maintenance_mode "web" "maintenance-message" ${route_name:-auto}
+    disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
     expected_output="Maintenance mode has been disabled"
   fi
 
@@ -2759,5 +2759,65 @@ clear_moodle_cache_deployment() {
   else
     echo "⚠️  Cache clearing and theme rebuilding had issues, but deployment can continue"
     return 1
+  fi
+}
+
+# Function to update Redis proxy configuration after right-sizing
+update_redis_proxy_after_scaling() {
+  local redis_name="${1:-redis}"
+  local redis_proxy_name="${2:-redis-proxy}"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local config_file="/tmp/sentinel_tunnel.${namespace}.config.json"
+
+  echo "🔧 Checking if Redis proxy configuration needs updating after scaling..."
+
+  # Get current Redis replica count
+  local redis_sts_name="${redis_name}-node"
+  local current_replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+
+  echo "🔍 Current Redis replicas: $current_replicas"
+
+  if [[ "$current_replicas" -gt 1 ]]; then
+    echo "🔧 Multiple replicas detected ($current_replicas), updating Redis proxy configuration..."
+
+    # Wait for all Redis pods to be ready before regenerating config
+    echo "⏳ Waiting for all Redis pods to be ready after scaling..."
+    if ! wait_for "statefulset/$redis_sts_name"; then
+      echo "⚠️ Some Redis pods may not be ready, but proceeding with config update..."
+    fi
+
+    # Regenerate the config with all available pods
+    if ! generate_redis_proxy_config_json "$namespace" "$redis_sts_name" "redis-headless" 26379 "$config_file"; then
+      echo "⚠️ Failed to regenerate Redis proxy configuration, keeping existing config..."
+      return 1
+    fi
+
+    # Validate the updated configuration
+    echo "🔍 Validating updated Redis proxy configuration..."
+    if validate_redis_proxy_config "$config_file" "$namespace" "$redis_sts_name"; then
+      echo "✅ Updating ConfigMap with right-sized Redis proxy configuration..."
+      create_or_update_configmap "${redis_proxy_name}-config" \
+        "config.json=$config_file"
+
+      # Restart Redis proxy to pick up new config
+      echo "🔄 Restarting Redis proxy to use updated configuration..."
+      oc rollout restart deployment/"$redis_proxy_name" -n "$namespace"
+      if ! wait_for "deployment/$redis_proxy_name"; then
+        echo "⚠️ Redis Proxy restart failed, but continuing..."
+        return 1
+      else
+        echo "✅ Redis Proxy restarted with updated configuration for $current_replicas replicas"
+
+        # Clean up temporary config file
+        rm -f "$config_file" 2>/dev/null || true
+        return 0
+      fi
+    else
+      echo "⚠️ Updated Redis proxy configuration failed validation, keeping existing config..."
+      return 1
+    fi
+  else
+    echo "✅ Single replica deployment, Redis proxy configuration update not needed"
+    return 0
   fi
 }

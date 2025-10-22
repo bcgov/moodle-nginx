@@ -244,8 +244,8 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
-# Generate dynamic redis proxy config for the current environment
-echo "🔧 Generating Redis proxy configuration for namespace: $OC_PROJECT"
+# Phase 1: Generate initial Redis proxy config for minimal setup (1 pod)
+echo "🔧 Phase 1: Generating initial Redis proxy configuration for namespace: $OC_PROJECT"
 dynamic_config_file="/tmp/sentinel_tunnel.${OC_PROJECT}.config.json"
 
 # Set up cleanup trap
@@ -258,19 +258,19 @@ cleanup_temp_config() {
 trap cleanup_temp_config EXIT
 
 if ! generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "$dynamic_config_file"; then
-  echo "❌ Failed to generate Redis proxy configuration. Exiting..."
+  echo "❌ Failed to generate initial Redis proxy configuration. Exiting..."
   exit 1
 fi
 
 # Validate the generated configuration
-echo "🔍 Validating generated Redis proxy configuration..."
+echo "🔍 Validating initial Redis proxy configuration..."
 if ! validate_redis_proxy_config "$dynamic_config_file" "$OC_PROJECT" "$REDIS_NAME-node"; then
-  echo "❌ Generated Redis proxy configuration failed validation. Exiting..."
+  echo "❌ Initial Redis proxy configuration failed validation. Exiting..."
   exit 1
 fi
 
 # Create the ConfigMap with the validated dynamic config
-echo "✅ Creating ConfigMap with validated Redis proxy configuration..."
+echo "✅ Creating ConfigMap with initial Redis proxy configuration..."
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=$dynamic_config_file"
 

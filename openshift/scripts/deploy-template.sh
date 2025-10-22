@@ -9,7 +9,7 @@ oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
-manage_maintenance_mode "enable" "web"
+manage_maintenance_mode "enable" "maointenance-message"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
@@ -171,6 +171,10 @@ else
 fi
 
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
+
+# Update Redis proxy configuration after right-sizing (Phase 2)
+echo "🔧 Updating Redis proxy configuration after right-sizing..."
+update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAMESPACE"
 
 # Disable maintenance mode and verify output
 manage_maintenance_mode "disable" "web"
