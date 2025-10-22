@@ -55,6 +55,21 @@ redis:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
+  # Disable problematic startup probe in values file
+  startupProbe:
+    enabled: false
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
 
 replicas:
   replicaCount: $REDIS_REPLICAS
@@ -82,6 +97,21 @@ sentinel:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
+  # Disable problematic startup probe for sentinel too
+  startupProbe:
+    enabled: false
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
 
 # Alternative FIPS structure for older chart versions
 commonConfiguration: |
@@ -94,37 +124,37 @@ if [[ `oc describe statefulset/$redis_node_name 2>&1` =~ "NotFound" ]]; then
   echo "Redis StatefulSet NOT FOUND... Creating new deployment..."
 else
   echo "Redis StatefulSet found. Checking if image update requires Helm reinstall..."
-  
+
   # Get current image tags from the StatefulSet
   current_redis_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="redis")].image}' 2>/dev/null || echo "")
   current_sentinel_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="sentinel")].image}' 2>/dev/null || echo "")
-  
+
   echo "Current images:"
   echo "  Redis: $current_redis_image"
   echo "  Sentinel: $current_sentinel_image"
-  
+
   target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
   target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
-  
+
   # Check if image changes require Helm reinstall
   if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
     echo "Image tags have changed. Helm reinstall required to handle StatefulSet recreation..."
     echo "Scaling down existing StatefulSet before Helm uninstall..."
-    
+
     scale_deployment "statefulset" "$redis_node_name" "0" "0"
     if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
       echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
       exit 1
     fi
-    
+
     # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
     echo "Uninstalling Helm release to allow clean recreation..."
     helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
-    
+
     # Wait for cleanup
     echo "Waiting for resources to be cleaned up..."
     sleep 10
-    
+
     # Set flag to force install instead of upgrade
     FORCE_HELM_INSTALL=true
   else
@@ -162,10 +192,23 @@ REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
+# Disable startup probes that cause connection issues
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.startupProbe.enabled=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.startupProbe.enabled=false"
+# Set appropriate delays for other probes
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r2"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
 
 echo "🔍 Debug: Using consistent r2 image tags for both components:"
 echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
 echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
+echo "🔧 Startup probes disabled, liveness/readiness probes set to 180s delay"
 
 echo "🔍 Debug: Helm command will use these --set arguments:"
 echo "$REDIS_LEGACY_ARGS"
@@ -185,9 +228,13 @@ else
     "$REDIS_LEGACY_ARGS"
 fi
 
-# Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)
-echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
-apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
+# Apply Redis probe fixes immediately after Helm deployment (backup measure)
+echo "🔧 Applying additional Redis probe fixes as backup measure..."
+if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180; then
+  echo "✅ Additional probe fixes applied successfully"
+else
+  echo "⚠️ Additional probe fixes failed, but continuing (should be handled by Helm values)"
+fi
 
 # Scale to desired replicas
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
