@@ -32,6 +32,12 @@ global:
 fips:
   openssl: false
 
+# Use proven working image tags from test environment
+image:
+  repository: bitnamilegacy/redis
+  tag: 8.0.2-debian-12-r2
+  debug: false
+
 auth:
   enabled: false
 
@@ -64,6 +70,9 @@ replicas:
 
 sentinel:
   enabled: true
+  image:
+    repository: bitnamilegacy/redis-sentinel
+    tag: 8.0.2-debian-12-r2
   persistence:
     enabled: false
   resources:
@@ -74,11 +83,7 @@ sentinel:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
 
-# Additional FIPS configurations
-image:
-  debug: false
-
-# Alternative FIPS structure
+# Alternative FIPS structure for older chart versions
 commonConfiguration: |
   fips-mode no
 EOF
@@ -103,22 +108,34 @@ helm repo update
 echo "🔍 Debug: Redis Helm chart information:"
 helm search repo bitnami/redis --versions | head -5
 
+# Pin to chart version that works in dev/test environments
+REDIS_CHART_VERSION="23.1.3"
+echo "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
+
 echo "🔍 Debug: Checking generated redis-values.yaml file..."
 echo "--- FIPS Configuration ---"
 grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
 echo "--- End FIPS Configuration ---"
 
 # Define Redis-specific legacy image overrides with FIPS configuration
+# Use proven working image tags from test environment
 REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set image.tag=8.0.2-debian-12-r2"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.repository=bitnamilegacy/redis-sentinel"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r2"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.fips=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.fips=false"
+
+echo "🔍 Debug: Using consistent r2 image tags for both components:"
+echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
+echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
 
 echo "🔍 Debug: Helm command will use these --set arguments:"
 echo "$REDIS_LEGACY_ARGS"
+
+# Use specific chart version and add version to the legacy args
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --version $REDIS_CHART_VERSION"
 
 create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
   "redis-values.yaml" \
