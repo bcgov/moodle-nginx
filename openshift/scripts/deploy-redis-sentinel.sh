@@ -72,7 +72,7 @@ sentinel:
   enabled: true
   image:
     repository: bitnamilegacy/redis-sentinel
-    tag: 8.0.2-debian-12-r2
+    tag: 8.0.2-debian-12-r1
   persistence:
     enabled: false
   resources:
@@ -104,7 +104,7 @@ else
   echo "  Sentinel: $current_sentinel_image"
 
   target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
-  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
+  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
 
   # Check if image changes require Helm reinstall
   if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
@@ -158,22 +158,26 @@ echo "--- End FIPS Configuration ---"
 REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set image.tag=8.0.2-debian-12-r2"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.repository=bitnamilegacy/redis-sentinel"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r2"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r1"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
-# Disable problematic probes that cause connection issues
+# Configure probes with delays matching test environment (don't disable completely)
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.startupProbe.enabled=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.startupProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.enabled=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.enabled=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.enabled=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.enabled=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.enabled=true"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.initialDelaySeconds=180"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.initialDelaySeconds=180"
 
-echo "🔍 Debug: Using consistent r2 image tags for both components:"
+echo "🔍 Debug: Using image versions matching test environment:"
 echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
-echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r2"
-echo "🔧 Startup probes disabled, liveness/readiness probes set to 180s delay"
+echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+echo "🔧 Startup probes disabled, liveness/readiness probes enabled with 180s delay"
 
 echo "🔍 Debug: Helm command will use these --set arguments:"
 echo "$REDIS_LEGACY_ARGS"
@@ -204,18 +208,18 @@ scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPL
 echo "🔍 Monitoring Redis container startup..."
 if ! wait_for "statefulset/$redis_node_name"; then
   echo "❌ Failed to deploy Redis. Checking container status..."
-  
+
   # Get pod status and logs for debugging
   pod_name="${redis_node_name}-0"
   echo "🔍 Debug: Pod status for $pod_name:"
   oc describe pod "$pod_name" | grep -A 10 -B 10 "State\|Conditions\|Events"
-  
+
   echo "🔍 Debug: Recent Redis container logs:"
   oc logs "$pod_name" -c redis --tail=20 || echo "Cannot get Redis logs"
-  
+
   echo "🔍 Debug: Recent Sentinel container logs:"
   oc logs "$pod_name" -c sentinel --tail=20 || echo "Cannot get Sentinel logs"
-  
+
   exit 1
 fi
 
