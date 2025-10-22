@@ -336,13 +336,51 @@ wait_for_deployment_without_errors() {
   return 0
 }
 
+# Helper function to get the standard route name for any environment
+get_standard_route_name() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  echo "${APP:-moodle}-${WEB_DEPLOYMENT_NAME:-web}"
+}
+
+# Function to patch all relevant routes for the environment
+patch_all_routes() {
+  local target_service="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local success=true
+
+  # Always patch the standard route (same format for all environments)
+  local standard_route=$(get_standard_route_name "$namespace")
+  echo "🔄 Patching standard route: $standard_route"
+  if ! patch_route "$standard_route" "$target_service" "$namespace"; then
+    echo "❌ Failed to patch standard route: $standard_route"
+    success=false
+  fi
+
+  # In production, also patch the custom route
+  if [[ "$namespace" == "950003-prod" ]]; then
+    echo "🏭 Production environment - also patching custom route: moodle-custom"
+    if ! patch_route "moodle-custom" "$target_service" "$namespace"; then
+      echo "❌ Failed to patch custom route: moodle-custom"
+      success=false
+    fi
+  fi
+
+  if [[ "$success" == "true" ]]; then
+    echo "✅ Successfully patched all routes for $namespace environment"
+    return 0
+  else
+    echo "❌ Some route patches failed"
+    return 1
+  fi
+}
+
 # Function to deploy and enable maintenance mode
 enable_maintenance_mode() {
   local service_name=$1
-  local route_name=$2
+  local route_mode=${2:-"auto"}  # "auto" means use patch_all_routes, or specific route name
   local route_timeout="60s"
 
-  echo "Deploying maintenance mode: $route_name > $service_name"
+  echo "Deploying maintenance mode for service: $service_name"
 
   # Scale to 1 replica
   scale_deployment "deployment" "$service_name" 1 1
@@ -354,9 +392,14 @@ enable_maintenance_mode() {
     "APP_HOST_URL=$APP_HOST_URL" \
     "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
 
-  # Redirect traffic
-  # echo "Redirecting traffic: $route_name > $service_name"
-  patch_route $route_name $service_name
+  # Redirect traffic to maintenance service
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes to maintenance service..."
+    patch_all_routes "$service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    patch_route "$route_mode" "$service_name"
+  fi
 }
 
 # Function to disable maintenance mode
@@ -368,8 +411,13 @@ disable_maintenance_mode() {
   echo "Disabling $maintenance_service_name..."
 
   # Redirect traffic back to application
-  # echo "Redirecting traffic to: service/$service_name..."
-  patch_route $route_name $service_name
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes back to application service..."
+    patch_all_routes "$service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    patch_route "$route_mode" "$service_name"
+  fi
 
   sleep 60
 
@@ -404,10 +452,10 @@ manage_maintenance_mode() {
   local expected_output_first_run="Could not open input file"
 
   if [[ $action == "enable" ]]; then
-    enable_maintenance_mode $deployment_name $route_name
+    enable_maintenance_mode $deployment_name ${route_name:-auto}
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    disable_maintenance_mode $deployment_name
+    disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
     expected_output="Maintenance mode has been disabled"
   fi
 
@@ -2561,20 +2609,64 @@ fix_sentinel_container_probes() {
   fix_container_probes "$statefulset_name" "1" "Sentinel" "/health/ping_sentinel.sh 10" "/health/ping_sentinel.sh 10" "$namespace" "$initial_delay" "$timeout" "$period" "$failure_threshold"
 }
 
+# Function to remove ALL probes from Redis StatefulSet (matching test environment)
+remove_all_redis_probes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🔧 Removing ALL probes from Redis and Sentinel containers..."
+
+  # Create comprehensive patch to remove all probe types from both containers
+  local patch_content='[
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/livenessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/readinessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/1/livenessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/1/readinessProbe"
+  }
+]'
+
+  # Use generic apply_resource_patch function
+  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Removing all probes to match test environment"; then
+    echo "✅ Successfully removed all probes from Redis StatefulSet"
+    return 0
+  else
+    echo "⚠️ Warning: Failed to remove all probes"
+    return 1
+  fi
+}
+
 # Combined function to apply all Redis probe fixes
 apply_redis_probe_fixes() {
   local statefulset_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local initial_delay="${3:-180}"
+  local remove_all_probes="${4:-false}"
 
   echo "🔧 Applying Redis probe fixes to $statefulset_name..."
 
-  # Remove startup probe first
+  # Always remove startup probes first
   remove_redis_startup_probe "$statefulset_name" "$namespace"
 
-  # Fix liveness and readiness probes for both Redis and Sentinel containers
-  fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
-  fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+  if [[ "$remove_all_probes" == "true" ]]; then
+    echo "🔧 Removing ALL probes to match test environment..."
+    remove_all_redis_probes "$statefulset_name" "$namespace"
+  else
+    echo "🔧 Fixing liveness and readiness probes..."
+    # Fix liveness and readiness probes for both Redis and Sentinel containers
+    fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+    fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+  fi
 
   echo "✅ Redis probe fixes completed"
 }
@@ -2658,5 +2750,286 @@ clear_moodle_cache_deployment() {
   else
     echo "⚠️  Cache clearing and theme rebuilding had issues, but deployment can continue"
     return 1
+  fi
+}
+
+# Function to validate and get current secret values
+get_secret_value() {
+  local secret_name="$1"
+  local key="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    # Get the base64 encoded value and decode it
+    oc get secret "$secret_name" -n "$namespace" -o jsonpath="{.data.$key}" 2>/dev/null | base64 -d 2>/dev/null || echo ""
+  else
+    echo ""
+  fi
+}
+
+# Function to validate if secret values match expected values
+validate_secret_values() {
+  local secret_name="$1"
+  local expected_values="$2"  # Format: "key1=value1,key2=value2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if ! oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    echo "❌ Secret '$secret_name' does not exist"
+    return 1
+  fi
+
+  echo "🔍 Validating secret '$secret_name' values..."
+
+  # Parse expected values
+  IFS=',' read -ra expected_pairs <<< "$expected_values"
+  local validation_failed=false
+
+  for pair in "${expected_pairs[@]}"; do
+    if [[ "$pair" == *"="* ]]; then
+      local key="${pair%%=*}"
+      local expected_value="${pair#*=}"
+      local current_value=$(get_secret_value "$secret_name" "$key" "$namespace")
+
+      if [[ "$current_value" != "$expected_value" ]]; then
+        echo "  ❌ Key '$key': value mismatch"
+        validation_failed=true
+      else
+        echo "  ✅ Key '$key': value matches"
+      fi
+    fi
+  done
+
+  if [[ "$validation_failed" == "true" ]]; then
+    return 1
+  else
+    echo "✅ All secret values match expected values"
+    return 0
+  fi
+}
+
+# Function to create or update secret with validation
+# Return codes:
+#   0 - Secret already exists with correct values (no changes made)
+#   2 - Secret was created or updated successfully (changes made - restart may be needed)
+#   1 - Error occurred
+create_or_update_secret() {
+  local secret_name="$1"
+  local secret_values="$2"  # Format: "key1=value1,key2=value2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local force_recreate="${4:-false}"
+
+  echo "🔧 Managing secret '$secret_name'..."
+
+  # Check if validation is needed
+  if [[ "$force_recreate" == "false" ]] && validate_secret_values "$secret_name" "$secret_values" "$namespace"; then
+    echo "✅ Secret '$secret_name' already exists with correct values"
+    return 0  # No changes made
+  fi
+
+  # Need to create or recreate the secret
+  echo "🔄 Creating/updating secret '$secret_name'..."
+
+  # Delete existing secret if it exists
+  if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    echo "🗑️  Removing existing secret to recreate with updated values..."
+    if ! oc delete secret "$secret_name" -n "$namespace"; then
+      echo "❌ Failed to delete existing secret '$secret_name'"
+      return 1
+    fi
+  fi
+
+  # Parse values and build oc command
+  local create_cmd="oc create secret generic $secret_name"
+  IFS=',' read -ra value_pairs <<< "$secret_values"
+
+  for pair in "${value_pairs[@]}"; do
+    if [[ "$pair" == *"="* ]]; then
+      local key="${pair%%=*}"
+      local value="${pair#*=}"
+      create_cmd+=" --from-literal=${key}='${value}'"
+    fi
+  done
+
+  # Add namespace if specified
+  if [[ "$namespace" != "$DEPLOY_NAMESPACE" && -n "$namespace" ]]; then
+    create_cmd+=" -n $namespace"
+  fi
+
+  # Execute the command
+  echo "🔧 Creating secret with updated values..."
+  if eval "$create_cmd"; then
+    echo "✅ Successfully created secret '$secret_name'"
+    echo "⚠️  Note: Deployment restart may be required for changes to take effect"
+    return 2  # Changes were made
+  else
+    echo "❌ Failed to create secret '$secret_name'"
+    return 1
+  fi
+}
+
+# Generic function to manage any secret with configurable validation and feedback
+# Return codes:
+#   0 - Secret already exists with correct values (no changes made)
+#   2 - Secret was created or updated successfully (changes made - restart may be needed)
+#   1 - Error occurred
+# Usage examples:
+#   - Basic secret management:
+#     manage_secret_with_validation "my-secret" "key1=value1,key2=value2" "my-namespace"
+#   - With validation feedback on specific keys:
+#     manage_secret_with_validation "my-secret" "user=admin,password=secret123" "my-namespace" "password" "database credentials"
+#   - Multiple key validation:
+#     manage_secret_with_validation "api-keys" "api-key=abc123,webhook=http://example.com" "default" "api-key,webhook" "API configuration"
+manage_secret_with_validation() {
+  local secret_name="$1"
+  local secret_values="$2"  # Format: "key1=value1,key2=value2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local validation_keys="${4:-}"  # Optional: specific keys to validate and provide feedback for
+  local secret_description="${5:-secret}"  # Optional: description for logging
+
+  echo "🔍 Managing $secret_description '$secret_name' for namespace: $namespace"
+
+  # Use the utility function to create/update the secret and capture return code
+  create_or_update_secret "$secret_name" "$secret_values" "$namespace"
+  local secret_result=$?
+
+  if [[ $secret_result -eq 0 ]]; then
+    echo "✅ $secret_description '$secret_name' is properly configured (no changes made)"
+  elif [[ $secret_result -eq 2 ]]; then
+    echo "✅ $secret_description '$secret_name' is properly configured (changes made)"
+  else
+    echo "❌ Failed to configure $secret_description '$secret_name'"
+    return 1
+  fi
+
+  # Provide feedback on specific keys if validation_keys is provided
+  if [[ -n "$validation_keys" ]]; then
+    IFS=',' read -ra keys_to_check <<< "$validation_keys"
+    for key in "${keys_to_check[@]}"; do
+      local current_value=$(get_secret_value "$secret_name" "$key" "$namespace")
+      if [[ -n "$current_value" ]]; then
+        echo "✅ Key '$key' is configured (length: ${#current_value} characters)"
+      else
+        echo "⚠️  Key '$key' is empty"
+      fi
+    done
+  fi
+
+  return $secret_result  # Propagate the original return code
+}
+
+# Function to manage backup storage secrets with environment-specific values
+# This function is now a thin wrapper around manage_secret_with_validation for backward compatibility
+# and to provide a convenient interface for backup storage secrets
+# Return codes:
+#   0 - Secret already exists with correct values (no changes made)
+#   2 - Secret was created or updated successfully (changes made - restart may be needed)
+#   1 - Error occurred
+# Usage examples:
+#   - Basic backup storage secret management:
+#     manage_backup_storage_secrets "$namespace" "secret-name" "key1=value1,key2=value2"
+#   - With validation feedback:
+#     manage_backup_storage_secrets "$namespace" "secret-name" "key1=value1,key2=value2" "key1,key2" "my secrets"
+#   - For other secrets, use manage_secret_with_validation directly
+manage_backup_storage_secrets() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  local secret_name="${2:-moodle-db-backup-storage-secrets}"
+  local secret_values="${3}"  # Format: "key1=value1,key2=value2"
+  local validation_keys="${4:-}"  # Optional: specific keys to validate and provide feedback for
+  local secret_description="${5:-backup storage secrets}"
+
+  # Use the generic function with provided parameters and propagate return code
+  manage_secret_with_validation "$secret_name" "$secret_values" "$namespace" "$validation_keys" "$secret_description"
+}
+
+# Function to restart a deployment after secret changes
+# Usage: restart_deployment_for_secrets "deployment-name" "namespace" "timeout"
+restart_deployment_for_secrets() {
+  local deployment_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local timeout="${3:-300s}"
+
+  echo "🔄 Restarting deployment '$deployment_name' due to secret changes..."
+
+  # Check if deployment exists
+  if ! oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
+    echo "❌ Deployment '$deployment_name' not found in namespace '$namespace'"
+    return 1
+  fi
+
+  # Restart the deployment to pick up secret changes
+  if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
+    echo "✅ Deployment restart initiated for '$deployment_name'"
+
+    # Wait for the rollout to complete
+    if oc rollout status deployment/"$deployment_name" -n "$namespace" --timeout="$timeout"; then
+      echo "✅ Deployment restart completed successfully"
+      return 0
+    else
+      echo "⚠️  Deployment restart timed out after $timeout"
+      return 2  # Timeout, but restart was initiated
+    fi
+  else
+    echo "❌ Failed to restart deployment '$deployment_name'"
+    return 1
+  fi
+}
+
+# Function to update Redis proxy configuration after right-sizing
+update_redis_proxy_after_scaling() {
+  local redis_name="${1:-redis}"
+  local redis_proxy_name="${2:-redis-proxy}"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local config_file="/tmp/sentinel_tunnel.${namespace}.config.json"
+
+  echo "🔧 Checking if Redis proxy configuration needs updating after scaling..."
+
+  # Get current Redis replica count
+  local redis_sts_name="${redis_name}-node"
+  local current_replicas=$(oc get statefulset "$redis_sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+
+  echo "🔍 Current Redis replicas: $current_replicas"
+
+  if [[ "$current_replicas" -gt 1 ]]; then
+    echo "🔧 Multiple replicas detected ($current_replicas), updating Redis proxy configuration..."
+
+    # Wait for all Redis pods to be ready before regenerating config
+    echo "⏳ Waiting for all Redis pods to be ready after scaling..."
+    if ! wait_for "statefulset/$redis_sts_name"; then
+      echo "⚠️ Some Redis pods may not be ready, but proceeding with config update..."
+    fi
+
+    # Regenerate the config with all available pods
+    if ! generate_redis_proxy_config_json "$namespace" "$redis_sts_name" "redis-headless" 26379 "$config_file"; then
+      echo "⚠️ Failed to regenerate Redis proxy configuration, keeping existing config..."
+      return 1
+    fi
+
+    # Validate the updated configuration
+    echo "🔍 Validating updated Redis proxy configuration..."
+    if validate_redis_proxy_config "$config_file" "$namespace" "$redis_sts_name"; then
+      echo "✅ Updating ConfigMap with right-sized Redis proxy configuration..."
+      create_or_update_configmap "${redis_proxy_name}-config" \
+        "config.json=$config_file"
+
+      # Restart Redis proxy to pick up new config
+      echo "🔄 Restarting Redis proxy to use updated configuration..."
+      oc rollout restart deployment/"$redis_proxy_name" -n "$namespace"
+      if ! wait_for "deployment/$redis_proxy_name"; then
+        echo "⚠️ Redis Proxy restart failed, but continuing..."
+        return 1
+      else
+        echo "✅ Redis Proxy restarted with updated configuration for $current_replicas replicas"
+
+        # Clean up temporary config file
+        rm -f "$config_file" 2>/dev/null || true
+        return 0
+      fi
+    else
+      echo "⚠️ Updated Redis proxy configuration failed validation, keeping existing config..."
+      return 1
+    fi
+  else
+    echo "✅ Single replica deployment, Redis proxy configuration update not needed"
+    return 0
   fi
 }

@@ -49,5 +49,11 @@ else
   echo "Skipping Moodle upgrade as it has been run within $IMAGE_REBUILD_TIME_LIMIT seconds."
 fi
 
+echo "Purging cache..."
+php /var/www/html/admin/cli/purge_caches.php
+
+echo "Rebuilding theme cache..."
+php /var/www/html/admin/cli/build_theme_css.php --themes=bcgovpsa
+
 echo "Disabling Moodle maintenance mode..."
 php /var/www/html/admin/cli/maintenance.php --disable

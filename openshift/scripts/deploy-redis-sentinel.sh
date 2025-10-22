@@ -22,93 +22,81 @@ REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
 REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
 REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
-# Create a minimal installation values file
-cat <<EOF > install.yaml
-redis:
-  enableServiceLinks: false
-resources:
-  requests:
-    cpu: $REDIS_REQUEST_CPU
-    memory: $REDIS_REQUEST_MEMORY
-  limits:
-    cpu: $REDIS_LIMIT_CPU
-    memory: $REDIS_LIMIT_MEMORY
-persistence:
-  enabled: false
-replicas:
-  replicaCount: $REDIS_REPLICAS
-  persistence:
-    enabled: false
-  resources:
-    requests:
-      cpu: $REDIS_REQUEST_CPU
-      memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: $REDIS_LIMIT_CPU
-      memory: $REDIS_LIMIT_MEMORY
-sentinel:
-  enabled: true
-  persistence:
-    enabled: false
-  resources:
-    requests:
-      cpu: $REDIS_REQUEST_CPU
-      memory: $REDIS_REQUEST_MEMORY
-    limits:
-      cpu: $REDIS_LIMIT_CPU
-      memory: $REDIS_LIMIT_MEMORY
+# Pin to chart version that works in dev/test environments
+REDIS_CHART_VERSION="23.1.3"
+
+# Configure Redis deployment arguments in one place
+REDIS_ARGS=(
+  "--set" "image.repository=bitnamilegacy/redis"
+  "--set" "image.tag=8.0.2-debian-12-r2"
+  "--set" "sentinel.image.repository=bitnamilegacy/redis-sentinel"
+  "--set" "sentinel.image.tag=8.0.2-debian-12-r1"
+  "--set" "global.security.allowInsecureImages=true"
+  "--set" "redis.resources.limits.ephemeral-storage=2Gi"
+  "--set" "redis.resources.requests.ephemeral-storage=50Mi"
+  "--set" "persistence.enabled=false"
+  "--set" "replica.persistence.enabled=false"
+  "--set" "master.persistence.enabled=false"
+  "--set" "sentinel.persistence.enabled=false"
+  "--version" "$REDIS_CHART_VERSION"
+)
+
+# Create a minimal values file matching test environment
+cat <<EOF > redis-values.yaml
+global:
+  security:
+    allowInsecureImages: true
+
+# Use proven working image tags from test environment
+image:
+  repository: bitnamilegacy/redis
+  tag: 8.0.2-debian-12-r2
+  debug: false
+
 auth:
   enabled: false
-EOF
 
-# Create minimal upgrade file
-cat <<EOF > upgrade.yaml
 persistence:
   enabled: false
+
 redis:
-  enableServiceLinks: false
+  enableServiceLinks: true
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
+
 replicas:
   replicaCount: $REDIS_REPLICAS
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
+      memory: $REDIS_REQUEST_MEMORY
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
+
 sentinel:
   enabled: true
+  image:
+    repository: bitnamilegacy/redis-sentinel
+    tag: 8.0.2-debian-12-r1
   persistence:
     enabled: false
   resources:
     requests:
-      memory: $REDIS_REQUEST_MEMORY
       cpu: $REDIS_REQUEST_CPU
-    limits:
-      memory: $REDIS_LIMIT_MEMORY
-      cpu: $REDIS_LIMIT_CPU
-sentinel:
-  enabled: true
-  persistence:
-    enabled: false
-  resources:
-    requests:
       memory: $REDIS_REQUEST_MEMORY
-      cpu: $REDIS_REQUEST_CPU
     limits:
-      memory: $REDIS_LIMIT_MEMORY
       cpu: $REDIS_LIMIT_CPU
+      memory: $REDIS_LIMIT_MEMORY
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -116,35 +104,134 @@ redis_node_name=$REDIS_NAME-node
 if [[ `oc describe statefulset/$redis_node_name 2>&1` =~ "NotFound" ]]; then
   echo "Redis StatefulSet NOT FOUND... Creating new deployment..."
 else
-  echo "Redis StatefulSet found. Scaling down..."
-  scale_deployment "statefulset" "$redis_node_name" "0" "0"
-  if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-    echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-    exit 1
+  echo "Redis StatefulSet found. Checking if image update requires Helm reinstall..."
+
+  # Get current image tags from the StatefulSet
+  current_redis_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="redis")].image}' 2>/dev/null || echo "")
+  current_sentinel_image=$(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[?(@.name=="sentinel")].image}' 2>/dev/null || echo "")
+
+  echo "Current images:"
+  echo "  Redis: $current_redis_image"
+  echo "  Sentinel: $current_sentinel_image"
+
+  target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
+  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+
+  # Check if changes require Helm reinstall (images or persistence settings)
+  if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
+    echo "Image tags have changed. Helm reinstall required to handle StatefulSet recreation..."
+    echo "Scaling down existing StatefulSet before Helm uninstall..."
+  # Also check if persistent volume claims exist (indicating persistence was enabled)
+  elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
+    echo "Persistent volume claims detected. Helm reinstall required to disable persistence..."
+    echo "Scaling down existing StatefulSet before Helm uninstall..."
+
+    scale_deployment "statefulset" "$redis_node_name" "0" "0"
+    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+      exit 1
+    fi
+
+    # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+    echo "Uninstalling Helm release to allow clean recreation..."
+    helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+
+    # Wait for cleanup
+    echo "Waiting for resources to be cleaned up..."
+    sleep 10
+
+    # Set flag to force install instead of upgrade
+    FORCE_HELM_INSTALL=true
+  else
+    echo "Image tags unchanged. Performing standard scaling..."
+    scale_deployment "statefulset" "$redis_node_name" "0" "0"
+    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+      exit 1
+    fi
   fi
 fi
 
 # Create or update the Helm deployment
 helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
 
-# Define Redis-specific legacy image overrides
-REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis --set sentinel.image.repository=bitnamilegacy/redis-sentinel --set global.security.allowInsecureImages=true"
+echo "🔍 Debug: Redis Helm chart information:"
+helm search repo bitnami/redis --versions | head -5
 
-create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
-  "install.yaml" \
-  "upgrade.yaml" \
-  "$REDIS_LEGACY_ARGS"
+echo "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
 
-# Apply Redis probe fixes immediately after Helm deployment (before waiting for readiness)
-echo "🔧 Applying Redis probe fixes before waiting for deployment readiness..."
-apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180
+echo "🔍 Debug: Checking generated redis-values.yaml file..."
+echo "--- FIPS Configuration ---"
+grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
+echo "--- End FIPS Configuration ---"
+
+echo "🔍 Debug info:"
+echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
+echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+echo "🔧 Chart: $REDIS_CHART_VERSION"
+
+echo "🔍 Debug: Helm deployment arguments:"
+printf '%s\n' "${REDIS_ARGS[@]}"
+
+# Handle forced reinstall for StatefulSet image changes
+if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then
+  echo "🔧 Performing Helm install (forced due to image changes)..."
+  helm install --values redis-values.yaml "${REDIS_ARGS[@]}" "$REDIS_NAME" "$REDIS_HELM_CHART"
+else
+  echo "🔧 Performing standard Helm upgrade..."
+  # Convert array to string for create_or_update_helm_deployment
+  REDIS_ARGS_STRING="${REDIS_ARGS[*]}"
+  create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
+    "redis-values.yaml" \
+    "redis-values.yaml" \
+    "$REDIS_ARGS_STRING"
+fi
+
+# Apply proven Redis probe fixes after Helm deployment
+echo "🔧 Apply Redis probe fixes..."
+if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180 true; then
+  echo "✅ All Redis probes removed successfully (matching test environment)"
+else
+  echo "⚠️ Redis probe fixes failed, but continuing..."
+fi
 
 # Scale to desired replicas
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
+# Debug: Check actual probe configuration after fixes
+echo "🔍 Debug: Verifying probe configuration after fixes..."
+echo "Startup probes (should be empty/null):"
+oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' || echo "  Redis: No startup probe ✅"
+oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].startupProbe}' || echo "  Sentinel: No startup probe ✅"
+echo "Liveness probe delays (should be 180s):"
+echo "  Redis: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')s"
+echo "  Sentinel: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}')s"
+
+# Debug: Check for FIPS configuration in ConfigMaps
+echo "🔍 Debug: Checking for FIPS configuration in ConfigMaps..."
+if oc get configmap redis-configuration -o yaml | grep -i fips; then
+  echo "⚠️ WARNING: FIPS configuration still found in ConfigMap!"
+else
+  echo "✅ No FIPS configuration found in ConfigMap"
+fi
+
 # Now wait for the StatefulSet to be ready with the correct probe configurations
+echo "🔍 Monitoring Redis container startup..."
 if ! wait_for "statefulset/$redis_node_name"; then
-  echo "Failed to deploy Redis. Exiting..."
+  echo "❌ Failed to deploy Redis. Checking container status..."
+
+  # Get pod status and logs for debugging
+  pod_name="${redis_node_name}-0"
+  echo "🔍 Debug: Pod status for $pod_name:"
+  oc describe pod "$pod_name" | grep -A 10 -B 10 "State\|Conditions\|Events"
+
+  echo "🔍 Debug: Recent Redis container logs:"
+  oc logs "$pod_name" -c redis --tail=20 || echo "Cannot get Redis logs"
+
+  echo "🔍 Debug: Recent Sentinel container logs:"
+  oc logs "$pod_name" -c sentinel --tail=20 || echo "Cannot get Sentinel logs"
+
   exit 1
 fi
 
@@ -157,8 +244,8 @@ if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 
-# Generate dynamic redis proxy config for the current environment
-echo "🔧 Generating Redis proxy configuration for namespace: $OC_PROJECT"
+# Phase 1: Generate initial Redis proxy config for minimal setup (1 pod)
+echo "🔧 Phase 1: Generating initial Redis proxy configuration for namespace: $OC_PROJECT"
 dynamic_config_file="/tmp/sentinel_tunnel.${OC_PROJECT}.config.json"
 
 # Set up cleanup trap
@@ -171,19 +258,19 @@ cleanup_temp_config() {
 trap cleanup_temp_config EXIT
 
 if ! generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "$dynamic_config_file"; then
-  echo "❌ Failed to generate Redis proxy configuration. Exiting..."
+  echo "❌ Failed to generate initial Redis proxy configuration. Exiting..."
   exit 1
 fi
 
 # Validate the generated configuration
-echo "🔍 Validating generated Redis proxy configuration..."
+echo "🔍 Validating initial Redis proxy configuration..."
 if ! validate_redis_proxy_config "$dynamic_config_file" "$OC_PROJECT" "$REDIS_NAME-node"; then
-  echo "❌ Generated Redis proxy configuration failed validation. Exiting..."
+  echo "❌ Initial Redis proxy configuration failed validation. Exiting..."
   exit 1
 fi
 
 # Create the ConfigMap with the validated dynamic config
-echo "✅ Creating ConfigMap with validated Redis proxy configuration..."
+echo "✅ Creating ConfigMap with initial Redis proxy configuration..."
 create_or_update_configmap "$REDIS_PROXY_NAME-config" \
   "config.json=$dynamic_config_file"
 
