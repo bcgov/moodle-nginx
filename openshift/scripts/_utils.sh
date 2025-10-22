@@ -2540,32 +2540,32 @@ fix_container_probes() {
       "exec": {
         "command": [
           "/bin/bash",
-          "-c",
-          "'${liveness_script}'"
+          "-ec",
+          "${liveness_script}"
         ]
       },
-      "initialDelaySeconds": '${initial_delay}',
-      "timeoutSeconds": '${timeout}',
-      "periodSeconds": '${period}',
-      "failureThreshold": '${failure_threshold}',
+      "initialDelaySeconds": ${initial_delay},
+      "timeoutSeconds": ${timeout},
+      "periodSeconds": ${period},
+      "failureThreshold": ${failure_threshold},
       "successThreshold": 1
     }
   },
   {
     "op": "replace",
-    "path": "/spec/template/spec/containers/'${container_index}'/readinessProbe",
+    "path": "/spec/template/spec/containers/${container_index}/readinessProbe",
     "value": {
       "exec": {
         "command": [
           "/bin/bash",
-          "-c",
-          "'${readiness_script}'"
+          "-ec",
+          "${readiness_script}"
         ]
       },
-      "initialDelaySeconds": '${initial_delay}',
-      "timeoutSeconds": '${timeout}',
-      "periodSeconds": '${period}',
-      "failureThreshold": '${failure_threshold}',
+      "initialDelaySeconds": ${initial_delay},
+      "timeoutSeconds": ${timeout},
+      "periodSeconds": ${period},
+      "failureThreshold": ${failure_threshold},
       "successThreshold": 1
     }
   }
@@ -2616,20 +2616,64 @@ fix_sentinel_container_probes() {
   fix_container_probes "$statefulset_name" "1" "Sentinel" "/health/ping_sentinel.sh 10" "/health/ping_sentinel.sh 10" "$namespace" "$initial_delay" "$timeout" "$period" "$failure_threshold"
 }
 
+# Function to remove ALL probes from Redis StatefulSet (matching test environment)
+remove_all_redis_probes() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🔧 Removing ALL probes from Redis and Sentinel containers..."
+
+  # Create comprehensive patch to remove all probe types from both containers
+  local patch_content='[
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/livenessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/readinessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/1/livenessProbe"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/1/readinessProbe"
+  }
+]'
+
+  # Use generic apply_resource_patch function
+  if apply_resource_patch "statefulset" "$statefulset_name" "$patch_content" "$namespace" "Removing all probes to match test environment"; then
+    echo "✅ Successfully removed all probes from Redis StatefulSet"
+    return 0
+  else
+    echo "⚠️ Warning: Failed to remove all probes"
+    return 1
+  fi
+}
+
 # Combined function to apply all Redis probe fixes
 apply_redis_probe_fixes() {
   local statefulset_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local initial_delay="${3:-180}"
+  local remove_all_probes="${4:-false}"
 
   echo "🔧 Applying Redis probe fixes to $statefulset_name..."
 
-  # Remove startup probe first
+  # Always remove startup probes first
   remove_redis_startup_probe "$statefulset_name" "$namespace"
 
-  # Fix liveness and readiness probes for both Redis and Sentinel containers
-  fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
-  fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+  if [[ "$remove_all_probes" == "true" ]]; then
+    echo "🔧 Removing ALL probes to match test environment..."
+    remove_all_redis_probes "$statefulset_name" "$namespace"
+  else
+    echo "🔧 Fixing liveness and readiness probes..."
+    # Fix liveness and readiness probes for both Redis and Sentinel containers
+    fix_redis_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+    fix_sentinel_container_probes "$statefulset_name" "$namespace" "$initial_delay"
+  fi
 
   echo "✅ Redis probe fixes completed"
 }

@@ -22,15 +22,26 @@ REDIS_REQUEST_MEMORY="${REDIS_REQUEST_MEMORY:-128Mi}"
 REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
 REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
-# Create a comprehensive values file for both install and upgrade
+# Pin to chart version that works in dev/test environments
+REDIS_CHART_VERSION="23.1.3"
+
+# Configure Redis deployment arguments in one place
+REDIS_LEGACY_ARGS=(
+  "--set" "image.repository=bitnamilegacy/redis"
+  "--set" "image.tag=8.0.2-debian-12-r2"
+  "--set" "sentinel.image.repository=bitnamilegacy/redis-sentinel"
+  "--set" "sentinel.image.tag=8.0.2-debian-12-r1"
+  "--set" "global.security.allowInsecureImages=true"
+  "--set" "redis.resources.limits.ephemeral-storage=2Gi"
+  "--set" "redis.resources.requests.ephemeral-storage=50Mi"
+  "--version" "$REDIS_CHART_VERSION"
+)
+
+# Create a minimal values file matching test environment
 cat <<EOF > redis-values.yaml
 global:
-  defaultFips: false
   security:
     allowInsecureImages: true
-
-fips:
-  openssl: false
 
 # Use proven working image tags from test environment
 image:
@@ -82,10 +93,6 @@ sentinel:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
-
-# Alternative FIPS structure for older chart versions
-commonConfiguration: |
-  fips-mode no
 EOF
 
 # Scale down the Redis deployment if it exists
@@ -144,8 +151,6 @@ helm repo update
 echo "🔍 Debug: Redis Helm chart information:"
 helm search repo bitnami/redis --versions | head -5
 
-# Pin to chart version that works in dev/test environments
-REDIS_CHART_VERSION="23.1.3"
 echo "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
 
 echo "🔍 Debug: Checking generated redis-values.yaml file..."
@@ -153,56 +158,55 @@ echo "--- FIPS Configuration ---"
 grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
 echo "--- End FIPS Configuration ---"
 
-# Define Redis-specific legacy image overrides with FIPS configuration
-# Use proven working image tags from test environment
-REDIS_LEGACY_ARGS="--set image.repository=bitnamilegacy/redis"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set image.tag=8.0.2-debian-12-r2"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.repository=bitnamilegacy/redis-sentinel"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r1"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
-# Configure probes with delays matching test environment (don't disable completely)
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.startupProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.startupProbe.enabled=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.enabled=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.enabled=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.enabled=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.enabled=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.initialDelaySeconds=180"
-
-echo "🔍 Debug: Using image versions matching test environment:"
+echo "🔍 Debug info:"
 echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
 echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
-echo "🔧 Startup probes disabled, liveness/readiness probes enabled with 180s delay"
+echo "🔧 Chart: $REDIS_CHART_VERSION"
 
-echo "🔍 Debug: Helm command will use these --set arguments:"
-echo "$REDIS_LEGACY_ARGS"
-
-# Use specific chart version and add version to the legacy args
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --version $REDIS_CHART_VERSION"
+echo "🔍 Debug: Helm deployment arguments:"
+printf '%s\n' "${REDIS_LEGACY_ARGS[@]}"
 
 # Handle forced reinstall for StatefulSet image changes
 if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then
   echo "🔧 Performing Helm install (forced due to image changes)..."
-  helm install --values redis-values.yaml $REDIS_LEGACY_ARGS "$REDIS_NAME" "$REDIS_HELM_CHART"
+  helm install --values redis-values.yaml "${REDIS_LEGACY_ARGS[@]}" "$REDIS_NAME" "$REDIS_HELM_CHART"
 else
   echo "🔧 Performing standard Helm upgrade..."
+  # Convert array to string for create_or_update_helm_deployment
+  REDIS_ARGS_STRING="${REDIS_LEGACY_ARGS[*]}"
   create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
     "redis-values.yaml" \
     "redis-values.yaml" \
-    "$REDIS_LEGACY_ARGS"
+    "$REDIS_ARGS_STRING"
 fi
 
-# Debug: Check actual probe configuration in the deployed StatefulSet
-echo "🔍 Debug: Checking actual probe configuration in StatefulSet..."
-oc get statefulset/$redis_node_name -o yaml | grep -A 20 -B 5 "Probe:" || echo "No probes found (good!)"
+# Apply proven Redis probe fixes after Helm deployment
+echo "🔧 Apply Redis probe fixes..."
+if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180 true; then
+  echo "✅ All Redis probes removed successfully (matching test environment)"
+else
+  echo "⚠️ Redis probe fixes failed, but continuing..."
+fi
 
 # Scale to desired replicas
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
+
+# Debug: Check actual probe configuration after fixes
+echo "🔍 Debug: Verifying probe configuration after fixes..."
+echo "Startup probes (should be empty/null):"
+oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' || echo "  Redis: No startup probe ✅"
+oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].startupProbe}' || echo "  Sentinel: No startup probe ✅"
+echo "Liveness probe delays (should be 180s):"
+echo "  Redis: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')s"
+echo "  Sentinel: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}')s"
+
+# Debug: Check for FIPS configuration in ConfigMaps
+echo "🔍 Debug: Checking for FIPS configuration in ConfigMaps..."
+if oc get configmap redis-configuration -o yaml | grep -i fips; then
+  echo "⚠️ WARNING: FIPS configuration still found in ConfigMap!"
+else
+  echo "✅ No FIPS configuration found in ConfigMap"
+fi
 
 # Now wait for the StatefulSet to be ready with the correct probe configurations
 echo "🔍 Monitoring Redis container startup..."
