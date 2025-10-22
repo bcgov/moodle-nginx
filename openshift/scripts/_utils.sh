@@ -840,7 +840,7 @@ validate_and_format_resource_value() {
   if [[ $value =~ ^[1-9]+$ ]]; then
     echo "${value}${unit}"
   elif [[ $value == "0" || $value == 0 ]]; then
-    echo "0"
+    echo "null"  # Return null for zero values so they are skipped
   else
     echo "null"
   fi
@@ -922,9 +922,11 @@ create_hpa() {
   echo "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
 
   # Determine the kind of the target resource
-  local kind="Deployment"
+  local kind="deployment"  # Use lowercase for wait_for_deployment_without_errors
+  local hpa_kind="Deployment"  # Use proper case for HPA template
   if [[ $target == sts/* ]]; then
-    kind="StatefulSet"
+    kind="statefulset"
+    hpa_kind="StatefulSet"
     target=${target#sts/}
   elif [[ $target == deployment/* ]]; then
     target=${target#deployment/}
@@ -939,7 +941,7 @@ metadata:
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
-    kind: $kind
+    kind: $hpa_kind
     name: $target
   minReplicas: $min_replicas
   maxReplicas: $max_replicas
@@ -955,7 +957,7 @@ EOF
   # First, delete the HPA if it exists
   delete_resource_if_exists hpa $name
 
-  echo "Cre$pod--forating HPA from template:"
+  echo "Creating HPA from template:"
   # echo $(cat hpa.yaml)
   oc create -f hpa.yaml
 
@@ -1440,7 +1442,7 @@ create_or_update_helm_deployment() {
   if [[ -f "$values_file" ]]; then
     rm "$values_file"
   fi
-  
+
   # Only remove upgrade file if it's different from values file
   if [[ "$upgrade_file" != "$values_file" ]] && [[ -f "$upgrade_file" ]]; then
     rm "$upgrade_file"
@@ -1845,7 +1847,7 @@ get_pods_for_resource() {
     return 1
   fi
 
-  echo "Getting pods for: $resource_type / $resource_name" >&2
+  echo "Getting pods for: $resource_type/$resource_name" >&2
 
   local pods=""
   if [[ "$resource_type" == "statefulset" ]]; then

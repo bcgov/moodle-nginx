@@ -26,7 +26,7 @@ REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 REDIS_CHART_VERSION="23.1.3"
 
 # Configure Redis deployment arguments in one place
-REDIS_LEGACY_ARGS=(
+REDIS_ARGS=(
   "--set" "image.repository=bitnamilegacy/redis"
   "--set" "image.tag=8.0.2-debian-12-r2"
   "--set" "sentinel.image.repository=bitnamilegacy/redis-sentinel"
@@ -34,6 +34,10 @@ REDIS_LEGACY_ARGS=(
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
   "--set" "redis.resources.requests.ephemeral-storage=50Mi"
+  "--set" "persistence.enabled=false"
+  "--set" "replica.persistence.enabled=false"
+  "--set" "master.persistence.enabled=false"
+  "--set" "sentinel.persistence.enabled=false"
   "--version" "$REDIS_CHART_VERSION"
 )
 
@@ -164,16 +168,16 @@ echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
 echo "🔧 Chart: $REDIS_CHART_VERSION"
 
 echo "🔍 Debug: Helm deployment arguments:"
-printf '%s\n' "${REDIS_LEGACY_ARGS[@]}"
+printf '%s\n' "${REDIS_ARGS[@]}"
 
 # Handle forced reinstall for StatefulSet image changes
 if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then
   echo "🔧 Performing Helm install (forced due to image changes)..."
-  helm install --values redis-values.yaml "${REDIS_LEGACY_ARGS[@]}" "$REDIS_NAME" "$REDIS_HELM_CHART"
+  helm install --values redis-values.yaml "${REDIS_ARGS[@]}" "$REDIS_NAME" "$REDIS_HELM_CHART"
 else
   echo "🔧 Performing standard Helm upgrade..."
   # Convert array to string for create_or_update_helm_deployment
-  REDIS_ARGS_STRING="${REDIS_LEGACY_ARGS[*]}"
+  REDIS_ARGS_STRING="${REDIS_ARGS[*]}"
   create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
     "redis-values.yaml" \
     "redis-values.yaml" \
