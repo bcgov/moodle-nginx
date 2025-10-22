@@ -190,7 +190,7 @@ else
     if oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD &>/dev/null; then
       db_password=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD 2>/dev/null)
       if [[ -n "$db_password" ]]; then
-        echo "  ✅ MARIADB_GALERA_PASSWORD is set (length: ${#db_password} chars)"
+        echo "  ✅ MARIADB_GALERA_PASSWORD is set"
       else
         echo "  ⚠️  MARIADB_GALERA_PASSWORD is empty"
       fi

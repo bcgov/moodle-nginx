@@ -117,9 +117,13 @@ else
   target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
   target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
 
-  # Check if image changes require Helm reinstall
+  # Check if changes require Helm reinstall (images or persistence settings)
   if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
     echo "Image tags have changed. Helm reinstall required to handle StatefulSet recreation..."
+    echo "Scaling down existing StatefulSet before Helm uninstall..."
+  # Also check if persistent volume claims exist (indicating persistence was enabled)
+  elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
+    echo "Persistent volume claims detected. Helm reinstall required to disable persistence..."
     echo "Scaling down existing StatefulSet before Helm uninstall..."
 
     scale_deployment "statefulset" "$redis_node_name" "0" "0"
