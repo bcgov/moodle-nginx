@@ -55,21 +55,6 @@ redis:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
-  # Disable problematic startup probe in values file
-  startupProbe:
-    enabled: false
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    periodSeconds: 30
-    timeoutSeconds: 5
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    periodSeconds: 30
-    timeoutSeconds: 5
-    failureThreshold: 5
 
 replicas:
   replicaCount: $REDIS_REPLICAS
@@ -97,21 +82,6 @@ sentinel:
     limits:
       cpu: $REDIS_LIMIT_CPU
       memory: $REDIS_LIMIT_MEMORY
-  # Disable problematic startup probe for sentinel too
-  startupProbe:
-    enabled: false
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    periodSeconds: 30
-    timeoutSeconds: 5
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    periodSeconds: 30
-    timeoutSeconds: 5
-    failureThreshold: 5
 
 # Alternative FIPS structure for older chart versions
 commonConfiguration: |
@@ -192,18 +162,13 @@ REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
-# Disable startup probes that cause connection issues
+# Disable problematic probes that cause connection issues
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.startupProbe.enabled=false"
 REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.startupProbe.enabled=false"
-# Set appropriate delays for other probes
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.initialDelaySeconds=180"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.image.tag=8.0.2-debian-12-r2"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.security.allowInsecureImages=true"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set global.defaultFips=false"
-REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set fips.openssl=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.livenessProbe.enabled=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.livenessProbe.enabled=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set redis.readinessProbe.enabled=false"
+REDIS_LEGACY_ARGS="$REDIS_LEGACY_ARGS --set sentinel.readinessProbe.enabled=false"
 
 echo "🔍 Debug: Using consistent r2 image tags for both components:"
 echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
@@ -228,20 +193,29 @@ else
     "$REDIS_LEGACY_ARGS"
 fi
 
-# Apply Redis probe fixes immediately after Helm deployment (backup measure)
-echo "🔧 Applying additional Redis probe fixes as backup measure..."
-if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180; then
-  echo "✅ Additional probe fixes applied successfully"
-else
-  echo "⚠️ Additional probe fixes failed, but continuing (should be handled by Helm values)"
-fi
+# Debug: Check actual probe configuration in the deployed StatefulSet
+echo "🔍 Debug: Checking actual probe configuration in StatefulSet..."
+oc get statefulset/$redis_node_name -o yaml | grep -A 20 -B 5 "Probe:" || echo "No probes found (good!)"
 
 # Scale to desired replicas
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Now wait for the StatefulSet to be ready with the correct probe configurations
+echo "🔍 Monitoring Redis container startup..."
 if ! wait_for "statefulset/$redis_node_name"; then
-  echo "Failed to deploy Redis. Exiting..."
+  echo "❌ Failed to deploy Redis. Checking container status..."
+  
+  # Get pod status and logs for debugging
+  pod_name="${redis_node_name}-0"
+  echo "🔍 Debug: Pod status for $pod_name:"
+  oc describe pod "$pod_name" | grep -A 10 -B 10 "State\|Conditions\|Events"
+  
+  echo "🔍 Debug: Recent Redis container logs:"
+  oc logs "$pod_name" -c redis --tail=20 || echo "Cannot get Redis logs"
+  
+  echo "🔍 Debug: Recent Sentinel container logs:"
+  oc logs "$pod_name" -c sentinel --tail=20 || echo "Cannot get Sentinel logs"
+  
   exit 1
 fi
 
