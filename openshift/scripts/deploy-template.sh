@@ -176,15 +176,8 @@ clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovp
 echo "🔧 Updating Redis proxy configuration after right-sizing..."
 update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAMESPACE"
 
-# Disable maintenance mode and verify output
-manage_maintenance_mode "disable" "web"
-
-sleep 30
-
-echo "Waiting for route changes to take effect..."
-sleep 60
-
-echo "Shutting down maintenance message..."
-oc scale deployment/maintenance-message --replicas=0
+# Disable maintenance mode with integrated verification and scaling
+echo "🔄 Disabling maintenance mode with automatic verification and cleanup..."
+manage_maintenance_mode "disable" "web" "auto"
 
 echo "Deployment complete."

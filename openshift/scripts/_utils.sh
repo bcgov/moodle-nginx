@@ -404,33 +404,114 @@ enable_maintenance_mode() {
 
 # Function to disable maintenance mode
 disable_maintenance_mode() {
-  local route_name="moodle-web"
-  local service_name="web"
-  local maintenance_service_name="maintenance-message"
+  local target_service_name="${1:-web}"  # Service to redirect traffic to
+  local maintenance_service_name="${2:-maintenance-message}"  # Maintenance service to scale down
+  local route_mode="${3:-auto}"  # Route handling mode
 
-  echo "Disabling $maintenance_service_name..."
+  echo "Disabling $maintenance_service_name and redirecting to $target_service_name..."
 
   # Redirect traffic back to application
   if [[ "$route_mode" == "auto" ]]; then
-    echo "🔄 Redirecting all relevant routes back to application service..."
-    patch_all_routes "$service_name"
+    echo "🔄 Redirecting all relevant routes back to application service: $target_service_name"
+    patch_all_routes "$target_service_name"
   else
-    echo "🔄 Redirecting specific route $route_mode to $service_name..."
-    patch_route "$route_mode" "$service_name"
+    echo "🔄 Redirecting specific route $route_mode to $target_service_name..."
+    patch_route "$route_mode" "$target_service_name"
   fi
 
-  sleep 60
-
-  # Scale to 0
-  scale_deployment "deployment" "$maintenance_service_name" 0 0
+  echo "✅ Route redirection completed - traffic now directed to $target_service_name"
+  echo "⚠️ Note: Maintenance service scaling should be handled by caller after verification"
 }
 
-# Function to manage maintenance mode
+# Function to verify that routes are pointing to the correct service
+verify_route_target() {
+  local expected_service="$1"
+  local timeout="${2:-120}"
+  local check_interval="${3:-10}"
+  local elapsed=0
+
+  echo "🔍 Verifying routes are pointing to service: $expected_service"
+
+  while [[ $elapsed -lt $timeout ]]; do
+    # Get all routes and check their backend services
+    local routes_status="✅"
+    local routes_info=""
+
+    # Check all routes in the namespace
+    while IFS= read -r route_line; do
+      if [[ -n "$route_line" ]]; then
+        local route_name=$(echo "$route_line" | awk '{print $1}')
+        local current_target=$(echo "$route_line" | awk '{print $2}')
+
+        if [[ "$current_target" == "$expected_service" ]]; then
+          routes_info+="  ✅ Route '$route_name' → $current_target\n"
+        else
+          routes_info+="  ❌ Route '$route_name' → $current_target (expected: $expected_service)\n"
+          routes_status="❌"
+        fi
+      fi
+    done < <(oc get routes -o custom-columns=NAME:.metadata.name,SERVICE:.spec.to.name --no-headers 2>/dev/null || echo "")
+
+    echo -e "$routes_info"
+
+    if [[ "$routes_status" == "✅" ]]; then
+      echo "✅ All routes are correctly pointing to '$expected_service'"
+      return 0
+    fi
+
+    echo "⏳ Waiting for route changes to propagate... ($elapsed/$timeout seconds)"
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  echo "❌ Timeout: Routes are not pointing to '$expected_service' after $timeout seconds"
+  return 1
+}
+
+# Function to verify the application is responding correctly
+verify_application_response() {
+  local timeout="${1:-60}"
+  local check_interval="${2:-10}"
+  local elapsed=0
+
+  echo "🔍 Verifying application is responding correctly..."
+
+  # Get the route URL
+  local route_url=$(oc get route -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+  if [[ -z "$route_url" ]]; then
+    echo "⚠️ Could not determine route URL, skipping response verification"
+    return 0
+  fi
+
+  echo "🌐 Testing application response at: https://$route_url"
+
+  while [[ $elapsed -lt $timeout ]]; do
+    # Test the application response
+    local response_code=$(curl -s -o /dev/null -w "%{http_code}" -k "https://$route_url" --max-time 10 2>/dev/null || echo "000")
+
+    if [[ "$response_code" == "200" ]]; then
+      echo "✅ Application is responding correctly (HTTP $response_code)"
+      return 0
+    elif [[ "$response_code" == "000" ]]; then
+      echo "⏳ Connection failed, retrying... ($elapsed/$timeout seconds)"
+    else
+      echo "⏳ Application returned HTTP $response_code, retrying... ($elapsed/$timeout seconds)"
+    fi
+
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  echo "❌ Application is not responding correctly after $timeout seconds"
+  return 1
+}
+
+# Function to manage maintenance mode with integrated verification and scaling
 manage_maintenance_mode() {
   local action=$1
   local deployment_name=$2
   local route_name=$3
-  local max_retries=${4:-5} # Default to 5 retries
+  local max_retries=${4:-5} # Default to 5 retries for maintenance mode operation
   local wait_time=${5:-30} # Default to 30 seconds between retries
   local retry_count=0
 
@@ -455,6 +536,7 @@ manage_maintenance_mode() {
     enable_maintenance_mode $deployment_name ${route_name:-auto}
     expected_output="Your site is currently in CLI maintenance mode"
   else
+    # For disable mode, the deployment_name parameter is actually the target service name
     disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
     expected_output="Maintenance mode has been disabled"
   fi
@@ -476,10 +558,10 @@ manage_maintenance_mode() {
 
     if echo "$maintenance_output" | grep -q "$expected_output"; then
       echo "✔️ Maintenance mode has been successfully ${action}d."
-      return 0
+      break
     elif echo "$maintenance_output" | grep -q "$expected_output_first_run"; then
       echo "⚠️ Maintenance cannot be set on first run, skipping."
-      return 0
+      break
     elif echo "$maintenance_output" | grep -q "Exception"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
     elif echo "$maintenance_output" | grep -q "Error"; then
@@ -501,6 +583,37 @@ manage_maintenance_mode() {
     echo "Retrying in $wait_time seconds... (Attempt $retry_count/$max_retries)"
     sleep $wait_time
   done
+
+  # Additional steps for disable mode: verify and scale down maintenance service
+  if [[ $action == "disable" ]]; then
+    echo ""
+    echo "🔍 Verifying route configuration and application response before scaling down maintenance service..."
+
+    # Verify routes are pointing to the correct service
+    if verify_route_target "$deployment_name" 120 10; then
+      echo "✅ Routes verified - safe to scale down maintenance service"
+
+      # Additional verification: check if application is responding
+      if verify_application_response 60 10; then
+        echo "✅ Application verified - proceeding with maintenance service shutdown"
+      else
+        echo "⚠️ Application response verification failed, but routes are correct - proceeding anyway"
+      fi
+
+      echo "🔄 Shutting down maintenance message service..."
+      if scale_deployment "deployment" "maintenance-message" "0" "0"; then
+        echo "✅ Maintenance mode disabled and maintenance service scaled down"
+      else
+        echo "⚠️ Failed to scale down maintenance service, but continuing..."
+      fi
+    else
+      echo "❌ Routes are not correctly configured - NOT scaling down maintenance service"
+      echo "🚨 Manual intervention required to fix route configuration"
+      exit 1
+    fi
+  fi
+
+  return 0
 }
 
 # Generic function to apply JSON patches to Kubernetes resources
