@@ -412,7 +412,7 @@ clear_moodle_cache_deployment() {
 
 # Function to clear Moodle cache across all PHP pods
 clear_moodle_cache_across_pods() {
-  local php_resource_name="${1:-php}"  # Default to 'php' deployment/statefulset
+  local php_resource_name="${1:-deployment/php}"  # Default to 'php' deployment
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
   local max_retries="${4:-30}"
