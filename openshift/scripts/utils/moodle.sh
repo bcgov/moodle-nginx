@@ -382,7 +382,7 @@ clear_moodle_cache() {
 
 # Deployment-time cache clearing function
 clear_moodle_cache_deployment() {
-  local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
+  local php_deployment_name="${1:-deployment/$PHP_DEPLOYMENT_NAME}"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
 
