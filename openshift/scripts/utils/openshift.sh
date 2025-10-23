@@ -1,0 +1,1592 @@
+#!/bin/bash
+
+# OpenShift Utilities Module
+# Contains core OpenShift operations, resource management, maintenance mode,
+# secret management, logging, and validation functions
+
+# =============================================================================
+# RESOURCE MANAGEMENT FUNCTIONS
+# =============================================================================
+
+# Define error handling functions
+delete_pod() {
+  local pod=$1
+  echo "Restarting (deleting) pod..."
+  delete_resource_if_exists pod $pod
+}
+
+# Unified resource scaling function
+scale_resource() {
+  local type="$1"
+  local resource_name="$2"
+  local target_replicas="$3"
+  local max_replicas="${4:-$target_replicas}"  # Default to target_replicas if not specified
+  local namespace="${5:-$DEPLOY_NAMESPACE}"
+  local timeout="${6:-300s}"
+  local enable_hpa="${7:-false}"  # New flag to control HPA behavior
+
+  # Standardize resource type names
+  case "$type" in
+    "sts") type="statefulset" ;;
+    "deploy") type="deployment" ;;
+  esac
+
+  # Check if the resource exists
+  if ! oc get "$type" "$resource_name" -n "$namespace" &> /dev/null; then
+    echo "⚠️ $type/$resource_name does not exist in namespace $namespace"
+    return 1
+  fi
+
+  echo "🔄 Scaling $type/$resource_name to $target_replicas replicas (max: $max_replicas)..."
+
+  # Handle HPA for deployments (backward compatibility with scale_deployment)
+  if [[ "$type" == "deployment" && "$enable_hpa" == "true" ]]; then
+    # Remove existing autoscaler if it exists
+    if oc get hpa "$resource_name" -n "$namespace" &> /dev/null; then
+      echo "Removing existing HorizontalPodAutoscaler for $resource_name"
+      oc delete hpa "$resource_name" -n "$namespace" 2>/dev/null || true
+    fi
+
+    sleep 10
+  fi
+
+  # Perform the scaling operation
+  if ! oc scale "$type" "$resource_name" --replicas="$target_replicas" -n "$namespace"; then
+    echo "❌ Failed to scale $type/$resource_name to $target_replicas replicas"
+    return 1
+  fi
+
+  # Add HPA if requested and max_replicas > target_replicas (backward compatibility)
+  if [[ "$type" == "deployment" && "$enable_hpa" == "true" && $max_replicas -gt $target_replicas ]]; then
+    echo "Creating HorizontalPodAutoscaler: min=$target_replicas, max=$max_replicas"
+    oc autoscale deployment "$resource_name" --min="$target_replicas" --max="$max_replicas" --cpu-percent=80 -n "$namespace"
+
+    # Apply deployment strategy patches for better rolling updates
+    oc patch deployment "$resource_name" -n "$namespace" -p='{"spec":{"strategy":{"rollingUpdate":{"maxSurge":"100%","maxUnavailable":"33%"}}}}' 2>/dev/null || true
+  fi
+
+  # Wait for scaling to complete
+  echo "⏳ Waiting for $type/$resource_name to scale to $target_replicas replicas..."
+
+  if [[ "$target_replicas" == "0" ]]; then
+    # Scaling down - wait for pods to terminate
+    if wait_for "$type/$resource_name" "ready" "$timeout" "down"; then
+      echo "✅ $type/$resource_name successfully scaled down to 0"
+      return 0
+    else
+      echo "⚠️ Timeout waiting for $type/$resource_name to scale down"
+      return 1
+    fi
+  else
+    # Add fixed sleep for deployment stabilization (backward compatibility)
+    if [[ "$enable_hpa" == "true" ]]; then
+      sleep 20
+    fi
+
+    # Scaling up - wait for pods to be ready and error-free
+    if wait_for_deployment_without_errors "$type/$resource_name"; then
+      echo "✅ $type/$resource_name successfully scaled to $target_replicas replicas"
+      return 0
+    else
+      echo "⚠️ $type/$resource_name scaled but pods have errors or timeout occurred"
+      return 1
+    fi
+  fi
+}
+
+# Legacy wrapper for backward compatibility
+scale_deployment() {
+  local type="$1"
+  local deployment="$2"
+  local pod_count="$3"
+  local max_pods="$4"
+
+  # Call new unified function with HPA enabled
+  scale_resource "$type" "$deployment" "$pod_count" "$max_pods" "$DEPLOY_NAMESPACE" "300s" "true"
+}
+
+# Convenience wrapper for simple scaling without HPA
+scale_simple() {
+  local type="$1"
+  local resource_name="$2"
+  local target_replicas="$3"
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local timeout="${5:-300s}"
+
+  scale_resource "$type" "$resource_name" "$target_replicas" "$target_replicas" "$namespace" "$timeout" "false"
+}
+
+# Function to check if a resource exists
+resource_exists() {
+  local resource_type=$1
+  local resource_name=$2
+
+  if oc get $resource_type $resource_name &> /dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Wait for deployment to scale down [to 0 replicas]
+wait_for_scale_down() {
+  local resource=$1 # e.g., deployment/php
+  local max_retries=${2:-30}
+  local wait_time=${3:-10}
+  local retry_count=0
+
+  echo "Waiting for $resource to scale down to 0 replicas..."
+
+  while true; do
+    # Get the list of pods for the resource
+    local pods=$(oc get pods --selector=deployment=${resource##*/} -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      echo "✔️ All pods for $resource have been terminated."
+      return 0
+    else
+      echo "Pods still exist for $resource: $pods. Retrying..."
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for $resource to scale down. Exiting..."
+      return 1
+    fi
+
+    sleep $wait_time
+  done
+}
+
+# Function to delete a resource if it exists
+delete_resource_if_exists() {
+  local resource_type=$1
+  local resource_name=$2
+
+  echo "Checking if $resource_type exists: $resource_name"
+
+  # Use oc get to check if the resource exists
+  if oc get $resource_type $resource_name &> /dev/null; then
+    echo "Deleting existing $resource_type: $resource_name"
+    oc delete $resource_type $resource_name
+  else
+    echo "$resource_type does not exist: $resource_name"
+  fi
+}
+
+# Function to deploy a resource from a template
+deploy_resource_from_template() {
+  local template_file=$1
+  shift
+  local params=("$@")
+
+  # Construct the oc process command with parameters
+  local process_cmd="oc process -f $template_file"
+  for param in "${params[@]}"; do
+    process_cmd+=" -p \"$param\""
+  done
+
+  echo "Deploying resource from template: $template_file"
+
+  # Process the template and print the output for debugging
+  local processed_template
+  processed_template=$(eval $process_cmd)
+
+  # Extract the deployment name from the processed template
+  local deployment_name=$(echo "$processed_template" | jq -r '.items[] | select(.kind == "Deployment") | .metadata.name')
+
+  # Delete the existing deployment if it exists
+  if [ -n "$deployment_name" ]; then
+    delete_resource_if_exists deployment $deployment_name
+  fi
+
+  # Apply the processed template
+  echo "$processed_template" | oc apply -f -
+
+  echo "Resource deployed from template: $template_file"
+}
+
+# =============================================================================
+# VALIDATION FUNCTIONS
+# =============================================================================
+
+# Ensure openShift resource values are valid
+validate_and_format_resource_value() {
+  local value=$1
+  local unit=$2
+
+  # Check if the value is a valid number
+  if [[ $value =~ ^[1-9]+$ ]]; then
+    echo "${value}${unit}"
+  elif [[ $value == "0" || $value == 0 ]]; then
+    echo "0"
+  else
+    echo "null"
+  fi
+}
+
+# Platform detection functions
+is_openshift() {
+  [[ -n "$DEPLOY_NAMESPACE" ]]
+}
+
+is_docker() {
+  [[ -z "$DEPLOY_NAMESPACE" ]]
+}
+
+# Platform-specific execution
+platform_exec() {
+  local pod_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  shift 2
+  local command="$*"
+
+  if is_openshift; then
+    oc exec -n "$namespace" "$pod_name" -- bash -c "$command"
+  elif is_docker; then
+    docker exec "$pod_name" bash -c "$command"
+  else
+    echo "❌ Unknown platform"
+    return 1
+  fi
+}
+
+# Platform-specific copy operations
+platform_cp() {
+  local source="$1"
+  local destination="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if is_openshift; then
+    oc cp -n "$namespace" "$source" "$destination"
+  elif is_docker; then
+    docker cp "$source" "$destination"
+  else
+    echo "❌ Unknown platform"
+    return 1
+  fi
+}
+
+# Generic function to get pods for a resource
+get_pods_for_resource() {
+  local resource="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  # Split the resource into type and name
+  local resource_type=${resource%%/*}
+  local resource_name=${resource##*/}
+
+  # Validate that resource was properly split
+  if [[ -z "$resource_type" || -z "$resource_name" || "$resource_type" == "$resource" ]]; then
+    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>" >&2
+    return 1
+  fi
+
+  # Handle full API resource names (e.g., deployment.apps -> deployment)
+  case "$resource_type" in
+    "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+    "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+    "service.v1" | "services.v1") resource_type="service" ;;
+    "job.batch" | "jobs.batch") resource_type="job" ;;
+  esac
+
+  # Get pods based on resource type
+  case "$resource_type" in
+    "deployment")
+      oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+      ;;
+    "statefulset")
+      oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+      ;;
+    "job")
+      oc get pods -l job-name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+      ;;
+    *)
+      # Fallback: try common selectors
+      local pods
+      pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      if [[ -z "$pods" ]]; then
+        pods=$(oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      fi
+      echo "$pods"
+      ;;
+  esac
+}
+
+# Function to set resources for a deployment
+set_resources() {
+  local type=$1
+  local deployment=$2
+  local cpu_request=$3
+  local mem_request=$4
+  local cpu_limit=$5
+  local mem_limit=$6
+
+  echo "Setting resources for $type/$deployment..."
+  echo "CPU Request: $cpu_request"
+  echo "Memory Request: $mem_request"
+  echo "CPU Limit: $cpu_limit"
+  echo "Memory Limit: $mem_limit"
+
+  # Validate and format resource values
+  cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
+  mem_request=$(validate_and_format_resource_value "$mem_request" "Mi")
+  cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
+  mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
+
+  # Construct the oc set resources command
+  local cmd="oc set resources $type $deployment"
+  local requests_set=false
+  local limits_set=false
+
+  if [[ "$cpu_request" != "null" ]]; then
+    cmd+=" --requests=cpu=${cpu_request}"
+    requests_set=true
+  fi
+  if [[ "$mem_request" != "null" ]]; then
+    if $requests_set; then
+      cmd+=",memory=${mem_request}"
+    else
+      cmd+=" --requests=memory=${mem_request}"
+    fi
+    requests_set=true
+  fi
+  if [[ "$cpu_limit" != "null" ]]; then
+    cmd+=" --limits=cpu=${cpu_limit}"
+    limits_set=true
+  fi
+  if [[ "$mem_limit" != "null" ]]; then
+    if $limits_set; then
+      cmd+=",memory=${mem_limit}"
+    else
+      cmd+=" --limits=memory=${mem_limit}"
+    fi
+    limits_set=true
+  fi
+
+  echo "Set: $cmd"
+  $cmd
+}
+
+# Function to create HorizontalPodAutoscaler
+create_hpa() {
+  local name=$1
+  local target=$2
+  local min_replicas=$3
+  local max_replicas=$4
+  local avg_value=$5
+
+  # Ensure avg_value includes "m" at the end
+  if [[ ! $avg_value =~ m$ ]]; then
+    avg_value="${avg_value}m"
+  fi
+
+  if [[ $avg_value == "0m" || $avg_value == "0.0m" || $max_replicas -le $min_replicas || $min_replicas == "0" ]]; then
+    echo "Invalid HPA values. Exiting..."
+    return 1
+  fi
+
+  echo "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
+
+  # Determine the kind of the target resource
+  local kind="Deployment"
+  if [[ $target == sts/* ]]; then
+    kind="StatefulSet"
+    target=${target#sts/}
+  elif [[ $target == deployment/* ]]; then
+    target=${target#deployment/}
+  fi
+
+  # Create a temporary template file
+  cat <<EOF > hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: $name
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: $kind
+    name: $target
+  minReplicas: $min_replicas
+  maxReplicas: $max_replicas
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageValue: $avg_value
+EOF
+
+  # First, delete the HPA if it exists
+  delete_resource_if_exists hpa $name
+
+  echo "Creating HPA from template:"
+  oc create -f hpa.yaml
+
+  wait_for_deployment_without_errors "$kind/$target"
+
+  return 0
+}
+
+# =============================================================================
+# WAIT AND MONITORING FUNCTIONS
+# =============================================================================
+
+# Wait for a resource to deploy (or scale-down)
+wait_for() {
+  local resource=$1
+  local condition=${2:-ready}
+  local timeout=${3:-300s}
+  local scale_direction=${4:-up}
+  local max_retries=30
+  local retry_count=0
+  local wait_time=10
+
+  # Wait to ensure the resource has had enough time to set the desired state
+  sleep 10
+
+  # Extract resource type and name
+  if [[ $resource == */* ]]; then
+    local resource_type=${resource%%/*}
+    local resource_name=${resource##*/}
+
+    # Handle full API resource names (e.g., deployment.apps -> deployment)
+    case "$resource_type" in
+      "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+      "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+      "service.v1" | "services.v1") resource_type="service" ;;
+      "job.batch" | "jobs.batch") resource_type="job" ;;
+    esac
+  else
+    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>"
+    return 1
+  fi
+
+  # Convert timeout to seconds for calculation
+  local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
+  max_retries=$((timeout_seconds / wait_time))
+
+  echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
+
+  # Check if the resource exists before attempting to scale
+  if ! oc get $resource_type $resource_name &> /dev/null; then
+    echo "⚠️ $resource_type/$resource_name does not exist. Skipping..."
+    return 0
+  fi
+
+  if [[ $resource_type == "job" ]]; then
+    handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+  else
+    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
+  fi
+}
+
+# Function to wait for all pods in a deployment or statefulset to be running and check for errors
+wait_for_deployment_without_errors() {
+  local resource=$1 # e.g., deployment/web
+  local error_search_string=${2:-error}
+  local error_handler=${3:-delete_pod}
+  local max_retries=${4:-30}
+  local wait_time=${5:-30}
+
+  # Split the resource into type and name
+  local resource_type=${resource%%/*}
+  local resource_name=${resource##*/}
+
+  # Validate that resource was properly split
+  if [[ -z "$resource_type" || -z "$resource_name" || "$resource_type" == "$resource" ]]; then
+    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>" >&2
+    return 1
+  fi
+
+  # Handle full API resource names (e.g., deployment.apps -> deployment)
+  case "$resource_type" in
+    "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+    "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+    "service.v1" | "services.v1") resource_type="service" ;;
+    "job.batch" | "jobs.batch") resource_type="job" ;;
+  esac
+
+  echo "Waiting for $resource to be ready and error-free..."
+
+  # Check if the resource exists
+  if ! oc get $resource_type $resource_name &> /dev/null; then
+    echo "❌ Error from server (NotFound): $resource_type/$resource_name not found"
+    return 1
+  fi
+
+  # Get the desired replica count
+  local desired_replicas=$(oc get $resource_type $resource_name -o jsonpath='{.spec.replicas}')
+  if [[ "$desired_replicas" == "0" ]]; then
+    echo "✔️ $resource has scaled down to 0 replicas."
+    return 0
+  fi
+
+  # Use handle_pods_in_resource to manage pods
+  if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
+    echo "❌ Errors detected in pods for $resource. Exiting..."
+    return 1
+  fi
+
+  echo "✔️ All pods in $resource are ready and error-free."
+  return 0
+}
+
+check_timestamp() {
+  IMAGE_REBUILD_TIME_LIMIT=${IMAGE_REBUILD_TIME_LIMIT:-86400} # Default to 24 hours
+  local file_to_test=${1:-/var/www/html/index.php}
+  local default_rerun_block_seconds=0 # Default to never blocking reruns
+  local rerun_block_seconds=${IMAGE_REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
+
+  echo "Checking last time maintenance script was run..."
+
+  # Check if the environment variable is set and valid
+  if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
+    echo "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
+    rerun_block_seconds=$default_rerun_block_seconds
+  fi
+
+  # If the value is 0, do not enforce the time limit
+  if [ "$rerun_block_seconds" -eq 0 ]; then
+    echo "IMAGE_REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
+    return 0
+  fi
+
+  local rerun_minutes=$((rerun_block_seconds / 60))
+  local rerun_hours=$((rerun_minutes / 60))
+  local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
+
+  echo "Last modified time: $last_modified_minutes minutes ago"
+  echo "Rerun block time: $rerun_hours hours"
+  echo "Current time: $(date +%Y-%m-%dT%H:%M:%S)"
+  echo "Current time (epoch): $(date +%s)"
+  echo "Last modified time (epoch): $(stat -c %Y $file_to_test)"
+  echo "Difference in hours: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 3600 )) hours"
+
+  # Check if the script has been run within the past hour
+  if [ -f "$file_to_test" ]; then
+    if [ "$last_modified_minutes" -lt "$rerun_minutes" ]; then
+      echo "The script has been run within the past $rerun_hours hours."
+      return 1
+    else
+      echo "The script has not been run within the past $rerun_hours hours."
+      return 0
+    fi
+  else
+    echo "No file found to test last run time ($file_to_test)."
+    return 0
+  fi
+}
+
+# =============================================================================
+# LOGGING AND ERROR HANDLING FUNCTIONS
+# =============================================================================
+
+log_error_continue() {
+  local pod=$1
+  echo "Continuing..."
+  # Add any additional error handling logic here
+}
+
+# Function to check logs for a single pod
+check_pod_logs() {
+  local pod=$1
+  local namespace=$2
+  local error_search_strings=${3:-"error"}
+  local error_handler=${4:-delete_pod}
+  local log_file="/tmp/logs/check-pod-logs.log"
+
+  # Split the error_search_strings into an array
+  IFS=',' read -r -a error_strings <<< "$error_search_strings"
+
+  # Check for malformed variables
+  if [[ -z "$pod" || -z "$namespace" ]]; then
+    echo "ERROR: pod or namespace is empty!"
+    return 1
+  fi
+
+  # Get the list of containers in the pod
+  CONTAINERS=$(oc get pod "$pod" -n "$namespace" -o jsonpath='{.spec.containers[*].name}')
+  IFS=' ' read -r -a container_array <<< "$CONTAINERS"
+
+  for container in "${container_array[@]}"; do
+    LOGS=$(oc logs $pod -n $namespace -c $container)
+
+    for error_search_string in "${error_strings[@]}"; do
+      if echo "$LOGS" | grep -q "$error_search_string"; then
+        if echo "$LOGS" | grep -q "Success"; then
+          echo "Connection was lost but reestablished. No need to restart the pod."
+          continue
+        else
+          echo "Error found in pod logs: $error_search_string"
+          $error_handler $pod
+          return 1  # Return failure if an error was found and handled
+        fi
+      fi
+    done
+  done
+
+  echo "No errors found in pod: $pod"
+  return 0  # Return success if no errors were found
+}
+
+log_error_to_file() {
+  local pod=$1
+  local container=$2
+  local error_line=$3
+  local log_file=$4
+
+  echo "Pod: $pod, Container: $container, Error: $error_line" >> $log_file
+}
+
+# Function to check logs for all pods in a deployment
+check_deployment_logs() {
+  eval "declare -A deployments="${1#*=}
+  local max_retries=15
+  local retry_count=0
+  local wait_time=60
+
+  for deployment in "${!deployments[@]}"; do
+    local error_search_strings=${deployments[$deployment]:-"error"}
+    local error_handler=${3:-delete_pod}
+    local total_errors=0
+
+    echo "Checking logs: $deployment"
+
+    while true; do
+      local errors_detected=0
+
+      # Get the list of pods in the deployment
+      PODS=$(oc get pods -l $deployment -o jsonpath='{.items[*].metadata.name}')
+
+      # Check if PODS is empty
+      if [ -z "$PODS" ]; then
+        echo "No pods found for deployment: $deployment"
+        break
+      fi
+
+      # Convert PODS to an array
+      IFS=' ' read -r -a pod_array <<< "$PODS"
+      # Get number of pods in the array
+      total_pods=$(echo $PODS | wc -w)
+
+      for pod in "${pod_array[@]}"; do
+        echo "Processing pod logs: $pod"
+
+        if ! check_pod_logs "$pod" "$DEPLOY_NAMESPACE" "$error_search_strings" "$error_handler"; then
+          errors_detected=$((errors_detected + 1))
+          total_errors=$((total_errors + 1))
+
+          # Wait for the pod to be fully restarted and stabilized
+          echo "Waiting for pod $pod to restart and stabilize..."
+          sleep $wait_time
+          oc wait --for=condition=Ready pod/$pod --timeout=300s
+          break
+        fi
+      done
+
+      if [ $errors_detected -eq 0 ]; then
+        echo "✔️ OK"
+        break
+      else
+        echo "❌ Errors found: $total_errors."
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -ge $max_retries ]; then
+          echo "❌ Max retries reached. Exiting..."
+          return 1
+        fi
+        echo "Waiting for pods to restart and stabilize..."
+        sleep $wait_time
+      fi
+    done
+
+    if [ $total_errors -ne 0 ]; then
+      echo "❌ Errors detected: $total_errors"
+    fi
+  done
+
+  return 0
+}
+
+check_logs_for_pattern() {
+  local pattern=$1
+  local deployment=$2
+  local max_retries=${3:-5}
+  local wait_time=${4:-10}
+
+  echo "Checking logs for pattern: $pattern in deployment: $deployment"
+  # Implementation details for pattern checking
+  return 0
+}
+
+# Enhanced logging function for critical events
+log_critical_event() {
+  local event_type="$1"
+  local message="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local timestamp=$(date '+%Y-%m-%d %H:%M:%S UTC')
+
+  # Log to stdout with structured format for OpenShift log aggregation
+  echo "CRITICAL_EVENT|${timestamp}|${namespace}|${event_type}|${message}"
+
+  # Also log to OpenShift events for visibility in cluster
+  if command -v oc >/dev/null 2>&1; then
+    oc create event --type=Warning --reason="$event_type" --message="$message" --reporting-instance="check-pod-logs" --reporting-component="galera-monitor" 2>/dev/null || true
+  fi
+}
+
+# Function to send notifications matching GitHub workflow style
+send_notification() {
+  local event_type="$1"
+  local title="$2"
+  local message="$3"
+  local severity="${4:-warning}"  # warning, error, success
+  local namespace="${5:-$DEPLOY_NAMESPACE}"
+
+  # Determine emoji based on severity (matching GitHub workflow style)
+  local emoji=""
+  case "$severity" in
+    "success")
+      emoji=":white_check_mark:"
+      ;;
+    "error"|"failure")
+      emoji=":boom:"
+      ;;
+    "warning")
+      emoji=":warning:"
+      ;;
+    "healing"|"repair")
+      emoji=":wrench:"
+      ;;
+    "info")
+      emoji=":information_source:"
+      ;;
+    *)
+      emoji=":grey_question:"
+      ;;
+  esac
+
+  # Only send webhook for critical events (errors, failures, healing attempts)
+  if [[ "$severity" =~ ^(error|failure|warning|healing)$ ]] && [[ -n "$ROCKET_CHAT_WEBHOOK" ]]; then
+    local webhook_payload=$(cat << EOF
+{
+  "emoji": "$emoji",
+  "text": "**${title}** in \`${namespace}\`",
+  "attachments": [{
+    "title": "Galera Cluster Monitor Alert",
+    "color": "${severity}",
+    "fields": [{
+      "title": "Event Type",
+      "value": "$event_type",
+      "short": true
+    },{
+      "title": "Namespace",
+      "value": "$namespace",
+      "short": true
+    },{
+      "title": "Details",
+      "value": "$message"
+    },{
+      "title": "Timestamp",
+      "value": "$(date '+%Y-%m-%d %H:%M:%S UTC')",
+      "short": true
+    }]
+  }]
+}
+EOF
+    )
+
+    # Send webhook notification (non-blocking)
+    curl -s -X POST "$ROCKET_CHAT_WEBHOOK" \
+      -H 'Content-Type: application/json' \
+      -d "$webhook_payload" > /dev/null 2>&1 || true
+  fi
+
+  # Always log the critical event for aggregation
+  log_critical_event "$event_type" "$message" "$namespace"
+}
+
+# Function to check logs for errors and restart if needed
+check_and_restart_pod() {
+  local selector="$1"
+  local error_patterns="$2"
+
+  echo "🔍 Checking pods with selector: $selector"
+
+  # Get all running pods matching the selector
+  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
+
+  if [[ -z "$pods" ]]; then
+    echo "⚠️  No running pods found for selector: $selector"
+    return
+  fi
+
+  # Convert comma-separated patterns to array
+  IFS=',' read -ra patterns <<< "$error_patterns"
+
+  local pods_restarted=0
+
+  for pod in $pods; do
+    echo "  📋 Checking pod: $pod"
+
+    # Get recent logs (last 50 lines to avoid overwhelming output)
+    local logs=$(oc logs "$pod" --tail=50 2>/dev/null)
+
+    if [[ -z "$logs" ]]; then
+      echo "    ⚠️  No logs available for pod: $pod"
+      continue
+    fi
+
+    local errors_found=false
+    local found_pattern=""
+
+    # Check for each error pattern
+    for pattern in "${patterns[@]}"; do
+      pattern=$(echo "$pattern" | xargs)  # Trim whitespace
+      if echo "$logs" | grep -q "$pattern"; then
+        echo "    ❌ Error pattern '$pattern' found in pod $pod"
+        errors_found=true
+        found_pattern="$pattern"
+        break
+      fi
+    done
+
+    if [[ "$errors_found" == "true" ]]; then
+      echo "    🔄 Restarting pod $pod due to error pattern: $found_pattern"
+      oc delete pod "$pod" --grace-period=0 --force 2>/dev/null || true
+      pods_restarted=$((pods_restarted + 1))
+
+      # Send notification for individual pod restart
+      send_notification "POD_RESTART" "Pod Restarted Due to Errors" "Pod '$pod' restarted due to error pattern: $found_pattern" "warning" "$DEPLOY_NAMESPACE"
+
+      # Wait for pod to be recreated
+      sleep 30
+    else
+      echo "    ✅ Pod $pod is healthy (no error patterns found)"
+    fi
+  done
+
+  # Send summary notification if multiple pods were restarted
+  if [[ $pods_restarted -gt 1 ]]; then
+    send_notification "MULTIPLE_POD_RESTARTS" "Multiple Pods Restarted" "$pods_restarted pods with selector '$selector' were restarted due to errors" "warning" "$DEPLOY_NAMESPACE"
+  fi
+}
+
+# =============================================================================
+# MAINTENANCE MODE AND ROUTE MANAGEMENT FUNCTIONS
+# =============================================================================
+
+# Helper function to get the standard route name for any environment
+get_standard_route_name() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  echo "${APP:-moodle}-${WEB_DEPLOYMENT_NAME:-web}"
+}
+
+# Function to verify that specific routes are pointing to the correct service
+verify_route_target() {
+  local expected_service="$1"
+  local route_names="$2"  # Comma-separated list of route names to check
+  local timeout="${3:-120}"
+  local check_interval="${4:-10}"
+  local elapsed=0
+
+  # Convert comma-separated route names to array
+  IFS=',' read -ra routes_to_check <<< "$route_names"
+
+  echo "🔍 Verifying specific routes are pointing to service: $expected_service"
+  echo "    Routes to verify: ${routes_to_check[*]}"
+
+  while [[ $elapsed -lt $timeout ]]; do
+    local routes_status="✅"
+    local routes_info=""
+
+    # Check only the specified routes
+    for route_name in "${routes_to_check[@]}"; do
+      # Trim whitespace from route name
+      route_name=$(echo "$route_name" | xargs)
+
+      # Check if route exists and get its target service
+      local current_target=$(oc get route "$route_name" -o jsonpath='{.spec.to.name}' 2>/dev/null)
+
+      if [[ -z "$current_target" ]]; then
+        routes_info+="  ⚠️ Route '$route_name' → NOT FOUND\n"
+        routes_status="❌"
+      elif [[ "$current_target" == "$expected_service" ]]; then
+        routes_info+="  ✅ Route '$route_name' → $current_target\n"
+      else
+        routes_info+="  ❌ Route '$route_name' → $current_target (expected: $expected_service)\n"
+        routes_status="❌"
+      fi
+    done
+
+    echo -e "$routes_info"
+
+    if [[ "$routes_status" == "✅" ]]; then
+      echo "✅ All specified routes are correctly pointing to '$expected_service'"
+      return 0
+    fi
+
+    echo "⏳ Waiting for route changes to propagate... ($elapsed/$timeout seconds)"
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  echo "❌ Timeout: Specified routes are not pointing to '$expected_service' after $timeout seconds"
+  return 1
+}
+
+# Function to verify the application is responding correctly
+verify_application_response() {
+  local timeout="${1:-60}"
+  local check_interval="${2:-10}"
+  local elapsed=0
+
+  echo "🔍 Verifying application is responding correctly..."
+
+  # Get the route URL
+  local route_url=$(oc get route -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+  if [[ -z "$route_url" ]]; then
+    echo "⚠️ Could not determine route URL, skipping response verification"
+    return 0
+  fi
+
+  echo "🌐 Testing application response at: https://$route_url"
+
+  while [[ $elapsed -lt $timeout ]]; do
+    # Test the application response
+    local response_code=$(curl -s -o /dev/null -w "%{http_code}" -k "https://$route_url" --max-time 10 2>/dev/null || echo "000")
+
+    if [[ "$response_code" == "200" ]]; then
+      echo "✅ Application is responding correctly (HTTP $response_code)"
+      return 0
+    elif [[ "$response_code" == "000" ]]; then
+      echo "⏳ Connection failed, retrying... ($elapsed/$timeout seconds)"
+    else
+      echo "⏳ Application returned HTTP $response_code, retrying... ($elapsed/$timeout seconds)"
+    fi
+
+    sleep $check_interval
+    elapsed=$((elapsed + check_interval))
+  done
+
+  echo "❌ Application is not responding correctly after $timeout seconds"
+  return 1
+}
+
+# Generic function to apply JSON patches to Kubernetes resources
+apply_resource_patch() {
+  local resource_type="$1"    # e.g., "statefulset", "deployment", "route"
+  local resource_name="$2"    # e.g., "redis-node"
+  local patch_operations="$3" # JSON array of patch operations as string
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local description="${5:-Applying patch}"
+
+  echo "🔧 $description for $resource_type/$resource_name..."
+
+  # Check if the resource exists
+  if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
+    echo "⚠️ $resource_type $resource_name does not exist. Skipping patch."
+    return 1
+  fi
+
+  # Create temporary patch file
+  local patch_file="/tmp/patch-${resource_type}-${resource_name}-$$.json"
+  echo "$patch_operations" > "$patch_file"
+
+  # Apply the patch
+  if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
+    echo "✅ Successfully applied patch to $resource_type/$resource_name"
+    rm -f "$patch_file"
+    return 0
+  else
+    echo "⚠️ Warning: Failed to apply patch to $resource_type/$resource_name"
+    rm -f "$patch_file"
+    return 1
+  fi
+}
+
+# Generic function to verify patch results using JSONPath
+verify_patch_result() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local jsonpath_checks="$3"  # Array of "jsonpath:expected_value" pairs
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+
+  echo "🔍 Verifying patch results for $resource_type/$resource_name..."
+
+  # Parse jsonpath_checks (format: "path1:value1,path2:value2")
+  IFS=',' read -ra checks <<< "$jsonpath_checks"
+
+  local all_verified=true
+  for check in "${checks[@]}"; do
+    IFS=':' read -ra parts <<< "$check"
+    local jsonpath="${parts[0]}"
+    local expected="${parts[1]}"
+
+    local actual
+    actual=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath="$jsonpath" 2>/dev/null)
+
+    if [[ "$actual" == "$expected" ]]; then
+      echo "✅ Verified: $jsonpath = $expected"
+    else
+      echo "⚠️ Failed verification: $jsonpath = '$actual' (expected '$expected')"
+      all_verified=false
+    fi
+  done
+
+  [[ "$all_verified" == "true" ]]
+}
+
+# Fast route patching without immediate verification (for batch operations)
+patch_route_fast() {
+  local route_name="$1"
+  local target_service="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  echo "🔄 Patching route $route_name to point to $target_service..."
+
+  # Show current route target
+  if oc get route "$route_name" -n "$namespace" &> /dev/null; then
+    local current_target
+    current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
+    echo "  Current: $route_name → $current_target"
+  fi
+
+  # Create patch operation
+  local patch_ops='[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
+
+  # Apply the patch using generic function
+  if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
+    echo "  ✅ Patch applied to route $route_name"
+    return 0
+  else
+    echo "  ❌ Failed to apply patch to route $route_name"
+    return 1
+  fi
+}
+
+# Updated patch_route function using generic approach with integrated verification
+patch_route() {
+  local route_name="$1"
+  local target_service="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local verify_timeout="${4:-60}"  # Verification timeout in seconds
+
+  echo "Patching route $route_name to point to $target_service..."
+
+  # Show current route target
+  if oc get route "$route_name" -n "$namespace" &> /dev/null; then
+    local current_target
+    current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
+    echo "Current route: $current_target"
+  fi
+
+  # Create patch operation
+  local patch_ops='[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
+
+  # Apply the patch using generic function
+  if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
+    # Verify the route change took effect using the enhanced verification function
+    echo "🔍 Verifying route patch was successful..."
+    if verify_route_target "$target_service" "$route_name" "$verify_timeout" 5; then
+      echo "✅ Route $route_name successfully updated and verified to point to $target_service"
+      return 0
+    else
+      echo "❌ Route patch failed verification - route $route_name is not pointing to $target_service"
+      return 1
+    fi
+  else
+    echo "❌ Failed to apply patch to route $route_name"
+    return 1
+  fi
+}
+
+# Function to patch all relevant routes for the environment (optimized for parallel processing)
+patch_all_routes() {
+  local target_service="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local verify_timeout="${3:-60}"
+  local patch_success=true
+  local routes_to_patch=()
+  local routes_for_verification=""
+
+  # Determine which routes to patch
+  local standard_route=$(get_standard_route_name "$namespace")
+  routes_to_patch+=("$standard_route")
+  routes_for_verification="$standard_route"
+
+  # In production, also patch the custom route
+  if [[ "$namespace" == "950003-prod" ]]; then
+    routes_to_patch+=("moodle-custom")
+    routes_for_verification="$routes_for_verification,moodle-custom"
+  fi
+
+  echo "🚀 Optimized route patching for $namespace environment"
+  echo "📋 Routes to patch: ${routes_to_patch[*]}"
+
+  # Phase 1: Apply all patches quickly without waiting for verification
+  echo ""
+  echo "🔄 Phase 1: Applying all route patches..."
+  for route in "${routes_to_patch[@]}"; do
+    if ! patch_route_fast "$route" "$target_service" "$namespace"; then
+      echo "❌ Failed to patch route: $route"
+      patch_success=false
+    fi
+  done
+
+  if [[ "$patch_success" != "true" ]]; then
+    echo "❌ Some route patches failed - aborting"
+    return 1
+  fi
+
+  # Phase 2: Wait a moment for patches to propagate, then verify all routes together
+  echo ""
+  echo "⏳ Phase 2: Allowing patches to propagate (10 seconds)..."
+  sleep 10
+
+  echo "🔍 Phase 3: Verifying all routes together..."
+  if verify_route_target "$target_service" "$routes_for_verification" "$verify_timeout" 5; then
+    echo "✅ Successfully patched and verified all routes for $namespace environment"
+    return 0
+  else
+    echo "❌ Route verification failed for some routes"
+    return 1
+  fi
+}
+
+# Function to deploy and enable maintenance mode
+enable_maintenance_mode() {
+  local service_name=$1
+  local route_mode=${2:-"auto"}  # "auto" means use patch_all_routes, or specific route name
+  local route_timeout="60s"
+
+  echo "Deploying maintenance mode for service: $service_name"
+
+  # Scale to 1 replica
+  scale_deployment "deployment" "$service_name" 1 1
+
+  # Create / update route
+  deploy_resource_from_template ./openshift/web-route-template.yml \
+    "APP=$APP" \
+    "WEB_DEPLOYMENT_NAME=$WEB_DEPLOYMENT_NAME" \
+    "APP_HOST_URL=$APP_HOST_URL" \
+    "DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE" \
+
+  # Redirect traffic to maintenance service
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes to maintenance service..."
+    patch_all_routes "$service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    patch_route "$route_mode" "$service_name"
+  fi
+}
+
+# Function to disable maintenance mode
+disable_maintenance_mode() {
+  local target_service_name="${1:-web}"  # Service to redirect traffic to
+  local maintenance_service_name="${2:-maintenance-message}"  # Maintenance service to scale down
+  local route_mode="${3:-auto}"  # Route handling mode
+
+  echo "Disabling $maintenance_service_name and redirecting to $target_service_name..."
+
+  # Redirect traffic back to application
+  if [[ "$route_mode" == "auto" ]]; then
+    echo "🔄 Redirecting all relevant routes back to application service: $target_service_name"
+    patch_all_routes "$target_service_name"
+  else
+    echo "🔄 Redirecting specific route $route_mode to $target_service_name..."
+    patch_route "$route_mode" "$target_service_name"
+  fi
+
+  echo "✅ Route redirection completed - traffic now directed to $target_service_name"
+  echo "⚠️ Note: Maintenance service scaling should be handled by caller after verification"
+}
+
+# =============================================================================
+# SECRET MANAGEMENT FUNCTIONS
+# =============================================================================
+
+# Function to validate and get current secret values
+get_secret_value() {
+  local secret_name="$1"
+  local key="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    # Get the base64 encoded value and decode it
+    oc get secret "$secret_name" -n "$namespace" -o jsonpath="{.data.$key}" 2>/dev/null | base64 -d 2>/dev/null || echo ""
+  else
+    echo ""
+  fi
+}
+
+# Function to validate if secret values match expected values
+validate_secret_values() {
+  local secret_name="$1"
+  local expected_values="$2"  # Format: "key1=value1,key2=value2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if ! oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    echo "❌ Secret '$secret_name' does not exist"
+    return 1
+  fi
+
+  echo "🔍 Validating secret '$secret_name' values..."
+
+  # Parse expected values
+  IFS=',' read -ra expected_pairs <<< "$expected_values"
+  local validation_failed=false
+
+  for pair in "${expected_pairs[@]}"; do
+    if [[ "$pair" == *"="* ]]; then
+      local key="${pair%%=*}"
+      local expected_value="${pair#*=}"
+      local current_value=$(get_secret_value "$secret_name" "$key" "$namespace")
+
+      if [[ "$current_value" != "$expected_value" ]]; then
+        echo "  ❌ Key '$key': value mismatch"
+        validation_failed=true
+      else
+        echo "  ✅ Key '$key': value matches"
+      fi
+    fi
+  done
+
+  if [[ "$validation_failed" == "true" ]]; then
+    return 1
+  else
+    echo "✅ All secret values validated successfully"
+    return 0
+  fi
+}
+
+# Function to create or update a secret
+create_or_update_secret() {
+  local secret_name="$1"
+  local secret_data="$2"  # Format: "key1=value1,key2=value2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  echo "🔐 Creating/updating secret '$secret_name'..."
+
+  # Delete existing secret if it exists
+  if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
+    echo "  Deleting existing secret..."
+    oc delete secret "$secret_name" -n "$namespace"
+  fi
+
+  # Parse secret data and build create command
+  local create_cmd="oc create secret generic $secret_name -n $namespace"
+  IFS=',' read -ra data_pairs <<< "$secret_data"
+
+  for pair in "${data_pairs[@]}"; do
+    if [[ "$pair" == *"="* ]]; then
+      local key="${pair%%=*}"
+      local value="${pair#*=}"
+      create_cmd+=" --from-literal=$key='$value'"
+    fi
+  done
+
+  # Execute the command
+  if eval "$create_cmd"; then
+    echo "✅ Secret '$secret_name' created/updated successfully"
+    return 0
+  else
+    echo "❌ Failed to create/update secret '$secret_name'"
+    return 1
+  fi
+}
+
+# Function to manage secrets with validation
+manage_secret_with_validation() {
+  local secret_name="$1"
+  local secret_data="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local force_update="${4:-false}"
+
+  echo "🔧 Managing secret '$secret_name' with validation..."
+
+  # If force_update is false, check if secret already exists and matches
+  if [[ "$force_update" != "true" ]]; then
+    if validate_secret_values "$secret_name" "$secret_data" "$namespace"; then
+      echo "✅ Secret '$secret_name' already exists with correct values"
+      return 0  # No changes needed
+    fi
+  fi
+
+  # Create or update the secret
+  if create_or_update_secret "$secret_name" "$secret_data" "$namespace"; then
+    # Validate the created secret
+    if validate_secret_values "$secret_name" "$secret_data" "$namespace"; then
+      echo "✅ Secret '$secret_name' created and validated successfully"
+      return 2  # Changes were made
+    else
+      echo "❌ Secret created but validation failed"
+      return 1  # Error
+    fi
+  else
+    echo "❌ Failed to create secret '$secret_name'"
+    return 1  # Error
+  fi
+}
+
+# Function to create or update a ConfigMap
+create_or_update_configmap() {
+  local configmap_name=$1
+  shift
+  local file_paths=("$@")
+
+  delete_resource_if_exists configmap $configmap_name
+  echo "Creating ConfigMap: $configmap_name"
+
+  # Construct the oc create configmap command with multiple --from-file flags
+  local create_cmd="oc create configmap $configmap_name"
+  for file_path in "${file_paths[@]}"; do
+    create_cmd+=" --from-file=$file_path"
+  done
+
+  # Execute the command
+  eval $create_cmd
+}
+
+# Function to restart deployments when secrets change (renamed from restart_deployment_for_secrets)
+restart_deployment() {
+  local deployment_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
+
+  if oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
+    if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
+      echo "✅ Deployment '$deployment_name' restart initiated"
+
+      # Wait for the rollout to complete
+      if oc rollout status deployment/"$deployment_name" -n "$namespace" --timeout=300s; then
+        echo "✅ Deployment '$deployment_name' restart completed successfully"
+        return 0
+      else
+        echo "⚠️ Deployment '$deployment_name' restart timed out or failed"
+        return 1
+      fi
+    else
+      echo "❌ Failed to restart deployment '$deployment_name'"
+      return 1
+    fi
+  else
+    echo "⚠️ Deployment '$deployment_name' not found"
+    return 1
+  fi
+}
+
+# =============================================================================
+# MONITORING AND STATUS FUNCTIONS
+# =============================================================================
+
+# Function to handle job-specific logic
+handle_job_status() {
+  local job_name=$1
+  local max_retries=$2
+  local retry_count=$3
+  local wait_time=$4
+
+  while true; do
+    # Check if the job has failed
+    local job_failed=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
+    if [[ $job_failed -gt 0 ]]; then
+      echo "❌ Job $job_name has failed. Retrieving logs..."
+      local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
+      local error_log_text=$(oc logs $pod_name)
+      echo "Error log:"
+      echo "$error_log_text"
+      return 1
+    fi
+
+    # Check if the job has succeeded
+    local job_succeeded=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
+    if [[ $job_succeeded -gt 0 ]]; then
+      echo "✔️ Job $job_name has completed successfully."
+      return 0
+    fi
+
+    # Retry logic
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for job $job_name to complete. Exiting..."
+      return 1
+    fi
+
+    echo "Waiting for job $job_name to complete... (Retry $retry_count/$max_retries)"
+    sleep $wait_time
+    retry_count=$((retry_count + 1))
+  done
+}
+
+# Function to handle deployment-specific logic
+handle_deployment_status() {
+  local resource_name=$1
+  local condition=$2
+  local scale_direction=$3
+  local max_retries=$4
+  local retry_count=$5
+  local wait_time=$6
+  local resource_type=${7:-""}  # Optional resource type parameter
+
+  while true; do
+    # Get the list of pods for the resource
+    local pods
+    # If resource_type is provided, use full resource identifier
+    if [[ -n "$resource_type" ]]; then
+      pods=$(get_pods_for_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE")
+    else
+      pods=$(get_pods_for_resource "$resource_name" "$DEPLOY_NAMESPACE")
+    fi
+    local status=$?
+
+    if [[ $status -ne 0 ]]; then
+      echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
+      retry_count=$((retry_count + 1))
+      if [[ $retry_count -ge $max_retries ]]; then
+        echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+        return 1
+      fi
+      sleep $wait_time
+      continue
+    fi
+
+    if [[ $scale_direction == "up" ]]; then
+      if [[ -z "$pods" ]]; then
+        echo "No pods found for $resource_name. Retrying..."
+      else
+        local all_pods_ready=true
+        for pod in $pods; do
+          local output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
+          if ! echo "$output" | grep -q "condition met"; then
+            all_pods_ready=false
+            echo "Pod $pod is not in '$condition' condition. Retrying..."
+            break
+          fi
+        done
+        if $all_pods_ready; then
+          echo "✔️ All pods for $resource_name are in '$condition' condition."
+          return 0
+        fi
+      fi
+    elif [[ $scale_direction == "down" ]]; then
+      if [[ -z "$pods" ]]; then
+        echo "✔️ All pods for $resource_name have scaled down."
+        return 0
+      else
+        echo "Pods still exist for $resource_name ($pods). Retrying..."
+      fi
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+      return 1
+    fi
+
+    echo "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
+    sleep $wait_time
+  done
+}
+
+# Function to handle pods in a resource
+handle_pods_in_resource() {
+  local resource="$1"
+  local namespace="$2"
+  local check_function="$3"
+  local error_search_string="$4"
+  local error_handler="$5"
+  local max_retries="${6:-30}"
+  local wait_time="${7:-30}"
+
+  local retry_count=0
+
+  while [[ $retry_count -lt $max_retries ]]; do
+    # Get pods for the resource
+    local pods=$(get_pods_for_resource "$resource" "$namespace")
+
+    if [[ -z "$pods" ]]; then
+      echo "No pods found for $resource. Retrying..."
+    else
+      local all_pods_healthy=true
+      for pod in $pods; do
+        if ! $check_function "$pod" "$namespace" "$error_search_string" "$error_handler"; then
+          all_pods_healthy=false
+          echo "Pod $pod has errors. Waiting for restart..."
+          break
+        fi
+      done
+
+      if $all_pods_healthy; then
+        echo "✔️ All pods for $resource are healthy."
+        return 0
+      fi
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Timeout: Pods for $resource still have issues after $((max_retries * wait_time)) seconds"
+      return 1
+    fi
+
+    echo "Retrying pod health check... ($retry_count/$max_retries)"
+    sleep $wait_time
+  done
+}
+
+# Function to create or update a Helm deployment
+create_or_update_helm_deployment() {
+  local helm_name=$1
+  local helm_chart=$2
+  local values_file=$3
+  local upgrade_file=$4
+  local additional_set_args="${5:-}"  # Optional: additional --set arguments
+
+  if helm list -q | grep -q "^$helm_name$"; then
+    echo "Helm release $helm_name exists. Upgrading..."
+
+    # Build upgrade command
+    local upgrade_cmd="helm upgrade $helm_name $helm_chart -f $values_file -f $upgrade_file"
+
+    # Add additional --set arguments if provided
+    if [[ -n "$additional_set_args" ]]; then
+      upgrade_cmd+=" $additional_set_args"
+    fi
+
+    # Execute upgrade
+    eval $upgrade_cmd
+
+    # Wait for deployment to be ready
+    helm status $helm_name
+    if [[ $? -eq 0 ]]; then
+      echo "✅ Helm upgrade completed successfully"
+    else
+      echo "⚠️ Helm upgrade may have issues, checking status..."
+      helm status $helm_name
+    fi
+  else
+    echo "Helm release $helm_name does not exist. Installing..."
+
+    # Build install command
+    local install_cmd="helm install $helm_name $helm_chart -f $values_file"
+
+    # Add additional --set arguments if provided
+    if [[ -n "$additional_set_args" ]]; then
+      install_cmd+=" $additional_set_args"
+    fi
+
+    # Execute install
+    eval $install_cmd
+  fi
+
+  # Clean up the temporary values file
+  rm $values_file
+  rm $upgrade_file
+
+  echo "Helm updates completed for $helm_name."
+}
