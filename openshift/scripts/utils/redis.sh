@@ -144,8 +144,9 @@ generate_redis_proxy_config_json() {
 
   echo "Generating Redis proxy configuration for: $redis_name"
 
-  # Get Redis pods
-  local redis_pods=$(oc get pods -l app.kubernetes.io/name=$redis_name -n "$namespace" -o jsonpath='{.items[*].metadata.name}')
+  # Get Redis pods using the proper utility function
+  local redis_pods=$(get_pods_for_resource "statefulset/$redis_name" "$namespace")
+  echo "🔍 Debug: Found Redis pods: '$redis_pods'"
 
   if [[ -z "$redis_pods" ]]; then
     echo "❌ No Redis pods found for: $redis_name"
