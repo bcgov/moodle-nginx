@@ -30,22 +30,29 @@ wait_for_redis_sync() {
 
   local retry_count=0
   while [[ $retry_count -lt $max_retries ]]; do
-    # Get running Redis pods using the proper utility function
-    local running_pods=$(get_pods_for_resource "statefulset/$redis_name" "$DEPLOY_NAMESPACE" | tr ' ' '\n' | while read pod; do
-      if [[ -n "$pod" ]]; then
-        local phase=$(oc get pod "$pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
-        if [[ "$phase" == "Running" ]]; then
-          echo "$pod"
-        fi
-      fi
-    done)
-    local pod_count=$(echo "$running_pods" | grep -v '^$' | wc -l)
+    # Get all pods for the StatefulSet first
+    local all_pods=$(get_pods_for_resource "statefulset/$redis_name" "$DEPLOY_NAMESPACE")
+    echo "🔍 Debug: All pods found: '$all_pods'"
 
-    if [[ $pod_count -eq $expected_pods ]]; then
+    # Count running pods
+    local running_count=0
+    if [[ -n "$all_pods" ]]; then
+      for pod in $all_pods; do
+        if [[ -n "$pod" ]]; then
+          local phase=$(oc get pod "$pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
+          echo "🔍 Debug: Pod $pod has phase: '$phase'"
+          if [[ "$phase" == "Running" ]]; then
+            running_count=$((running_count + 1))
+          fi
+        fi
+      done
+    fi
+
+    if [[ $running_count -eq $expected_pods ]]; then
       echo "✅ All $expected_pods Redis pods are running and synced"
       return 0
     else
-      echo "Redis sync status: $pod_count/$expected_pods pods running (retry $retry_count/$max_retries)"
+      echo "Redis sync status: $running_count/$expected_pods pods running (retry $retry_count/$max_retries)"
     fi
 
     retry_count=$((retry_count + 1))

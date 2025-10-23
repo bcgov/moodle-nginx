@@ -234,13 +234,13 @@ fi
 scale_deployment "statefulset" "$redis_node_name" "$REDIS_REPLICAS" "$REDIS_REPLICAS"
 
 # Debug: Check actual probe configuration after fixes
-echo "🔍 Debug: Verifying probe configuration after fixes..."
-echo "Startup probes (should be empty/null):"
-oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' || echo "  Redis: No startup probe ✅"
-oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].startupProbe}' || echo "  Sentinel: No startup probe ✅"
-echo "Liveness probe delays (should be 180s):"
-echo "  Redis: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')s"
-echo "  Sentinel: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}')s"
+# echo "🔍 Debug: Verifying probe configuration after fixes..."
+# echo "Startup probes (should be empty/null):"
+# oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' || echo "  Redis: No startup probe ✅"
+# oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].startupProbe}' || echo "  Sentinel: No startup probe ✅"
+# echo "Liveness probe delays (should be 180s):"
+# echo "  Redis: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')s"
+# echo "  Sentinel: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}')s"
 
 # Now wait for the StatefulSet to be ready with the correct probe configurations
 echo "🔍 Monitoring Redis container startup..."
