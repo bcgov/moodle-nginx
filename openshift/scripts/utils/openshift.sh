@@ -1631,20 +1631,20 @@ create_or_update_secret() {
     oc delete secret "$secret_name" -n "$namespace"
   fi
 
-  # Parse secret data and build create command
-  local create_cmd="oc create secret generic $secret_name -n $namespace"
+  # Parse secret data and build from-literal arguments array
+  local from_literal_args=()
   IFS=',' read -ra data_pairs <<< "$secret_data"
 
   for pair in "${data_pairs[@]}"; do
     if [[ "$pair" == *"="* ]]; then
       local key="${pair%%=*}"
       local value="${pair#*=}"
-      create_cmd+=" --from-literal=$key='$value'"
+      from_literal_args+=("--from-literal=${key}=${value}")
     fi
   done
 
-  # Execute the command
-  if eval "$create_cmd"; then
+  # Execute the command with proper argument handling
+  if oc create secret generic "$secret_name" -n "$namespace" "${from_literal_args[@]}"; then
     echo "✅ Secret '$secret_name' created/updated successfully"
     return 0
   else
