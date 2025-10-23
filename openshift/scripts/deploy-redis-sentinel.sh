@@ -224,7 +224,7 @@ fi
 
 # Apply proven Redis probe fixes after Helm deployment
 echo "🔧 Apply Redis probe fixes..."
-if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" 180 true; then
+if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" "remove"; then
   echo "✅ All Redis probes removed successfully (matching test environment)"
 else
   echo "⚠️ Redis probe fixes failed, but continuing..."
@@ -241,14 +241,6 @@ oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers
 echo "Liveness probe delays (should be 180s):"
 echo "  Redis: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')s"
 echo "  Sentinel: $(oc get statefulset/$redis_node_name -o jsonpath='{.spec.template.spec.containers[1].livenessProbe.initialDelaySeconds}')s"
-
-# Debug: Check for FIPS configuration in ConfigMaps
-echo "🔍 Debug: Checking for FIPS configuration in ConfigMaps..."
-if oc get configmap redis-configuration -o yaml | grep -i fips; then
-  echo "⚠️ WARNING: FIPS configuration still found in ConfigMap!"
-else
-  echo "✅ No FIPS configuration found in ConfigMap"
-fi
 
 # Now wait for the StatefulSet to be ready with the correct probe configurations
 echo "🔍 Monitoring Redis container startup..."
@@ -273,7 +265,7 @@ fi
 create_redis_services "$REDIS_NAME"
 
 # Wait for Redis nodes to sync
-if ! wait_for_redis_sync "$redis_node_name" "$OC_PROJECT" 60 10; then
+if ! wait_for_redis_sync "$redis_node_name" 60 10 "$REDIS_REPLICAS"; then
   echo "Redis nodes failed to sync. Exiting..."
   exit 1
 fi
