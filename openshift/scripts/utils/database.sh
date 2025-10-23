@@ -7,48 +7,154 @@
 # GALERA CLUSTER HEALTH AND MONITORING
 # =============================================================================
 
-# Function to dynamically determine expected replica count from Kubernetes resource
-get_expected_replica_count() {
-  local selector="$1"
+  # Function to check if a Galera pod is ready and synced
+check_galera_pod_ready() {
+  local pod_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local expected_cluster_size="${3:-}"
 
-  # Extract resource name from selector (e.g., "app.kubernetes.io/name=mariadb-galera" -> "mariadb-galera")
-  local resource_name
-  if [[ "$selector" =~ = ]]; then
-    resource_name="${selector##*=}"
-  else
-    resource_name="$selector"
-  fi
-
-  # Check StatefulSet first (most common for databases)
-  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    local replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    if [[ -n "$replicas" && "$replicas" != "0" ]]; then
-      echo "$replicas"
-      return 0
+  # Auto-detect expected cluster size if not provided
+  if [[ -z "$expected_cluster_size" ]]; then
+    # Try to get selector from pod labels and derive expected size
+    local app_name=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/name}' 2>/dev/null)
+    if [[ -n "$app_name" ]]; then
+      expected_cluster_size=$(get_expected_replica_count "app.kubernetes.io/name=$app_name" "$namespace")
+      if [[ $? -ne 0 ]]; then
+        echo "❌ Error: Failed to determine expected cluster size for pod $pod_name" >&2
+        return 1
+      fi
+    else
+      # Fallback to app label
+      local app=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.metadata.labels.app}' 2>/dev/null)
+      if [[ -n "$app" ]]; then
+        expected_cluster_size=$(get_expected_replica_count "app=$app" "$namespace")
+        if [[ $? -ne 0 ]]; then
+          echo "❌ Error: Failed to determine expected cluster size for pod $pod_name" >&2
+          return 1
+        fi
+      else
+        echo "❌ Error: Unable to determine selector for pod $pod_name" >&2
+        return 1
+      fi
     fi
   fi
 
-  # Check Deployment as fallback
-  if oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    local replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    if [[ -n "$replicas" && "$replicas" != "0" ]]; then
-      echo "$replicas"
-      return 0
-    fi
+  # Check if pod is in Running state
+  local pod_phase=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+  if [[ "$pod_phase" != "Running" ]]; then
+    return 1
   fi
 
-  # If we can't determine from resources, count actual running pods as fallback
-  local pods=( $(oc get pods -l "$selector" --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null) )
-  local pod_count=${#pods[@]}
+  # Get MariaDB credentials
+  get_mariadb_env_vars "$pod_name"
 
-  if [[ $pod_count -gt 0 ]]; then
-    echo "$pod_count"
+  # Check Galera cluster status
+  local galera_status
+  galera_status=$(oc exec -n "$namespace" "$pod_name" -- \
+    mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
+    -e "SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_size';" \
+    2>/dev/null) || return 1
+
+  # Parse the status
+  local local_state=$(echo "$galera_status" | awk '/wsrep_local_state_comment/ {print $2}')
+  local cluster_size=$(echo "$galera_status" | awk '/wsrep_cluster_size/ {print $2}')
+
+  # Check if node is synced and cluster size is correct
+  if [[ "$local_state" == "Synced" && "$cluster_size" == "$expected_cluster_size" ]]; then
     return 0
+  else
+    return 1
+  fi
+}
+
+# Function to get MariaDB environment variables for a pod
+get_mariadb_env_vars() {
+  local pod_name="$1"
+
+  # Set default values that will be used by other functions
+  export MARIADB_USER="${MARIADB_USER:-root}"
+  export MARIADB_PASSWORD="${MARIADB_PASSWORD:-}"
+
+  # Try to get password from pod environment if not set
+  if [[ -z "$MARIADB_PASSWORD" ]]; then
+    MARIADB_PASSWORD=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].value}' 2>/dev/null || echo "")
+    export MARIADB_PASSWORD
   fi
 
-  # Default fallback
-  echo "5"
+  # Try to get from secret if still empty
+  if [[ -z "$MARIADB_PASSWORD" ]]; then
+    local secret_name=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.name}' 2>/dev/null)
+    local secret_key=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.key}' 2>/dev/null)
+
+    if [[ -n "$secret_name" && -n "$secret_key" ]]; then
+      MARIADB_PASSWORD=$(get_secret_value "$secret_name" "$secret_key")
+      export MARIADB_PASSWORD
+    fi
+  fi
+}
+
+# Main function to wait for Galera cluster to be ready and synced
+wait_for_galera_sync() {
+  local galera_name="$1"
+  local max_retries="${2:-30}"
+  local wait_time="${3:-10}"
+  local expected_pods="${4:-}"
+
+  echo "⏳ Waiting for Galera cluster to sync: $galera_name"
+
+  local namespace="$DEPLOY_NAMESPACE"
+  local selector="app.kubernetes.io/name=$galera_name"
+
+  # Auto-detect expected pods if not provided
+  if [[ -z "$expected_pods" ]]; then
+    expected_pods=$(get_expected_replica_count "$selector" "$namespace")
+    if [[ $? -ne 0 ]]; then
+      echo "❌ Error: Failed to determine expected pod count" >&2
+      return 1
+    fi
+    echo "  📊 Auto-detected expected pod count: $expected_pods"
+  fi
+
+  echo "⏳ Waiting for $galera_name resource to be ready..."
+
+  # First wait for the StatefulSet to be ready (fast check using status fields)
+  if ! wait_for_resource_ready "$selector" "$namespace" "$max_retries" "$wait_time" "Galera StatefulSet"; then
+    echo "❌ Error: Galera StatefulSet failed to become ready" >&2
+    return 1
+  fi
+
+  # Now verify Galera-specific health (cluster synchronization)
+  echo "✅ StatefulSet ready, now verifying Galera cluster synchronization..."
+
+  local retries=0
+  while [[ $retries -lt $max_retries ]]; do
+    local pods=( $(oc get pods -l "$selector" --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[*].metadata.name}') )
+    local pod_count=${#pods[@]}
+
+    if [[ $pod_count -eq $expected_pods ]]; then
+      # Check if all pods are Galera-ready
+      local healthy_pods=0
+      for pod in "${pods[@]}"; do
+        if check_galera_pod_ready "$pod" "$namespace" "$expected_pods"; then
+          healthy_pods=$((healthy_pods + 1))
+        fi
+      done
+
+      if [[ $healthy_pods -eq $expected_pods ]]; then
+        echo "✅ All $expected_pods Galera pods are healthy and synced"
+        return 0
+      else
+        echo "    $healthy_pods/$expected_pods pods are Galera-ready... (retry $retries/$max_retries)"
+      fi
+    else
+      echo "    Pod count mismatch: found $pod_count, expected $expected_pods (retry $retries/$max_retries)"
+    fi
+
+    retries=$((retries + 1))
+    sleep $wait_time
+  done
+
+  echo "⚠️ Timeout: Galera cluster did not synchronize after $((max_retries * wait_time)) seconds"
   return 1
 }
 
@@ -61,6 +167,10 @@ check_galera_cluster_health() {
   # Dynamically determine expected size if not provided
   if [[ -z "$expected_size" ]]; then
     expected_size=$(get_expected_replica_count "$selector" "$namespace")
+    if [[ $? -ne 0 ]]; then
+      echo "❌ Error: Failed to determine expected cluster size" >&2
+      return 1
+    fi
     echo "  📊 Auto-detected expected cluster size: $expected_size"
   fi
 
@@ -126,65 +236,6 @@ check_galera_cluster_health() {
   fi
 }
 
-# Enhanced Galera sync function that works with selectors
-wait_for_galera_cluster_sync() {
-  local selector="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-  local expected_size="${3:-}"
-  local max_retries="${4:-30}"
-  local wait_time="${5:-10}"
-
-  # Dynamically determine expected size if not provided
-  if [[ -z "$expected_size" ]]; then
-    expected_size=$(get_expected_replica_count "$selector" "$namespace")
-    echo "  📊 Auto-detected expected cluster size: $expected_size"
-  fi
-
-  echo "⏳ Waiting for Galera cluster to sync (selector: $selector, expected size: $expected_size)..."
-
-  local retries=0
-  while [[ $retries -lt $max_retries ]]; do
-    # Get running pods using selector
-    local pods=( $(oc get pods -l "$selector" --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[*].metadata.name}') )
-    local pod_count=${#pods[@]}
-
-    if [[ $pod_count -eq 0 ]]; then
-      echo "    No running pods found yet... (retry $retries/$max_retries)"
-      retries=$((retries + 1))
-      sleep $wait_time
-      continue
-    fi
-
-    if [[ $pod_count -lt $expected_size ]]; then
-      echo "    $pod_count/$expected_size pods running, waiting for more... (retry $retries/$max_retries)"
-      retries=$((retries + 1))
-      sleep $wait_time
-      continue
-    fi
-
-    # Check if all pods are Galera-ready
-    local healthy_pods=0
-    for pod in "${pods[@]}"; do
-      if check_galera_pod_ready "$pod" "$namespace" "$expected_size"; then
-        healthy_pods=$((healthy_pods + 1))
-      fi
-    done
-
-    if [[ $healthy_pods -eq $expected_size ]]; then
-      echo "✅ All $expected_size Galera pods are healthy and synced"
-      return 0
-    else
-      echo "    $healthy_pods/$expected_size pods are Galera-ready... (retry $retries/$max_retries)"
-    fi
-
-    retries=$((retries + 1))
-    sleep $wait_time
-  done
-
-  echo "⚠️ Timeout: Only $healthy_pods/$expected_size pods became Galera-ready after $((max_retries * wait_time)) seconds"
-  return 1
-}
-
 # Function to auto-heal Galera cluster using existing utilities
 auto_heal_galera_cluster() {
   local selector="$1"
@@ -202,7 +253,7 @@ auto_heal_galera_cluster() {
 
   # Use existing function to determine resource type and get current replicas
   local resource_type=""
-  local original_replicas=""
+  local original_replicas=get_replicas "$selector" "$namespace" "$resource_name"
 
   if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
     resource_type="statefulset"
@@ -242,7 +293,7 @@ auto_heal_galera_cluster() {
 
   # Step 3: Wait for Galera cluster to sync using enhanced utility
   echo "🔄 Step 3: Waiting for Galera cluster synchronization..."
-  if wait_for_galera_cluster_sync "$selector" "$namespace" "$original_replicas" 60 15; then
+  if wait_for_galera_sync "$resource_name" 60 15 "$original_replicas"; then
     send_notification "GALERA_AUTO_HEAL_SUCCESS" "✅ Auto-Heal Successful" "Successfully auto-healed $resource_type/$resource_name: all $original_replicas replicas are healthy and synced" "success" "$namespace"
     return 0
   else
@@ -261,6 +312,10 @@ check_and_heal_galera_cluster() {
   # Dynamically determine expected size if not provided
   if [[ -z "$expected_size" ]]; then
     expected_size=$(get_expected_replica_count "$selector" "$namespace")
+    if [[ $? -ne 0 ]]; then
+      echo "❌ Error: Failed to determine expected cluster size" >&2
+      return 1
+    fi
     echo "  📊 Auto-detected expected cluster size: $expected_size"
   fi
 
@@ -292,114 +347,6 @@ check_and_heal_galera_cluster() {
       return 1
       ;;
   esac
-}
-
-# =============================================================================
-# GALERA POD MANAGEMENT
-# =============================================================================
-
-# Function to check if a Galera pod is ready and synced
-check_galera_pod_ready() {
-  local pod_name="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-  local expected_cluster_size="${3:-}"
-
-  # Auto-detect expected cluster size if not provided
-  if [[ -z "$expected_cluster_size" ]]; then
-    # Try to get selector from pod labels and derive expected size
-    local pod_labels=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.metadata.labels}' 2>/dev/null)
-    if [[ -n "$pod_labels" ]]; then
-      # Extract common label patterns to build selector
-      local app_name=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/name}' 2>/dev/null)
-      if [[ -n "$app_name" ]]; then
-        expected_cluster_size=$(get_expected_replica_count "app.kubernetes.io/name=$app_name" "$namespace")
-      else
-        # Fallback to app label
-        local app=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.metadata.labels.app}' 2>/dev/null)
-        if [[ -n "$app" ]]; then
-          expected_cluster_size=$(get_expected_replica_count "app=$app" "$namespace")
-        else
-          expected_cluster_size="5"  # Ultimate fallback
-        fi
-      fi
-    else
-      expected_cluster_size="5"  # Ultimate fallback
-    fi
-  fi
-
-  # Check if pod is in Running state
-  local pod_phase=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
-  if [[ "$pod_phase" != "Running" ]]; then
-    return 1
-  fi
-
-  # Get MariaDB credentials
-  get_mariadb_env_vars "$pod_name"
-
-  # Check Galera cluster status
-  local galera_status
-  galera_status=$(oc exec -n "$namespace" "$pod_name" -- \
-    mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
-    -e "SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_size';" \
-    2>/dev/null) || return 1
-
-  # Parse the status
-  local local_state=$(echo "$galera_status" | awk '/wsrep_local_state_comment/ {print $2}')
-  local cluster_size=$(echo "$galera_status" | awk '/wsrep_cluster_size/ {print $2}')
-
-  # Check if node is synced and cluster size is correct
-  if [[ "$local_state" == "Synced" && "$cluster_size" == "$expected_cluster_size" ]]; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# Function to get MariaDB environment variables for a pod
-get_mariadb_env_vars() {
-  local pod_name="$1"
-
-  # Set default values that will be used by other functions
-  export MARIADB_USER="${MARIADB_USER:-root}"
-  export MARIADB_PASSWORD="${MARIADB_PASSWORD:-}"
-
-  # Try to get password from pod environment if not set
-  if [[ -z "$MARIADB_PASSWORD" ]]; then
-    MARIADB_PASSWORD=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].value}' 2>/dev/null || echo "")
-    export MARIADB_PASSWORD
-  fi
-
-  # Try to get from secret if still empty
-  if [[ -z "$MARIADB_PASSWORD" ]]; then
-    local secret_name=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.name}' 2>/dev/null)
-    local secret_key=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.key}' 2>/dev/null)
-
-    if [[ -n "$secret_name" && -n "$secret_key" ]]; then
-      MARIADB_PASSWORD=$(get_secret_value "$secret_name" "$secret_key")
-      export MARIADB_PASSWORD
-    fi
-  fi
-}
-
-# Legacy function for backward compatibility
-wait_for_galera_sync() {
-  local galera_name="$1"
-  local max_retries="${2:-30}"
-  local wait_time="${3:-10}"
-  local expected_pods="${4:-}"
-
-  echo "⏳ Waiting for Galera sync (legacy function): $galera_name"
-
-  # Convert to selector format and use new function
-  local selector="app.kubernetes.io/name=$galera_name"
-
-  # Auto-detect expected pods if not provided
-  if [[ -z "$expected_pods" ]]; then
-    expected_pods=$(get_expected_replica_count "$selector" "$DEPLOY_NAMESPACE")
-    echo "  📊 Auto-detected expected pod count: $expected_pods"
-  fi
-
-  wait_for_galera_cluster_sync "$selector" "$DEPLOY_NAMESPACE" "$expected_pods" "$max_retries" "$wait_time"
 }
 
 # =============================================================================

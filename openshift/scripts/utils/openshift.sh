@@ -8,6 +8,164 @@
 # RESOURCE MANAGEMENT FUNCTIONS
 # =============================================================================
 
+# Function to dynamically determine expected replica count from Kubernetes resource
+get_expected_replica_count() {
+  local selector="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  # Extract resource name from selector (e.g., "app.kubernetes.io/name=mariadb-galera" -> "mariadb-galera")
+  local resource_name
+  if [[ "$selector" =~ = ]]; then
+    resource_name="${selector##*=}"
+  else
+    resource_name="$selector"
+  fi
+
+  # Check StatefulSet first (most common for databases)
+  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
+    local replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    if [[ -n "$replicas" && "$replicas" =~ ^[0-9]+$ && "$replicas" -gt 0 ]]; then
+      echo "$replicas"
+      return 0
+    else
+      echo "❌ Error: StatefulSet $resource_name exists but has invalid replica count: '$replicas'" >&2
+      return 1
+    fi
+  fi
+
+  # Check Deployment as fallback
+  if oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
+    local replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    if [[ -n "$replicas" && "$replicas" =~ ^[0-9]+$ && "$replicas" -gt 0 ]]; then
+      echo "$replicas"
+      return 0
+    else
+      echo "❌ Error: Deployment $resource_name exists but has invalid replica count: '$replicas'" >&2
+      return 1
+    fi
+  fi
+
+  echo "❌ Error: No StatefulSet or Deployment found for resource name: $resource_name (from selector: $selector)" >&2
+  return 1
+}
+
+get_replicas() {
+  local selector="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  local resource_name
+  if [[ "$selector" =~ = ]]; then
+    resource_name="${selector##*=}"
+  else
+    resource_name="$selector"
+  fi
+
+  # Determine resource type and get current replicas
+  local resource_type=""
+  local original_replicas=""
+
+  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
+    resource_type="statefulset"
+    original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
+  elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
+    resource_type="deployment"
+    original_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
+  else
+    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - No Resource" "Could not find StatefulSet or Deployment for selector: $selector (resource: $resource_name)" "error" "$namespace"
+    return 1
+  fi
+
+  return $original_replicas;
+}
+
+# Function to check if StatefulSet/Deployment has all replicas available and ready
+check_resource_ready() {
+  local selector="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  # Extract resource name from selector
+  local resource_name
+  if [[ "$selector" =~ = ]]; then
+    resource_name="${selector##*=}"
+  else
+    resource_name="$selector"
+  fi
+
+  # Check StatefulSet first
+  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
+    local spec_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    local ready_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+    local available_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
+
+    if [[ -n "$spec_replicas" && "$spec_replicas" =~ ^[0-9]+$ &&
+          -n "$ready_replicas" && "$ready_replicas" =~ ^[0-9]+$ &&
+          -n "$available_replicas" && "$available_replicas" =~ ^[0-9]+$ ]]; then
+      if [[ "$spec_replicas" -eq "$ready_replicas" && "$spec_replicas" -eq "$available_replicas" ]]; then
+        echo "✅ StatefulSet $resource_name: $available_replicas/$spec_replicas replicas ready and available"
+        return 0
+      else
+        echo "⏳ StatefulSet $resource_name: $ready_replicas/$spec_replicas ready, $available_replicas available"
+        return 1
+      fi
+    else
+      echo "❌ Error: Unable to get valid replica status for StatefulSet $resource_name" >&2
+      return 1
+    fi
+  fi
+
+  # Check Deployment as fallback
+  if oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
+    local spec_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    local ready_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+    local available_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
+
+    if [[ -n "$spec_replicas" && "$spec_replicas" =~ ^[0-9]+$ &&
+          -n "$ready_replicas" && "$ready_replicas" =~ ^[0-9]+$ &&
+          -n "$available_replicas" && "$available_replicas" =~ ^[0-9]+$ ]]; then
+      if [[ "$spec_replicas" -eq "$ready_replicas" && "$spec_replicas" -eq "$available_replicas" ]]; then
+        echo "✅ Deployment $resource_name: $available_replicas/$spec_replicas replicas ready and available"
+        return 0
+      else
+        echo "⏳ Deployment $resource_name: $ready_replicas/$spec_replicas ready, $available_replicas available"
+        return 1
+      fi
+    else
+      echo "❌ Error: Unable to get valid replica status for Deployment $resource_name" >&2
+      return 1
+    fi
+  fi
+
+  echo "❌ Error: No StatefulSet or Deployment found for resource name: $resource_name (from selector: $selector)" >&2
+  return 1
+}
+
+# Function to wait for resource to be ready with configurable timeout
+wait_for_resource_ready() {
+  local selector="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local max_retries="${3:-30}"
+  local wait_time="${4:-10}"
+  local description="${5:-resource}"
+
+  echo "⏳ Waiting for $description to be ready (selector: $selector)..."
+
+  local retries=0
+  while [[ $retries -lt $max_retries ]]; do
+    if check_resource_ready "$selector" "$namespace"; then
+      echo "✅ $description is ready"
+      return 0
+    else
+      echo "    $description not ready yet... (retry $retries/$max_retries)"
+    fi
+
+    retries=$((retries + 1))
+    sleep $wait_time
+  done
+
+  echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
+  return 1
+}
+
 # Define error handling functions
 delete_pod() {
   local pod=$1
