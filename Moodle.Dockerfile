@@ -120,13 +120,27 @@ COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenanc
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
 COPY ./config/moodle/moodle_index_during_maintenance.php /tmp/moodle_index_during_maintenance.php
 COPY ./openshift/scripts/migrate-build-files.sh /usr/local/bin/migrate-build-files.sh
+
+# Add utility functions
 COPY ./openshift/scripts/_utils.sh /usr/local/bin/_utils.sh
+COPY ./openshift/scripts/utils/moodle.sh /usr/local/bin/utils/moodle.sh
+COPY ./openshift/scripts/utils/database.sh /usr/local/bin/utils/database.sh
+COPY ./openshift/scripts/utils/openshift.sh /usr/local/bin/utils/openshift.sh
+COPY ./openshift/scripts/utils/redis.sh /usr/local/bin/utils/redis.sh
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 
 RUN chmod +x /usr/local/bin/migrate-build-files.sh && \
 	dos2unix /usr/local/bin/migrate-build-files.sh && \
   chmod +x /usr/local/bin/_utils.sh && \
 	dos2unix /usr/local/bin/_utils.sh && \
+  chmod +x /usr/local/bin/utils/moodle.sh && \
+  dos2unix /usr/local/bin/utils/moodle.sh && \
+  chmod +x /usr/local/bin/utils/database.sh && \
+  dos2unix /usr/local/bin/utils/database.sh && \
+  chmod +x /usr/local/bin/utils/openshift.sh && \
+  dos2unix /usr/local/bin/utils/openshift.sh && \
+  chmod +x /usr/local/bin/utils/redis.sh && \
+  dos2unix /usr/local/bin/utils/redis.sh && \
   chmod +x /usr/local/bin/test-migration-complete.sh && \
   dos2unix /usr/local/bin/test-migration-complete.sh
 
