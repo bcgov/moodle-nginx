@@ -380,6 +380,59 @@ clear_moodle_cache() {
   echo "✅ Cache clearing completed: $cache_type"
 }
 
+# Deployment-time cache clearing function
+clear_moodle_cache_deployment() {
+  local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local theme_name="${3:-bcgovpsa}"
+
+  echo ""
+  echo "🚀 Clearing Moodle cache and rebuilding theme across PHP deployments..."
+  echo "📍 Namespace: $namespace"
+  echo "🔍 PHP deployment: $php_deployment_name"
+  echo "🎨 Theme: $theme_name"
+  echo "🔄 Process: Cache purge → Theme rebuild → Final cache purge (per pod)"
+
+  # Wait for PHP deployment to be fully ready
+  echo "⏳ Ensuring PHP deployment is ready..."
+  if ! wait_for "deployment/$php_deployment_name" "ready" "300s"; then
+    echo "❌ PHP deployment not ready, skipping cache clearing"
+    return 1
+  fi
+
+  # Use the distributed cache clearing function
+  if clear_moodle_cache_across_pods "$php_deployment_name" "$namespace" "$theme_name"; then
+    echo "✅ Deployment-time cache clearing and theme rebuilding completed successfully!"
+    return 0
+  else
+    echo "⚠️  Cache clearing and theme rebuilding had issues, but deployment can continue"
+    return 1
+  fi
+}
+
+# Function to clear Moodle cache across all PHP pods
+clear_moodle_cache_across_pods() {
+  local php_resource_name="${1:-php}"  # Default to 'php' deployment/statefulset
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local theme_name="${3:-bcgovpsa}"
+  local max_retries="${4:-30}"
+  local wait_time="${5:-10}"
+
+  echo "🌐 Clearing Moodle cache across all PHP pods..."
+  echo "📍 Namespace: $namespace"
+  echo "🔍 PHP resource: $php_resource_name"
+  echo "🎨 Theme: $theme_name"
+
+  # Use existing handle_pods_in_resource function
+  if handle_pods_in_resource "$php_resource_name" "$namespace" "clear_cache_on_pod" "$theme_name" "" "$max_retries" "$wait_time"; then
+    echo "🎉 Cache clearing completed across all PHP pods!"
+    return 0
+  else
+    echo "⚠️  Cache clearing completed with some issues on PHP pods"
+    return 1
+  fi
+}
+
 # Function to rebuild course cache
 rebuild_course_cache() {
   local moodle_pod="$1"
@@ -623,6 +676,107 @@ moodle_content_cleanup() {
 # =============================================================================
 # MAINTENANCE MODE
 # =============================================================================
+
+# Function to manage maintenance mode with integrated verification and scaling
+manage_maintenance_mode() {
+  local action=$1
+  local deployment_name=$2
+  local route_name=$3
+  local max_retries=${4:-5} # Default to 5 retries for maintenance mode operation
+  local wait_time=${5:-30} # Default to 30 seconds between retries
+  local retry_count=0
+
+  # Ensure Redis Proxy is ready before proceeding
+  echo "Ensuring Redis Proxy is ready..."
+  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 30 10; then
+    echo "❌ Redis Proxy is not ready. Exiting..."
+    exit 1
+  fi
+  echo "✔️ Redis Proxy is ready."
+
+  if [[ $action != "enable" && $action != "disable" ]]; then
+    echo "Invalid action: $action. Use 'enable' or 'disable'."
+    return 1
+  fi
+
+  local script_action="--$action"
+  local expected_output=""
+  local expected_output_first_run="Could not open input file"
+
+  if [[ $action == "enable" ]]; then
+    enable_maintenance_mode $deployment_name ${route_name:-auto}
+    expected_output="Your site is currently in CLI maintenance mode"
+  else
+    # For disable mode, the deployment_name parameter is actually the target service name
+    disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
+    expected_output="Maintenance mode has been disabled"
+  fi
+
+  echo "${action^} maintenance mode..."
+
+  # Get an active pod from the Cron deployment
+  echo "Getting an active pod from deployment/$CRON_NAME..."
+  local cron_pod=$(oc get pods -l app=$CRON_NAME --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+  if [[ -z "$cron_pod" ]]; then
+    echo "❌ No running pods found for deployment/$CRON_NAME. Skipping..."
+    return 0
+  fi
+  echo "Using pod: $cron_pod"
+
+  # Retry logic for the maintenance mode operation
+  while true; do
+    maintenance_output=$(oc exec -n $DEPLOY_NAMESPACE $cron_pod -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
+
+    if echo "$maintenance_output" | grep -q "$expected_output"; then
+      echo "✔️ Maintenance mode has been successfully ${action}d."
+      break
+    elif echo "$maintenance_output" | grep -q "$expected_output_first_run"; then
+      echo "⚠️ Maintenance cannot be set on first run, skipping."
+      break
+    elif echo "$maintenance_output" | grep -q "Exception"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    elif echo "$maintenance_output" | grep -q "Error"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+    elif echo "$maintenance_output" | grep -q "level=error"; then
+      echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+      exit 1
+    else
+      echo "Unexpected output while attempting to ${action} maintenance mode:"
+      echo "$maintenance_output"
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "❌ Max retries reached. Failed to ${action} maintenance mode. Exiting..."
+      exit 1
+    fi
+
+    echo "Retrying in $wait_time seconds... (Attempt $retry_count/$max_retries)"
+    sleep $wait_time
+  done
+
+  # Additional steps for disable mode: verify application response and scale down maintenance service
+  if [[ $action == "disable" ]]; then
+    echo ""
+    echo "🔍 Verifying application response before scaling down maintenance service..."
+
+    # Verify application response
+    if verify_application_response 60 10; then
+      echo "✅ Application verified - proceeding with maintenance service shutdown"
+    else
+      echo "⚠️ Application response verification failed, but routes were verified - proceeding anyway"
+    fi
+
+    echo "🔄 Shutting down maintenance message service..."
+    if scale_deployment "deployment" "maintenance-message" "0" "0"; then
+      echo "✅ Maintenance mode disabled and maintenance service scaled down"
+    else
+      echo "⚠️ Failed to scale down maintenance service, but continuing..."
+    fi
+  fi
+
+  return 0
+}
 
 # Function to enable/disable Moodle maintenance mode
 manage_moodle_maintenance() {
