@@ -161,19 +161,6 @@ wait_for_redis_proxy_ready() {
     sleep $wait_time
   done
 }
-    else
-      echo "Redis proxy pod not ready (retry $retry_count/$max_retries)"
-    fi
-
-    retry_count=$((retry_count + 1))
-    if [[ $retry_count -ge $max_retries ]]; then
-      echo "⚠️ Timeout: Redis proxy $proxy_name not ready after $((max_retries * wait_time)) seconds"
-      return 1
-    fi
-
-    sleep $wait_time
-  done
-}
 
 # =============================================================================
 # REDIS PROXY CONFIGURATION
