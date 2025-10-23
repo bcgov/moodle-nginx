@@ -153,28 +153,48 @@ generate_redis_proxy_config_json() {
     return 1
   fi
 
-  # Build JSON configuration with proper service endpoints for Sentinel
-  local config_json='{"clusters": [{"name": "redis-cluster", "servers": ['
-
-  local first=true
+  # Build sentinels array in the correct format
+  local sentinels=()
   for pod in $redis_pods; do
-    if [[ "$first" != "true" ]]; then
-      config_json+=','
-    fi
     # Generate proper service endpoint for Sentinel
-    local service_endpoint="${pod}.redis-headless.${namespace}.svc.cluster.local"
-    config_json+="{\"host\": \"$service_endpoint\", \"port\": 26379}"
-    first=false
+    local service_endpoint="${pod}.redis-headless.${namespace}.svc.cluster.local:26379"
+    sentinels+=("\"$service_endpoint\"")
+    echo "   - Adding sentinel: $service_endpoint"
   done
 
-  config_json+=']}]}'
+  # Join the sentinels with commas
+  local sentinels_joined
+  sentinels_joined=$(IFS=, ; echo "${sentinels[*]}")
 
-  # Write to output file
-  echo "$config_json" > "$output_file"
-  echo "✅ Redis proxy configuration written to: $output_file"
-  echo "🔍 Debug: Generated configuration:"
-  cat "$output_file"
-  return 0
+  # Create the output directory if it doesn't exist
+  local output_dir
+  output_dir=$(dirname "$output_file")
+  mkdir -p "$output_dir"
+
+  # Generate JSON in the correct format
+  cat <<EOF > "$output_file"
+{
+  "Sentinels_addresses_list":[
+    $sentinels_joined
+  ],
+  "Databases":[
+    {
+      "Name": "mymaster",
+      "Local_port": "6379"
+    }
+  ]
+}
+EOF
+
+  if [[ $? -eq 0 ]]; then
+    echo "✅ Redis proxy configuration written to: $output_file"
+    echo "🔍 Debug: Generated configuration:"
+    cat "$output_file"
+    return 0
+  else
+    echo "❌ Failed to write Redis proxy config to: $output_file"
+    return 1
+  fi
 }
 
 # Function to validate Redis proxy configuration
