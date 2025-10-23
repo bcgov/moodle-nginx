@@ -467,3 +467,27 @@ should_migrate_by_version() {
   echo "ℹ️ No migration required for $migration_type version change"
   return 1
 }
+
+# Function to manage backup storage secrets with environment-specific values
+# This function is now a thin wrapper around manage_secret_with_validation for backward compatibility
+# and to provide a convenient interface for backup storage secrets
+# Return codes:
+#   0 - Secret already exists with correct values (no changes made)
+#   2 - Secret was created or updated successfully (changes made - restart may be needed)
+#   1 - Error occurred
+# Usage examples:
+#   - Basic backup storage secret management:
+#     manage_backup_storage_secrets "$namespace" "secret-name" "key1=value1,key2=value2"
+#   - With validation feedback:
+#     manage_backup_storage_secrets "$namespace" "secret-name" "key1=value1,key2=value2" "key1,key2" "my secrets"
+#   - For other secrets, use manage_secret_with_validation directly
+manage_backup_storage_secrets() {
+  local namespace="${1:-$DEPLOY_NAMESPACE}"
+  local secret_name="${2:-moodle-db-backup-storage-secrets}"
+  local secret_values="${3}"  # Format: "key1=value1,key2=value2"
+  local validation_keys="${4:-}"  # Optional: specific keys to validate and provide feedback for
+  local secret_description="${5:-backup storage secrets}"
+
+  # Use the generic function with provided parameters and propagate return code
+  manage_secret_with_validation "$secret_name" "$secret_values" "$namespace" "$validation_keys" "$secret_description"
+}

@@ -215,7 +215,7 @@ fi
 # Handle deployment restart if secret changes were made
 if [[ "${DEPLOYMENT_RESTART_NEEDED:-false}" == "true" ]]; then
   echo ""
-  restart_deployment_for_secrets "$DB_BACKUP_DEPLOYMENT_FULL_NAME" "$DEPLOY_NAMESPACE" "300s"
+  restart_deployment "$DB_BACKUP_DEPLOYMENT_FULL_NAME" "$DEPLOY_NAMESPACE"
   restart_result=$?
 
   if [[ $restart_result -eq 0 ]]; then
