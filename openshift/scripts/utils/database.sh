@@ -46,7 +46,10 @@ check_galera_pod_ready() {
   fi
 
   # Get MariaDB credentials
-  get_mariadb_env_vars "$pod_name"
+  if ! get_mariadb_env_vars "$pod_name"; then
+    echo "    ❌ Debug: Failed to retrieve valid credentials"
+    return 1
+  fi
 
   # Debug: Show what credentials we're using (without exposing password)
   echo "    🔍 Debug: MARIADB_USER='$MARIADB_USER', password_length=${#MARIADB_PASSWORD}"
@@ -81,48 +84,21 @@ check_galera_pod_ready() {
 get_mariadb_env_vars() {
   local pod_name="$1"
 
-  # Set default values that will be used by other functions
-  export MARIADB_USER="${MARIADB_USER:-root}"
-  export MARIADB_PASSWORD="${MARIADB_PASSWORD:-}"
+  echo "    🔍 Debug: Setting up credentials for pod $pod_name"
 
-  echo "    🔍 Debug: Starting credential lookup for pod $pod_name"
+  # Use the deployment environment variables (most reliable)
+  export MARIADB_USER="${DB_USER:-root}"
+  export MARIADB_PASSWORD="${DB_PASSWORD:-}"
 
-  # Try to get password from pod environment if not set
-  if [[ -z "$MARIADB_PASSWORD" ]]; then
-    echo "    🔍 Debug: Trying to get password from pod environment..."
-    MARIADB_PASSWORD=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].value}' 2>/dev/null || echo "")
-    export MARIADB_PASSWORD
-    if [[ -n "$MARIADB_PASSWORD" ]]; then
-      echo "    ✅ Debug: Found password in pod environment"
-    fi
-  fi
-
-  # Try to get from secret if still empty
-  if [[ -z "$MARIADB_PASSWORD" ]]; then
-    echo "    🔍 Debug: Trying to get password from secret reference..."
-    local secret_name=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.name}' 2>/dev/null)
-    local secret_key=$(oc get pod "$pod_name" -o jsonpath='{.spec.containers[0].env[?(@.name=="MARIADB_ROOT_PASSWORD")].valueFrom.secretKeyRef.key}' 2>/dev/null)
-
-    echo "    🔍 Debug: Secret name='$secret_name', key='$secret_key'"
-
-    if [[ -n "$secret_name" && -n "$secret_key" ]]; then
-      MARIADB_PASSWORD=$(get_secret_value "$secret_name" "$secret_key")
-      export MARIADB_PASSWORD
-      if [[ -n "$MARIADB_PASSWORD" ]]; then
-        echo "    ✅ Debug: Found password in secret (length: ${#MARIADB_PASSWORD})"
-      else
-        echo "    ❌ Debug: Secret exists but password value is empty"
-      fi
-    else
-      echo "    ❌ Debug: No secret reference found in pod environment"
-    fi
-  fi
+  # Debug output
+  echo "    ✅ Debug: Using deployment variables - user: $MARIADB_USER, password_length: ${#MARIADB_PASSWORD}"
 
   if [[ -z "$MARIADB_PASSWORD" ]]; then
-    echo "    ❌ Debug: Final result: No password found anywhere"
-  else
-    echo "    ✅ Debug: Final result: Password found (length: ${#MARIADB_PASSWORD})"
+    echo "    ❌ Debug: No DB_PASSWORD found in environment"
+    return 1
   fi
+
+  return 0
 }
 
 # Main function to wait for Galera cluster to be ready and synced
