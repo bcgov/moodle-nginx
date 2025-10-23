@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Database Utilities Module
-# Contains Galera/MariaDB operations, healget_mariadb_env_vars() {
+# Contains Galera/MariaDB operations, health checks, and auto-healing functions
+
+get_mariadb_env_vars() {
   local pod_name="$1"
 
   log_debug "Setting up credentials for pod $pod_name"
@@ -19,7 +21,7 @@
   fi
 
   return 0
-}-healing functions
+}
 
 # =============================================================================
 # GALERA CLUSTER HEALTH AND MONITORING
