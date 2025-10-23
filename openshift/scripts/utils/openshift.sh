@@ -575,86 +575,64 @@ debug_deployment_pods() {
   local deployment_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  echo "🔍 Debug: Troubleshooting pod discovery for deployment: $deployment_name"
+  log_info "🔍 Debug: Troubleshooting pod discovery for deployment: $deployment_name"
 
   # Check if deployment exists
   if ! oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
-    echo "❌ Deployment '$deployment_name' does not exist in namespace '$namespace'"
+    log_error "Deployment '$deployment_name' does not exist in namespace '$namespace'"
     return 1
   fi
 
   # Show deployment details
-  echo "📋 Deployment details:"
+  log_info "Deployment details:"
   oc get deployment "$deployment_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "matchLabels\|replicas\|selector"
 
   # Show selector labels
   echo ""
-  echo "🏷️ Deployment selector labels:"
-  local selector_labels
-  selector_labels=$(oc get deployment "$deployment_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
-  echo "$selector_labels" | jq . 2>/dev/null || echo "$selector_labels"
 
-  # Show all pods in namespace with their labels
-  echo ""
-  echo "🔍 All pods in namespace with 'maintenance' in name:"
-  oc get pods -n "$namespace" -o wide | grep -i maintenance || echo "No pods found with 'maintenance' in name"
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    log_debug "Deployment selector labels:"
+    local selector_labels
+    selector_labels=$(oc get deployment "$deployment_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+    log_debug "$selector_labels" | jq . 2>/dev/null || echo "$selector_labels"
 
-  # Show all pods with various label attempts
-  echo ""
-  echo "🔍 Pod discovery attempts:"
+    # Show all pods in namespace with their labels
+    echo ""
+    log_debug "All pods in namespace with 'maintenance' in name:"
+    oc get pods -n "$namespace" -o wide | grep -i maintenance || echo "No pods found with 'maintenance' in name"
 
-  echo "  1. Using app=$deployment_name:"
-  oc get pods -l app="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+    # Show all pods with various label attempts
+    echo ""
+    echo "🔍 Pod discovery attempts:"
 
-  echo "  2. Using app.kubernetes.io/name=$deployment_name:"
-  oc get pods -l app.kubernetes.io/name="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+    echo "  1. Using app=$deployment_name:"
+    oc get pods -l app="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
 
-  echo "  3. Using deployment=$deployment_name:"
-  oc get pods -l deployment="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+    echo "  2. Using app.kubernetes.io/name=$deployment_name:"
+    oc get pods -l app.kubernetes.io/name="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
 
-  echo "  4. Using deploymentconfig=$deployment_name:"
-  oc get pods -l deploymentconfig="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+    echo "  3. Using deployment=$deployment_name:"
+    oc get pods -l deployment="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+
+    echo "  4. Using deploymentconfig=$deployment_name:"
+    oc get pods -l deploymentconfig="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+  fi
 
   # Try using actual selector from deployment
   if [[ -n "$selector_labels" && "$selector_labels" != "null" ]]; then
-    echo "  5. Using deployment's actual selector:"
+    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+      echo "  5. Using deployment's actual selector:"
+    fi
     local selector_string
     selector_string=$(echo "$selector_labels" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null)
     if [[ -n "$selector_string" && "$selector_string" != "null" ]]; then
-      echo "    Selector: $selector_string"
-      oc get pods -l "$selector_string" -n "$namespace" -o name 2>/dev/null || echo "    No pods found with actual selector"
+      if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+        echo "    Selector: $selector_string"
+        oc get pods -l "$selector_string" -n "$namespace" -o name 2>/dev/null || echo "    No pods found with actual selector"
+      fi
     else
-      echo "    Could not parse selector"
+      log_warning "    Could not parse selector"
     fi
-  fi
-}
-
-# Simple test function for pod discovery (works locally)
-test_pod_discovery() {
-  local deployment_name="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-
-  echo "🧪 Testing pod discovery for: $deployment_name"
-
-  # Test the actual function
-  echo "📋 Testing get_pods_for_resource function:"
-  local pods_found
-  pods_found=$(get_pods_for_resource "deployment/$deployment_name" "$namespace")
-
-  if [[ -n "$pods_found" ]]; then
-    echo "✅ Found pods: $pods_found"
-    return 0
-  else
-    echo "❌ No pods found by get_pods_for_resource function"
-
-    # Show what we can find manually
-    echo ""
-    echo "🔍 Manual verification:"
-    echo "  Deployment exists: $(oc get deployment "$deployment_name" -n "$namespace" &>/dev/null && echo "Yes" || echo "No")"
-    echo "  Selector labels: $(oc get deployment "$deployment_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)"
-    echo "  Direct label check (deployment=$deployment_name): $(oc get pods -l deployment="$deployment_name" -n "$namespace" -o name 2>/dev/null | wc -l) pods"
-
-    return 1
   fi
 }
 
@@ -667,11 +645,11 @@ set_resources() {
   local cpu_limit=$5
   local mem_limit=$6
 
-  echo "Setting resources for $type/$deployment..."
-  echo "CPU Request: $cpu_request"
-  echo "Memory Request: $mem_request"
-  echo "CPU Limit: $cpu_limit"
-  echo "Memory Limit: $mem_limit"
+  log_info "Setting resources for $type/$deployment..."
+  log_debug "CPU Request: $cpu_request"
+  log_debug "Memory Request: $mem_request"
+  log_debug "CPU Limit: $cpu_limit"
+  log_debug "Memory Limit: $mem_limit"
 
   # Validate and format resource values
   cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
@@ -709,7 +687,7 @@ set_resources() {
     limits_set=true
   fi
 
-  echo "Set: $cmd"
+  log_debug "Set: $cmd"
   $cmd
 }
 
@@ -727,11 +705,11 @@ create_hpa() {
   fi
 
   if [[ $avg_value == "0m" || $avg_value == "0.0m" || $max_replicas -le $min_replicas || $min_replicas == "0" ]]; then
-    echo "Invalid HPA values. Exiting..."
+    log_error "Invalid HPA values. Exiting..."
     return 1
   fi
 
-  echo "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
+  log_info "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
 
   # Determine the kind of the target resource
   local kind="Deployment"
@@ -767,7 +745,7 @@ EOF
   # First, delete the HPA if it exists
   delete_resource_if_exists hpa $name
 
-  echo "Creating HPA from template:"
+  log_info "Creating HPA from template:"
   oc create -f hpa.yaml
 
   wait_for_deployment_without_errors "$kind/$target"
@@ -805,7 +783,7 @@ wait_for() {
       "job.batch" | "jobs.batch") resource_type="job" ;;
     esac
   else
-    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>"
+    log_error "Invalid resource format: $resource. Expected format: <type>/<name>"
     return 1
   fi
 
@@ -813,11 +791,11 @@ wait_for() {
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
   max_retries=$((timeout_seconds / wait_time))
 
-  echo "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
+  log_info "Waiting for $resource to be $condition ($scale_direction). Max time: $timeout..."
 
   # Check if the resource exists before attempting to scale
   if ! oc get $resource_type $resource_name &> /dev/null; then
-    echo "⚠️ $resource_type/$resource_name does not exist. Skipping..."
+    log_warning "$resource_type/$resource_name does not exist. Skipping..."
     return 0
   fi
 
@@ -842,7 +820,7 @@ wait_for_deployment_without_errors() {
 
   # Validate that resource was properly split
   if [[ -z "$resource_type" || -z "$resource_name" || "$resource_type" == "$resource" ]]; then
-    echo "❌ Invalid resource format: $resource. Expected format: <type>/<name>" >&2
+    log_error "Invalid resource format: $resource. Expected format: <type>/<name>"
     return 1
   fi
 
@@ -854,28 +832,28 @@ wait_for_deployment_without_errors() {
     "job.batch" | "jobs.batch") resource_type="job" ;;
   esac
 
-  echo "Waiting for $resource to be ready and error-free..."
+  log_info "Waiting for $resource to be ready and error-free..."
 
   # Check if the resource exists
   if ! oc get $resource_type $resource_name &> /dev/null; then
-    echo "❌ Error from server (NotFound): $resource_type/$resource_name not found"
+    log_error "$resource_type/$resource_name not found"
     return 1
   fi
 
   # Get the desired replica count
   local desired_replicas=$(oc get $resource_type $resource_name -o jsonpath='{.spec.replicas}')
   if [[ "$desired_replicas" == "0" ]]; then
-    echo "✔️ $resource has scaled down to 0 replicas."
+    log_success "$resource has scaled down to 0 replicas."
     return 0
   fi
 
   # Use handle_pods_in_resource to manage pods
   if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
-    echo "❌ Errors detected in pods for $resource. Exiting..."
+    log_error "Errors detected in pods for $resource. Exiting..."
     return 1
   fi
 
-  echo "✔️ All pods in $resource are ready and error-free."
+  log_success "All pods in $resource are ready and error-free."
   return 0
 }
 
@@ -885,17 +863,17 @@ check_timestamp() {
   local default_rerun_block_seconds=0 # Default to never blocking reruns
   local rerun_block_seconds=${IMAGE_REBUILD_TIME_LIMIT:-$default_rerun_block_seconds}
 
-  echo "Checking last time maintenance script was run..."
+  log_info "Checking last time maintenance script was run..."
 
   # Check if the environment variable is set and valid
   if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
-    echo "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
+    log_warning "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
     rerun_block_seconds=$default_rerun_block_seconds
   fi
 
   # If the value is 0, do not enforce the time limit
   if [ "$rerun_block_seconds" -eq 0 ]; then
-    echo "IMAGE_REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
+    log_info "IMAGE_REBUILD_TIME_LIMIT is set to 0. Time limit is not enforced."
     return 0
   fi
 
@@ -903,24 +881,24 @@ check_timestamp() {
   local rerun_hours=$((rerun_minutes / 60))
   local last_modified_minutes=$(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 60 ))
 
-  echo "Last modified time: $last_modified_minutes minutes ago"
-  echo "Rerun block time: $rerun_hours hours"
-  echo "Current time: $(date +%Y-%m-%dT%H:%M:%S)"
-  echo "Current time (epoch): $(date +%s)"
-  echo "Last modified time (epoch): $(stat -c %Y $file_to_test)"
-  echo "Difference in hours: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 3600 )) hours"
+  log_debug "Last modified time: $last_modified_minutes minutes ago"
+  log_debug "Rerun block time: $rerun_hours hours"
+  log_debug "Current time: $(date +%Y-%m-%dT%H:%M:%S)"
+  log_debug "Current time (epoch): $(date +%s)"
+  log_debug "Last modified time (epoch): $(stat -c %Y $file_to_test)"
+  log_debug "Difference in hours: $(( ($(date +%s) - $(stat -c %Y $file_to_test)) / 3600 )) hours"
 
   # Check if the script has been run within the past hour
   if [ -f "$file_to_test" ]; then
     if [ "$last_modified_minutes" -lt "$rerun_minutes" ]; then
-      echo "The script has been run within the past $rerun_hours hours."
+      log_info "The script has been run within the past $rerun_hours hours."
       return 1
     else
-      echo "The script has not been run within the past $rerun_hours hours."
+      log_info "The script has not been run within the past $rerun_hours hours."
       return 0
     fi
   else
-    echo "No file found to test last run time ($file_to_test)."
+    log_warning "No file found to test last run time ($file_to_test)."
     return 0
   fi
 }
@@ -929,10 +907,31 @@ check_timestamp() {
 # LOGGING AND ERROR HANDLING FUNCTIONS
 # =============================================================================
 
-log_error_continue() {
-  local pod=$1
-  echo "Continuing..."
-  # Add any additional error handling logic here
+# Function to log debug messages only when DEBUG_LEVEL is set to DEBUG
+log_debug() {
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    echo "🔍 Debug: $*"
+  fi
+}
+
+# Function to log info messages (always shown)
+log_info() {
+  echo "ℹ️  $*"
+}
+
+# Function to log warning messages (always shown)
+log_warn() {
+  echo "⚠️  $*"
+}
+
+# Function to log error messages (always shown)
+log_error() {
+  echo "❌ $*"
+}
+
+# Function to log success messages (always shown)
+log_success() {
+  echo "✅ $*"
 }
 
 # Function to check logs for a single pod
@@ -948,7 +947,7 @@ check_pod_logs() {
 
   # Check for malformed variables
   if [[ -z "$pod" || -z "$namespace" ]]; then
-    echo "ERROR: pod or namespace is empty!"
+    log_error "ERROR: pod or namespace is empty!"
     return 1
   fi
 
@@ -962,10 +961,10 @@ check_pod_logs() {
     for error_search_string in "${error_strings[@]}"; do
       if echo "$LOGS" | grep -q "$error_search_string"; then
         if echo "$LOGS" | grep -q "Success"; then
-          echo "Connection was lost but reestablished. No need to restart the pod."
+          log_info "Connection was lost but reestablished. No need to restart the pod."
           continue
         else
-          echo "Error found in pod logs: $error_search_string"
+          log_warning "Error found in pod logs: $error_search_string"
           $error_handler $pod
           return 1  # Return failure if an error was found and handled
         fi
@@ -973,7 +972,7 @@ check_pod_logs() {
     done
   done
 
-  echo "No errors found in pod: $pod"
+  log_success "No errors found in pod: $pod"
   return 0  # Return success if no errors were found
 }
 
@@ -998,7 +997,7 @@ check_deployment_logs() {
     local error_handler=${3:-delete_pod}
     local total_errors=0
 
-    echo "Checking logs: $deployment"
+    log_info "Checking logs: $deployment"
 
     while true; do
       local errors_detected=0
@@ -1008,7 +1007,7 @@ check_deployment_logs() {
 
       # Check if PODS is empty
       if [ -z "$PODS" ]; then
-        echo "No pods found for deployment: $deployment"
+        log_warning "No pods found for deployment: $deployment"
         break
       fi
 
@@ -1018,14 +1017,14 @@ check_deployment_logs() {
       total_pods=$(echo $PODS | wc -w)
 
       for pod in "${pod_array[@]}"; do
-        echo "Processing pod logs: $pod"
+        log_info "Processing pod logs: $pod"
 
         if ! check_pod_logs "$pod" "$DEPLOY_NAMESPACE" "$error_search_strings" "$error_handler"; then
           errors_detected=$((errors_detected + 1))
           total_errors=$((total_errors + 1))
 
           # Wait for the pod to be fully restarted and stabilized
-          echo "Waiting for pod $pod to restart and stabilize..."
+          log_info "Waiting for pod $pod to restart and stabilize..."
           sleep $wait_time
           oc wait --for=condition=Ready pod/$pod --timeout=300s
           break
@@ -1033,36 +1032,25 @@ check_deployment_logs() {
       done
 
       if [ $errors_detected -eq 0 ]; then
-        echo "✔️ OK"
+        log_success "✔️ OK"
         break
       else
-        echo "❌ Errors found: $total_errors."
+        log_error "Errors found: $total_errors."
         retry_count=$((retry_count + 1))
         if [ $retry_count -ge $max_retries ]; then
-          echo "❌ Max retries reached. Exiting..."
+          log_error "Max retries reached. Exiting..."
           return 1
         fi
-        echo "Waiting for pods to restart and stabilize..."
+        log_info "Waiting for pods to restart and stabilize..."
         sleep $wait_time
       fi
     done
 
     if [ $total_errors -ne 0 ]; then
-      echo "❌ Errors detected: $total_errors"
+      log_error "Errors detected: $total_errors"
     fi
   done
 
-  return 0
-}
-
-check_logs_for_pattern() {
-  local pattern=$1
-  local deployment=$2
-  local max_retries=${3:-5}
-  local wait_time=${4:-10}
-
-  echo "Checking logs for pattern: $pattern in deployment: $deployment"
-  # Implementation details for pattern checking
   return 0
 }
 
@@ -1158,13 +1146,13 @@ check_and_restart_pod() {
   local selector="$1"
   local error_patterns="$2"
 
-  echo "🔍 Checking pods with selector: $selector"
+  log_info "Checking pods with selector: $selector"
 
   # Get all running pods matching the selector
   local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
 
   if [[ -z "$pods" ]]; then
-    echo "⚠️  No running pods found for selector: $selector"
+    log_warning "No running pods found for selector: $selector"
     return
   fi
 
@@ -1174,13 +1162,13 @@ check_and_restart_pod() {
   local pods_restarted=0
 
   for pod in $pods; do
-    echo "  📋 Checking pod: $pod"
+    log_info "Checking pod: $pod"
 
     # Get recent logs (last 50 lines to avoid overwhelming output)
     local logs=$(oc logs "$pod" --tail=50 2>/dev/null)
 
     if [[ -z "$logs" ]]; then
-      echo "    ⚠️  No logs available for pod: $pod"
+      log_warning "No logs available for pod: $pod"
       continue
     fi
 
@@ -1191,7 +1179,7 @@ check_and_restart_pod() {
     for pattern in "${patterns[@]}"; do
       pattern=$(echo "$pattern" | xargs)  # Trim whitespace
       if echo "$logs" | grep -q "$pattern"; then
-        echo "    ❌ Error pattern '$pattern' found in pod $pod"
+        log_error "Error pattern '$pattern' found in pod $pod"
         errors_found=true
         found_pattern="$pattern"
         break
@@ -1199,7 +1187,7 @@ check_and_restart_pod() {
     done
 
     if [[ "$errors_found" == "true" ]]; then
-      echo "    🔄 Restarting pod $pod due to error pattern: $found_pattern"
+      log_warning "🔄 Restarting pod $pod due to error pattern: $found_pattern"
       oc delete pod "$pod" --grace-period=0 --force 2>/dev/null || true
       pods_restarted=$((pods_restarted + 1))
 
@@ -1209,7 +1197,7 @@ check_and_restart_pod() {
       # Wait for pod to be recreated
       sleep 30
     else
-      echo "    ✅ Pod $pod is healthy (no error patterns found)"
+      log_success "    ✅ Pod $pod is healthy (no error patterns found)"
     fi
   done
 
@@ -1240,8 +1228,8 @@ verify_route_target() {
   # Convert comma-separated route names to array
   IFS=',' read -ra routes_to_check <<< "$route_names"
 
-  echo "🔍 Verifying specific routes are pointing to service: $expected_service"
-  echo "    Routes to verify: ${routes_to_check[*]}"
+  log_info "🔍 Verifying specific routes are pointing to service: $expected_service"
+  log_info "    Routes to verify: ${routes_to_check[*]}"
 
   while [[ $elapsed -lt $timeout ]]; do
     local routes_status="✅"
@@ -1266,19 +1254,19 @@ verify_route_target() {
       fi
     done
 
-    echo -e "$routes_info"
+    log_debug -e "$routes_info"
 
     if [[ "$routes_status" == "✅" ]]; then
-      echo "✅ All specified routes are correctly pointing to '$expected_service'"
+      log_success "All specified routes are correctly pointing to '$expected_service'"
       return 0
     fi
 
-    echo "⏳ Waiting for route changes to propagate... ($elapsed/$timeout seconds)"
+    log_info "⏳ Waiting for route changes to propagate... ($elapsed/$timeout seconds)"
     sleep $check_interval
     elapsed=$((elapsed + check_interval))
   done
 
-  echo "❌ Timeout: Specified routes are not pointing to '$expected_service' after $timeout seconds"
+  log_error "Timeout: Specified routes are not pointing to '$expected_service' after $timeout seconds"
   return 1
 }
 
@@ -1288,16 +1276,16 @@ verify_application_response() {
   local check_interval="${2:-10}"
   local elapsed=0
 
-  echo "🔍 Verifying application is responding correctly..."
+  log_info "Verifying application is responding correctly..."
 
   # Get the route URL
   local route_url=$(oc get route -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
   if [[ -z "$route_url" ]]; then
-    echo "⚠️ Could not determine route URL, skipping response verification"
+    log_warning "Could not determine route URL, skipping response verification"
     return 0
   fi
 
-  echo "🌐 Testing application response at: https://$route_url"
+  log_info "🌐 Testing application response at: https://$route_url"
 
   while [[ $elapsed -lt $timeout ]]; do
     # Test the application response, following redirects
@@ -1308,24 +1296,24 @@ verify_application_response() {
 
     # Accept various success responses
     if [[ "$response_code" =~ ^(200|201|202)$ ]]; then
-      echo "✅ Application is responding correctly (HTTP $response_code)"
+      log_success "✅ Application is responding correctly (HTTP $response_code)"
       if [[ "$final_url" != "https://$route_url" ]]; then
-        echo "🔗 Final URL after redirects: $final_url"
+        log_info "🔗 Final URL after redirects: $final_url"
       fi
       return 0
     elif [[ "$response_code" == "000" ]]; then
-      echo "⏳ Connection failed, retrying... ($elapsed/$timeout seconds)"
+      log_info "⏳ Connection failed, retrying... ($elapsed/$timeout seconds)"
     elif [[ "$response_code" =~ ^(3[0-9][0-9])$ ]]; then
-      echo "⏳ Application returned redirect HTTP $response_code (following redirects), retrying... ($elapsed/$timeout seconds)"
+      log_info "⏳ Application returned redirect HTTP $response_code (following redirects), retrying... ($elapsed/$timeout seconds)"
     else
-      echo "⏳ Application returned HTTP $response_code, retrying... ($elapsed/$timeout seconds)"
+      log_info "⏳ Application returned HTTP $response_code, retrying... ($elapsed/$timeout seconds)"
     fi
 
     sleep $check_interval
     elapsed=$((elapsed + check_interval))
   done
 
-  echo "❌ Application is not responding correctly after $timeout seconds"
+  log_error "Application is not responding correctly after $timeout seconds"
   return 1
 }
 
@@ -1337,25 +1325,25 @@ apply_resource_patch() {
   local namespace="${4:-$DEPLOY_NAMESPACE}"
   local description="${5:-Applying patch}"
 
-  echo "🔧 $description for $resource_type/$resource_name..."
+  log_debug "🔧 $description for $resource_type/$resource_name..."
 
   # Check if the resource exists
   if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
-    echo "⚠️ $resource_type $resource_name does not exist. Skipping patch."
+    log_warning "$resource_type $resource_name does not exist. Skipping patch."
     return 1
   fi
 
   # Create temporary patch file
   local patch_file="/tmp/patch-${resource_type}-${resource_name}-$$.json"
-  echo "$patch_operations" > "$patch_file"
+  log_debug "$patch_operations" > "$patch_file"
 
   # Apply the patch
   if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
-    echo "✅ Successfully applied patch to $resource_type/$resource_name"
+    log_success "✅ Successfully applied patch to $resource_type/$resource_name"
     rm -f "$patch_file"
     return 0
   else
-    echo "⚠️ Warning: Failed to apply patch to $resource_type/$resource_name"
+    log_warning "⚠️ Warning: Failed to apply patch to $resource_type/$resource_name"
     rm -f "$patch_file"
     return 1
   fi
@@ -1368,7 +1356,7 @@ verify_patch_result() {
   local jsonpath_checks="$3"  # Array of "jsonpath:expected_value" pairs
   local namespace="${4:-$DEPLOY_NAMESPACE}"
 
-  echo "🔍 Verifying patch results for $resource_type/$resource_name..."
+  log_info "Verifying patch results for $resource_type/$resource_name..."
 
   # Parse jsonpath_checks (format: "path1:value1,path2:value2")
   IFS=',' read -ra checks <<< "$jsonpath_checks"
@@ -1383,9 +1371,9 @@ verify_patch_result() {
     actual=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath="$jsonpath" 2>/dev/null)
 
     if [[ "$actual" == "$expected" ]]; then
-      echo "✅ Verified: $jsonpath = $expected"
+      log_success "Verified: $jsonpath = $expected"
     else
-      echo "⚠️ Failed verification: $jsonpath = '$actual' (expected '$expected')"
+      log_warning "Failed verification: $jsonpath = '$actual' (expected '$expected')"
       all_verified=false
     fi
   done
@@ -1399,13 +1387,13 @@ patch_route_fast() {
   local target_service="$2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
-  echo "🔄 Patching route $route_name to point to $target_service..."
+  log_info "🔄 Patching route $route_name to point to $target_service..."
 
   # Show current route target
   if oc get route "$route_name" -n "$namespace" &> /dev/null; then
     local current_target
     current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
-    echo "  Current: $route_name → $current_target"
+    log_info "  Current: $route_name → $current_target"
   fi
 
   # Create patch operation
@@ -1413,10 +1401,10 @@ patch_route_fast() {
 
   # Apply the patch using generic function
   if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
-    echo "  ✅ Patch applied to route $route_name"
+    log_success "Patch applied to route $route_name"
     return 0
   else
-    echo "  ❌ Failed to apply patch to route $route_name"
+    log_error "Failed to apply patch to route $route_name"
     return 1
   fi
 }
@@ -1428,13 +1416,13 @@ patch_route() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
   local verify_timeout="${4:-60}"  # Verification timeout in seconds
 
-  echo "Patching route $route_name to point to $target_service..."
+  log_info "Patching route $route_name to point to $target_service..."
 
   # Show current route target
   if oc get route "$route_name" -n "$namespace" &> /dev/null; then
     local current_target
     current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
-    echo "Current route: $current_target"
+    log_info "Current route: $current_target"
   fi
 
   # Create patch operation
@@ -1443,16 +1431,16 @@ patch_route() {
   # Apply the patch using generic function
   if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
     # Verify the route change took effect using the enhanced verification function
-    echo "🔍 Verifying route patch was successful..."
+    log_info "Verifying route patch was successful..."
     if verify_route_target "$target_service" "$route_name" "$verify_timeout" 5; then
-      echo "✅ Route $route_name successfully updated and verified to point to $target_service"
+      log_success "Route $route_name successfully updated and verified to point to $target_service"
       return 0
     else
-      echo "❌ Route patch failed verification - route $route_name is not pointing to $target_service"
+      log_error "Route patch failed verification - route $route_name is not pointing to $target_service"
       return 1
     fi
   else
-    echo "❌ Failed to apply patch to route $route_name"
+    log_error "Failed to apply patch to route $route_name"
     return 1
   fi
 }
@@ -1477,35 +1465,35 @@ patch_all_routes() {
     routes_for_verification="$routes_for_verification,moodle-custom"
   fi
 
-  echo "🚀 Optimized route patching for $namespace environment"
-  echo "📋 Routes to patch: ${routes_to_patch[*]}"
+  log_info "🚀 Optimized route patching for $namespace environment"
+  log_debug "📋 Routes to patch: ${routes_to_patch[*]}"
 
   # Phase 1: Apply all patches quickly without waiting for verification
-  echo ""
-  echo "🔄 Phase 1: Applying all route patches..."
+  log_info ""
+  log_info "🔄 Phase 1: Applying all route patches..."
   for route in "${routes_to_patch[@]}"; do
     if ! patch_route_fast "$route" "$target_service" "$namespace"; then
-      echo "❌ Failed to patch route: $route"
+      log_error "Failed to patch route: $route"
       patch_success=false
     fi
   done
 
   if [[ "$patch_success" != "true" ]]; then
-    echo "❌ Some route patches failed - aborting"
+    log_error "Some route patches failed - aborting"
     return 1
   fi
 
   # Phase 2: Wait a moment for patches to propagate, then verify all routes together
-  echo ""
-  echo "⏳ Phase 2: Allowing patches to propagate (10 seconds)..."
+  log_info ""
+  log_info "⏳ Phase 2: Allowing patches to propagate (10 seconds)..."
   sleep 10
 
-  echo "🔍 Phase 3: Verifying all routes together..."
+  log_info "🔍 Phase 3: Verifying all routes together..."
   if verify_route_target "$target_service" "$routes_for_verification" "$verify_timeout" 5; then
-    echo "✅ Successfully patched and verified all routes for $namespace environment"
+    log_success "Successfully patched and verified all routes for $namespace environment"
     return 0
   else
-    echo "❌ Route verification failed for some routes"
+    log_error "Route verification failed for some routes"
     return 1
   fi
 }
@@ -1516,7 +1504,7 @@ enable_maintenance_mode() {
   local route_mode=${2:-"auto"}  # "auto" means use patch_all_routes, or specific route name
   local route_timeout="60s"
 
-  echo "Deploying maintenance mode for service: $service_name"
+  log_info "Deploying maintenance mode for service: $service_name"
 
   # Scale to 1 replica
   scale_deployment "deployment" "$service_name" 1 1
@@ -1530,10 +1518,10 @@ enable_maintenance_mode() {
 
   # Redirect traffic to maintenance service
   if [[ "$route_mode" == "auto" ]]; then
-    echo "🔄 Redirecting all relevant routes to maintenance service..."
+    log_info "🔄 Redirecting all relevant routes to maintenance service..."
     patch_all_routes "$service_name"
   else
-    echo "🔄 Redirecting specific route $route_mode to $service_name..."
+    log_info "🔄 Redirecting specific route $route_mode to $service_name..."
     patch_route "$route_mode" "$service_name"
   fi
 }
@@ -1544,19 +1532,19 @@ disable_maintenance_mode() {
   local maintenance_service_name="${2:-maintenance-message}"  # Maintenance service to scale down
   local route_mode="${3:-auto}"  # Route handling mode
 
-  echo "Disabling $maintenance_service_name and redirecting to $target_service_name..."
+  log_info "Disabling $maintenance_service_name and redirecting to $target_service_name..."
 
   # Redirect traffic back to application
   if [[ "$route_mode" == "auto" ]]; then
-    echo "🔄 Redirecting all relevant routes back to application service: $target_service_name"
+    log_info "🔄 Redirecting all relevant routes back to application service: $target_service_name"
     patch_all_routes "$target_service_name"
   else
-    echo "🔄 Redirecting specific route $route_mode to $target_service_name..."
+    log_info "🔄 Redirecting specific route $route_mode to $target_service_name..."
     patch_route "$route_mode" "$target_service_name"
   fi
 
-  echo "✅ Route redirection completed - traffic now directed to $target_service_name"
-  echo "⚠️ Note: Maintenance service scaling should be handled by caller after verification"
+  log_success "✅ Route redirection completed - traffic now directed to $target_service_name"
+  log_warning "⚠️ Note: Maintenance service scaling should be handled by caller after verification"
 }
 
 # =============================================================================
@@ -1584,11 +1572,11 @@ validate_secret_values() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
   if ! oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
-    echo "❌ Secret '$secret_name' does not exist"
+    log_error "❌ Secret '$secret_name' does not exist"
     return 1
   fi
 
-  echo "🔍 Validating secret '$secret_name' values..."
+  log_info "🔍 Validating secret '$secret_name' values..."
 
   # Parse expected values
   IFS=',' read -ra expected_pairs <<< "$expected_values"
@@ -1601,10 +1589,10 @@ validate_secret_values() {
       local current_value=$(get_secret_value "$secret_name" "$key" "$namespace")
 
       if [[ "$current_value" != "$expected_value" ]]; then
-        echo "  ❌ Key '$key': value mismatch"
+        log_error "Key '$key': value mismatch"
         validation_failed=true
       else
-        echo "  ✅ Key '$key': value matches"
+        log_success "Key '$key': value matches"
       fi
     fi
   done
@@ -1612,7 +1600,7 @@ validate_secret_values() {
   if [[ "$validation_failed" == "true" ]]; then
     return 1
   else
-    echo "✅ All secret values validated successfully"
+    log_success "All secret values validated successfully"
     return 0
   fi
 }
@@ -1623,11 +1611,11 @@ create_or_update_secret() {
   local secret_data="$2"  # Format: "key1=value1,key2=value2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
-  echo "🔐 Creating/updating secret '$secret_name'..."
+  log_info "🔐 Creating/updating secret '$secret_name'..."
 
   # Delete existing secret if it exists
   if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
-    echo "  Deleting existing secret..."
+    log_info "  Deleting existing secret..."
     oc delete secret "$secret_name" -n "$namespace"
   fi
 
@@ -1645,10 +1633,10 @@ create_or_update_secret() {
 
   # Execute the command with proper argument handling
   if oc create secret generic "$secret_name" -n "$namespace" "${from_literal_args[@]}"; then
-    echo "✅ Secret '$secret_name' created/updated successfully"
+    log_success "Secret '$secret_name' created/updated successfully"
     return 0
   else
-    echo "❌ Failed to create/update secret '$secret_name'"
+    log_error "Failed to create/update secret '$secret_name'"
     return 1
   fi
 }
@@ -1660,12 +1648,12 @@ manage_secret_with_validation() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
   local force_update="${4:-false}"
 
-  echo "🔧 Managing secret '$secret_name' with validation..."
+  log_info "🔧 Managing secret '$secret_name' with validation..."
 
   # If force_update is false, check if secret already exists and matches
   if [[ "$force_update" != "true" ]]; then
     if validate_secret_values "$secret_name" "$secret_data" "$namespace"; then
-      echo "✅ Secret '$secret_name' already exists with correct values"
+      log_success "Secret '$secret_name' already exists with correct values"
       return 0  # No changes needed
     fi
   fi
@@ -1674,14 +1662,14 @@ manage_secret_with_validation() {
   if create_or_update_secret "$secret_name" "$secret_data" "$namespace"; then
     # Validate the created secret
     if validate_secret_values "$secret_name" "$secret_data" "$namespace"; then
-      echo "✅ Secret '$secret_name' created and validated successfully"
+      log_success "Secret '$secret_name' created and validated successfully"
       return 2  # Changes were made
     else
-      echo "❌ Secret created but validation failed"
+      log_error "Secret created but validation failed"
       return 1  # Error
     fi
   else
-    echo "❌ Failed to create secret '$secret_name'"
+    log_error "Failed to create secret '$secret_name'"
     return 1  # Error
   fi
 }
@@ -1693,7 +1681,7 @@ create_or_update_configmap() {
   local file_paths=("$@")
 
   delete_resource_if_exists configmap $configmap_name
-  echo "Creating ConfigMap: $configmap_name"
+  log_info "Creating ConfigMap: $configmap_name"
 
   # Construct the oc create configmap command with multiple --from-file flags
   local create_cmd="oc create configmap $configmap_name"
@@ -1710,26 +1698,26 @@ restart_deployment() {
   local deployment_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  echo "🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
+  log_info "🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
 
   if oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
     if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
-      echo "✅ Deployment '$deployment_name' restart initiated"
+      log_info "Deployment '$deployment_name' restart initiated"
 
       # Wait for the rollout to complete
       if oc rollout status deployment/"$deployment_name" -n "$namespace" --timeout=300s; then
-        echo "✅ Deployment '$deployment_name' restart completed successfully"
+        log_success "Deployment '$deployment_name' restart completed successfully"
         return 0
       else
-        echo "⚠️ Deployment '$deployment_name' restart timed out or failed"
+        log_error "Deployment '$deployment_name' restart timed out or failed"
         return 1
       fi
     else
-      echo "❌ Failed to restart deployment '$deployment_name'"
+      log_error "Failed to restart deployment '$deployment_name'"
       return 1
     fi
   else
-    echo "⚠️ Deployment '$deployment_name' not found"
+    log_error "Deployment '$deployment_name' not found"
     return 1
   fi
 }
@@ -1749,28 +1737,28 @@ handle_job_status() {
     # Check if the job has failed
     local job_failed=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
     if [[ $job_failed -gt 0 ]]; then
-      echo "❌ Job $job_name has failed. Retrieving logs..."
+      log_error "Job $job_name has failed. Retrieving logs..."
       local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
       local error_log_text=$(oc logs $pod_name)
-      echo "Error log:"
-      echo "$error_log_text"
+      log_error "Error log:"
+      log_error "$error_log_text"
       return 1
     fi
 
     # Check if the job has succeeded
     local job_succeeded=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
     if [[ $job_succeeded -gt 0 ]]; then
-      echo "✔️ Job $job_name has completed successfully."
+      log_success "✔️ Job $job_name has completed successfully."
       return 0
     fi
 
     # Retry logic
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for job $job_name to complete. Exiting..."
+      log_error "Timeout waiting for job $job_name to complete. Exiting..."
       return 1
     fi
 
-    echo "Waiting for job $job_name to complete... (Retry $retry_count/$max_retries)"
+    log_info "Waiting for job $job_name to complete... (Retry $retry_count/$max_retries)"
     sleep $wait_time
     retry_count=$((retry_count + 1))
   done
@@ -1798,10 +1786,10 @@ handle_deployment_status() {
     local status=$?
 
     if [[ $status -ne 0 ]]; then
-      echo "❌ Failed to retrieve pods for resource: $resource_name. Retrying..."
+      log_warning "Failed to retrieve pods for resource: $resource_name. Retrying..."
       retry_count=$((retry_count + 1))
       if [[ $retry_count -ge $max_retries ]]; then
-        echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+        log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
         return 1
       fi
       sleep $wait_time
@@ -1810,11 +1798,11 @@ handle_deployment_status() {
 
     if [[ $scale_direction == "up" ]]; then
       if [[ -z "$pods" ]]; then
-        echo "No pods found for $resource_name. Retrying..."
+        log_warning "No pods found for $resource_name. Retrying..."
 
         # Add debug info on first failure and every 10 retries
         if [[ $retry_count -eq 0 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
-          echo "🔍 Debug: Investigating pod discovery issue..."
+          log_debug "Debug: Investigating pod discovery issue..."
           debug_deployment_pods "$resource_name" "$DEPLOY_NAMESPACE"
         fi
       else
@@ -1823,32 +1811,32 @@ handle_deployment_status() {
           local output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
           if ! echo "$output" | grep -q "condition met"; then
             all_pods_ready=false
-            echo "Pod $pod is not in '$condition' condition. Retrying..."
+            log_info "Pod $pod is not in '$condition' condition. Retrying..."
             break
           fi
         done
         if $all_pods_ready; then
-          echo "✔️ All pods for $resource_name are in '$condition' condition."
+          log_success "All pods for $resource_name are in '$condition' condition."
           return 0
         fi
       fi
     elif [[ $scale_direction == "down" ]]; then
       if [[ -z "$pods" ]]; then
-        echo "✔️ All pods for $resource_name have scaled down."
+        log_success "All pods for $resource_name have scaled down."
         return 0
       else
-        echo "Pods still exist for $resource_name ($pods). Retrying..."
+        log_info "Pods still exist for $resource_name ($pods). Retrying..."
       fi
     fi
 
     # Retry logic
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+      log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
       return 1
     fi
 
-    echo "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
+    log_info "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
     sleep $wait_time
   done
 }
@@ -1870,30 +1858,30 @@ handle_pods_in_resource() {
     local pods=$(get_pods_for_resource "$resource" "$namespace")
 
     if [[ -z "$pods" ]]; then
-      echo "No pods found for $resource. Retrying..."
+      log_info "No pods found for $resource. Retrying..."
     else
       local all_pods_healthy=true
       for pod in $pods; do
         if ! $check_function "$pod" "$namespace" "$error_search_string" "$error_handler"; then
           all_pods_healthy=false
-          echo "Pod $pod has errors. Waiting for restart..."
+          log_warning "Pod $pod has errors. Waiting for restart..."
           break
         fi
       done
 
       if $all_pods_healthy; then
-        echo "✔️ All pods for $resource are healthy."
+        log_success "All pods for $resource are healthy."
         return 0
       fi
     fi
 
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Timeout: Pods for $resource still have issues after $((max_retries * wait_time)) seconds"
+      log_error "Timeout: Pods for $resource still have issues after $((max_retries * wait_time)) seconds"
       return 1
     fi
 
-    echo "Retrying pod health check... ($retry_count/$max_retries)"
+    log_info "Retrying pod health check... ($retry_count/$max_retries)"
     sleep $wait_time
   done
 }
@@ -1907,7 +1895,7 @@ create_or_update_helm_deployment() {
   local additional_set_args="${5:-}"  # Optional: additional --set arguments
 
   if helm list -q | grep -q "^$helm_name$"; then
-    echo "Helm release $helm_name exists. Upgrading..."
+    log_info "Helm release $helm_name exists. Upgrading..."
 
     # Build upgrade command
     local upgrade_cmd="helm upgrade $helm_name $helm_chart -f $values_file -f $upgrade_file"
@@ -1923,13 +1911,13 @@ create_or_update_helm_deployment() {
     # Wait for deployment to be ready
     helm status $helm_name
     if [[ $? -eq 0 ]]; then
-      echo "✅ Helm upgrade completed successfully"
+      log_success "Helm upgrade completed successfully"
     else
-      echo "⚠️ Helm upgrade may have issues, checking status..."
+      log_warning "Helm upgrade may have issues, checking status..."
       helm status $helm_name
     fi
   else
-    echo "Helm release $helm_name does not exist. Installing..."
+    log_info "Helm release $helm_name does not exist. Installing..."
 
     # Build install command
     local install_cmd="helm install $helm_name $helm_chart -f $values_file"
@@ -1947,5 +1935,5 @@ create_or_update_helm_deployment() {
   rm $values_file
   rm $upgrade_file
 
-  echo "Helm updates completed for $helm_name."
+  log_success "Helm updates completed for $helm_name."
 }

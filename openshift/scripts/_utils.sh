@@ -23,37 +23,6 @@ timestamp_file='/var/www/html/last_migration_timestamp'
 DEBUG_LEVEL="${DEBUG_LEVEL:-INFO}"
 
 # =============================================================================
-# LOGGING FUNCTIONS
-# =============================================================================
-
-# Function to log debug messages only when DEBUG_LEVEL is set to DEBUG
-log_debug() {
-  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
-    echo "🔍 Debug: $*"
-  fi
-}
-
-# Function to log info messages (always shown)
-log_info() {
-  echo "ℹ️  $*"
-}
-
-# Function to log warning messages (always shown)
-log_warn() {
-  echo "⚠️  $*"
-}
-
-# Function to log error messages (always shown)
-log_error() {
-  echo "❌ $*"
-}
-
-# Function to log success messages (always shown)
-log_success() {
-  echo "✅ $*"
-}
-
-# =============================================================================
 # CORE MODULE LOADING
 # =============================================================================
 
