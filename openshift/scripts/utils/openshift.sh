@@ -291,27 +291,213 @@ get_pods_for_resource() {
     "job.batch" | "jobs.batch") resource_type="job" ;;
   esac
 
-  # Get pods based on resource type
+  # Get pods based on resource type using proper selectors
   case "$resource_type" in
     "deployment")
-      oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+      # For deployments, get the selector labels from the deployment itself
+      local selector_labels
+      selector_labels=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+
+      if [[ -n "$selector_labels" && "$selector_labels" != "{}" ]]; then
+        # Try to parse the matchLabels JSON and convert to label selector format
+        local selector_string=""
+
+        # First try with jq (this will work in Linux/OpenShift environment)
+        if command -v jq >/dev/null 2>&1; then
+          selector_string=$(echo "$selector_labels" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null || echo "")
+        fi
+
+        # If jq failed or not available, use simple bash parsing for common patterns
+        if [[ -z "$selector_string" || "$selector_string" == "null" ]]; then
+          # Handle simple cases like {"deployment":"name"} or {"app":"name"}
+          if [[ "$selector_labels" =~ \"deployment\":\"([^\"]+)\" ]]; then
+            selector_string="deployment=${BASH_REMATCH[1]}"
+          elif [[ "$selector_labels" =~ \"app\":\"([^\"]+)\" ]]; then
+            selector_string="app=${BASH_REMATCH[1]}"
+          fi
+        fi
+
+        # Use the parsed selector if we got one
+        if [[ -n "$selector_string" && "$selector_string" != "null" ]]; then
+          oc get pods -l "$selector_string" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+        else
+          # Fallback to common deployment patterns
+          local pods
+          pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+          if [[ -z "$pods" ]]; then
+            pods=$(oc get pods -l deployment="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+          fi
+          echo "$pods"
+        fi
+      else
+        # No selector labels found, use common patterns
+        local pods
+        pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        if [[ -z "$pods" ]]; then
+          pods=$(oc get pods -l deployment="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        fi
+        echo "$pods"
+      fi
       ;;
     "statefulset")
-      oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+      # For statefulsets, get the selector labels from the statefulset itself
+      local selector_labels
+      selector_labels=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+
+      if [[ -n "$selector_labels" && "$selector_labels" != "{}" ]]; then
+        local selector_string=""
+
+        # Try with jq first (works in Linux/OpenShift)
+        if command -v jq >/dev/null 2>&1; then
+          selector_string=$(echo "$selector_labels" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null || echo "")
+        fi
+
+        # Bash parsing fallback for common patterns
+        if [[ -z "$selector_string" || "$selector_string" == "null" ]]; then
+          if [[ "$selector_labels" =~ \"app\.kubernetes\.io/name\":\"([^\"]+)\" ]]; then
+            selector_string="app.kubernetes.io/name=${BASH_REMATCH[1]}"
+          elif [[ "$selector_labels" =~ \"app\":\"([^\"]+)\" ]]; then
+            selector_string="app=${BASH_REMATCH[1]}"
+          fi
+        fi
+
+        if [[ -n "$selector_string" && "$selector_string" != "null" ]]; then
+          oc get pods -l "$selector_string" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
+        else
+          # Fallback to common statefulset patterns
+          local pods
+          pods=$(oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+          if [[ -z "$pods" ]]; then
+            pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+          fi
+          echo "$pods"
+        fi
+      else
+        # No selector labels, use common patterns
+        local pods
+        pods=$(oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        if [[ -z "$pods" ]]; then
+          pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        fi
+        echo "$pods"
+      fi
       ;;
     "job")
       oc get pods -l job-name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null
       ;;
     *)
-      # Fallback: try common selectors
+      # Fallback: try multiple common selectors
       local pods
+
+      # Try app label first
       pods=$(oc get pods -l app="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+      # Try app.kubernetes.io/name if app didn't work
       if [[ -z "$pods" ]]; then
         pods=$(oc get pods -l app.kubernetes.io/name="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
       fi
+
+      # Try deployment label if others didn't work
+      if [[ -z "$pods" ]]; then
+        pods=$(oc get pods -l deployment="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      fi
+
+      # Try deploymentconfig label (OpenShift specific)
+      if [[ -z "$pods" ]]; then
+        pods=$(oc get pods -l deploymentconfig="$resource_name" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      fi
+
       echo "$pods"
       ;;
   esac
+}
+
+# Debug function to troubleshoot pod discovery issues
+debug_deployment_pods() {
+  local deployment_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🔍 Debug: Troubleshooting pod discovery for deployment: $deployment_name"
+
+  # Check if deployment exists
+  if ! oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
+    echo "❌ Deployment '$deployment_name' does not exist in namespace '$namespace'"
+    return 1
+  fi
+
+  # Show deployment details
+  echo "📋 Deployment details:"
+  oc get deployment "$deployment_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "matchLabels\|replicas\|selector"
+
+  # Show selector labels
+  echo ""
+  echo "🏷️ Deployment selector labels:"
+  local selector_labels
+  selector_labels=$(oc get deployment "$deployment_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)
+  echo "$selector_labels" | jq . 2>/dev/null || echo "$selector_labels"
+
+  # Show all pods in namespace with their labels
+  echo ""
+  echo "🔍 All pods in namespace with 'maintenance' in name:"
+  oc get pods -n "$namespace" -o wide | grep -i maintenance || echo "No pods found with 'maintenance' in name"
+
+  # Show all pods with various label attempts
+  echo ""
+  echo "🔍 Pod discovery attempts:"
+
+  echo "  1. Using app=$deployment_name:"
+  oc get pods -l app="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+
+  echo "  2. Using app.kubernetes.io/name=$deployment_name:"
+  oc get pods -l app.kubernetes.io/name="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+
+  echo "  3. Using deployment=$deployment_name:"
+  oc get pods -l deployment="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+
+  echo "  4. Using deploymentconfig=$deployment_name:"
+  oc get pods -l deploymentconfig="$deployment_name" -n "$namespace" -o name 2>/dev/null || echo "    No pods found"
+
+  # Try using actual selector from deployment
+  if [[ -n "$selector_labels" && "$selector_labels" != "null" ]]; then
+    echo "  5. Using deployment's actual selector:"
+    local selector_string
+    selector_string=$(echo "$selector_labels" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")' 2>/dev/null)
+    if [[ -n "$selector_string" && "$selector_string" != "null" ]]; then
+      echo "    Selector: $selector_string"
+      oc get pods -l "$selector_string" -n "$namespace" -o name 2>/dev/null || echo "    No pods found with actual selector"
+    else
+      echo "    Could not parse selector"
+    fi
+  fi
+}
+
+# Simple test function for pod discovery (works locally)
+test_pod_discovery() {
+  local deployment_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "🧪 Testing pod discovery for: $deployment_name"
+
+  # Test the actual function
+  echo "📋 Testing get_pods_for_resource function:"
+  local pods_found
+  pods_found=$(get_pods_for_resource "deployment/$deployment_name" "$namespace")
+
+  if [[ -n "$pods_found" ]]; then
+    echo "✅ Found pods: $pods_found"
+    return 0
+  else
+    echo "❌ No pods found by get_pods_for_resource function"
+
+    # Show what we can find manually
+    echo ""
+    echo "🔍 Manual verification:"
+    echo "  Deployment exists: $(oc get deployment "$deployment_name" -n "$namespace" &>/dev/null && echo "Yes" || echo "No")"
+    echo "  Selector labels: $(oc get deployment "$deployment_name" -n "$namespace" -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null)"
+    echo "  Direct label check (deployment=$deployment_name): $(oc get pods -l deployment="$deployment_name" -n "$namespace" -o name 2>/dev/null | wc -l) pods"
+
+    return 1
+  fi
 }
 
 # Function to set resources for a deployment
@@ -1458,6 +1644,12 @@ handle_deployment_status() {
     if [[ $scale_direction == "up" ]]; then
       if [[ -z "$pods" ]]; then
         echo "No pods found for $resource_name. Retrying..."
+
+        # Add debug info on first failure and every 10 retries
+        if [[ $retry_count -eq 0 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
+          echo "🔍 Debug: Investigating pod discovery issue..."
+          debug_deployment_pods "$resource_name" "$DEPLOY_NAMESPACE"
+        fi
       else
         local all_pods_ready=true
         for pod in $pods; do
