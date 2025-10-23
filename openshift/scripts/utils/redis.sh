@@ -200,8 +200,8 @@ EOF
 # Function to validate Redis proxy configuration
 validate_redis_proxy_config() {
   local config_file="$1"
-  local expected_namespace="$2"
-  local expected_sts_name="$3"
+  local expected_namespace="${2:-$DEPLOY_NAMESPACE}"
+  local expected_sts_name="${3:-$REDIS_NAME-node}"
 
   echo "🔍 Validating Redis proxy configuration: $config_file"
 
@@ -440,7 +440,7 @@ update_redis_proxy_after_scaling() {
   local config_file="/tmp/redis-proxy-config-update.json"
   if generate_redis_proxy_config_json "$redis_name" "$namespace" "$config_file"; then
     # Validate the new configuration
-    if validate_redis_proxy_config "$config_file"; then
+    if validate_redis_proxy_config "$config_file" ; then
       echo "✅ Redis proxy configuration updated for scaling"
 
       # Restart proxy to pick up new configuration (if needed)

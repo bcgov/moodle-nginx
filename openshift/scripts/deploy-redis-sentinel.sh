@@ -325,7 +325,7 @@ fi
 
 # Validate the generated configuration
 echo "🔍 Validating initial Redis proxy configuration..."
-if ! validate_redis_proxy_config "$dynamic_config_file" "$REDIS_REPLICAS"; then
+if ! validate_redis_proxy_config "$dynamic_config_file"; then
   echo "❌ Initial Redis proxy configuration failed validation. Exiting..."
   exit 1
 fi
