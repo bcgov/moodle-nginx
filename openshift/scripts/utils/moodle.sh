@@ -761,7 +761,7 @@ manage_maintenance_mode() {
     echo "🔍 Verifying application response before scaling down maintenance service..."
 
     # Verify application response
-    if verify_application_response 60 10; then
+    if verify_application_response 300 10; then
       echo "✅ Application verified - proceeding with maintenance service shutdown"
     else
       echo "⚠️ Application response verification failed, but routes were verified - proceeding anyway"

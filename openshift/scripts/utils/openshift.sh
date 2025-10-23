@@ -1300,14 +1300,23 @@ verify_application_response() {
   echo "🌐 Testing application response at: https://$route_url"
 
   while [[ $elapsed -lt $timeout ]]; do
-    # Test the application response
-    local response_code=$(curl -s -o /dev/null -w "%{http_code}" -k "https://$route_url" --max-time 10 2>/dev/null || echo "000")
+    # Test the application response, following redirects
+    local response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -k "https://$route_url" --max-time 30 2>/dev/null || echo "000")
 
-    if [[ "$response_code" == "200" ]]; then
+    # Also get the final URL after redirects for debugging
+    local final_url=$(curl -s -o /dev/null -w "%{url_effective}" -L -k "https://$route_url" --max-time 30 2>/dev/null || echo "unknown")
+
+    # Accept various success responses
+    if [[ "$response_code" =~ ^(200|201|202)$ ]]; then
       echo "✅ Application is responding correctly (HTTP $response_code)"
+      if [[ "$final_url" != "https://$route_url" ]]; then
+        echo "🔗 Final URL after redirects: $final_url"
+      fi
       return 0
     elif [[ "$response_code" == "000" ]]; then
       echo "⏳ Connection failed, retrying... ($elapsed/$timeout seconds)"
+    elif [[ "$response_code" =~ ^(3[0-9][0-9])$ ]]; then
+      echo "⏳ Application returned redirect HTTP $response_code (following redirects), retrying... ($elapsed/$timeout seconds)"
     else
       echo "⏳ Application returned HTTP $response_code, retrying... ($elapsed/$timeout seconds)"
     fi
