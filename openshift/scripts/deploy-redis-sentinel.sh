@@ -283,7 +283,7 @@ cleanup_temp_config() {
 }
 trap cleanup_temp_config EXIT
 
-if ! generate_redis_proxy_config_json "$OC_PROJECT" "$REDIS_NAME-node" "redis-headless" 26379 "$dynamic_config_file"; then
+if ! generate_redis_proxy_config_json "$REDIS_NAME-node" "$OC_PROJECT" "$dynamic_config_file"; then
   echo "❌ Failed to generate initial Redis proxy configuration. Exiting..."
   exit 1
 fi
