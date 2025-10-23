@@ -9,6 +9,10 @@ env:
 on:
   workflow_call:
     inputs:
+      DEBUG_LEVEL:
+        required: false
+        type: string
+        default: "INFO"
       FORCE_MIGRATE:
         required: true
         type: string
@@ -192,6 +196,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-mariadb-galera.sh
         env:
+          DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           DB_IMAGE: ${{ inputs.DB_IMAGE }}
@@ -208,6 +213,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-redis-sentinel.sh
         env:
+          DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           REDIS_HELM_CHART: ${{ inputs.REDIS_HELM_CHART }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
@@ -226,6 +232,7 @@ jobs:
         if: success()
         run: bash ./openshift/scripts/deploy-template.sh
         env:
+          DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
           FORCE_MIGRATE: ${{ inputs.FORCE_MIGRATE }}
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}

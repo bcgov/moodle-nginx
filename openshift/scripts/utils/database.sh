@@ -1,7 +1,25 @@
 #!/bin/bash
 
 # Database Utilities Module
-# Contains Galera/MariaDB operations, health checks, and auto-healing functions
+# Contains Galera/MariaDB operations, healget_mariadb_env_vars() {
+  local pod_name="$1"
+
+  log_debug "Setting up credentials for pod $pod_name"
+
+  # Use the deployment environment variables (most reliable)
+  export MARIADB_USER="${DB_USER:-root}"
+  export MARIADB_PASSWORD="${DB_PASSWORD:-}"
+
+  # Debug output
+  log_debug "Using deployment variables - user: $MARIADB_USER, password_length: ${#MARIADB_PASSWORD}"
+
+  if [[ -z "$MARIADB_PASSWORD" ]]; then
+    log_debug "MARIADB_PASSWORD is empty"
+    return 1
+  fi
+
+  return 0
+}-healing functions
 
 # =============================================================================
 # GALERA CLUSTER HEALTH AND MONITORING
@@ -47,14 +65,14 @@ check_galera_pod_ready() {
 
   # Get MariaDB credentials
   if ! get_mariadb_env_vars "$pod_name"; then
-    echo "    ❌ Debug: Failed to retrieve valid credentials"
+    log_debug "Failed to retrieve valid credentials"
     return 1
   fi
 
   # Debug: Show what credentials we're using (without exposing password)
-  echo "    🔍 Debug: MARIADB_USER='$MARIADB_USER', password_length=${#MARIADB_PASSWORD}"
+  log_debug "MARIADB_USER='$MARIADB_USER', password_length=${#MARIADB_PASSWORD}"
   if [[ -z "$MARIADB_PASSWORD" ]]; then
-    echo "    ❌ Debug: No password found for MariaDB authentication"
+    log_debug "No password found for MariaDB authentication"
     return 1
   fi
 

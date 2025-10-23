@@ -32,7 +32,7 @@ wait_for_redis_sync() {
   while [[ $retry_count -lt $max_retries ]]; do
     # Get all pods for the StatefulSet first
     local all_pods=$(get_pods_for_resource "statefulset/$redis_name" "$DEPLOY_NAMESPACE")
-    echo "🔍 Debug: All pods found: '$all_pods'"
+    log_debug "All pods found: '$all_pods'"
 
     # Count running pods
     local running_count=0
@@ -40,7 +40,7 @@ wait_for_redis_sync() {
       for pod in $all_pods; do
         if [[ -n "$pod" ]]; then
           local phase=$(oc get pod "$pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
-          echo "🔍 Debug: Pod $pod has phase: '$phase'"
+          log_debug "Pod $pod has phase: '$phase'"
           if [[ "$phase" == "Running" ]]; then
             running_count=$((running_count + 1))
           fi
@@ -121,12 +121,12 @@ wait_for_redis_proxy_ready() {
     local proxy_pod=$(oc get pods -l app=$proxy_name --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [[ -n "$proxy_pod" ]]; then
-      echo "🔍 Redis proxy pod found: $proxy_pod"
+      log_debug "Redis proxy pod found: $proxy_pod"
 
       # Check if the service exists
       local proxy_service=$(oc get svc "$proxy_name" -n "$namespace" -o jsonpath='{.metadata.name}' 2>/dev/null)
       if [[ -n "$proxy_service" ]]; then
-        echo "🔍 Redis proxy service found: $proxy_service"
+        log_debug "Redis proxy service found: $proxy_service"
 
         # Check pod readiness conditions
         local ready_condition=$(oc get pod "$proxy_pod" -n "$namespace" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
@@ -134,7 +134,7 @@ wait_for_redis_proxy_ready() {
           echo "✅ Redis proxy $proxy_name is ready and running"
           return 0
         else
-          echo "🔍 Redis proxy pod not ready yet (condition: $ready_condition)"
+          log_debug "Redis proxy pod not ready yet (condition: $ready_condition)"
         fi
       else
         echo "⚠️ Redis proxy service not found: $proxy_name"
@@ -176,7 +176,7 @@ generate_redis_proxy_config_json() {
 
   # Get Redis pods using the proper utility function
   local redis_pods=$(get_pods_for_resource "statefulset/$redis_name" "$namespace")
-  echo "🔍 Debug: Found Redis pods: '$redis_pods'"
+  log_debug "Found Redis pods: '$redis_pods'"
 
   if [[ -z "$redis_pods" ]]; then
     echo "❌ No Redis pods found for: $redis_name"
@@ -189,7 +189,7 @@ generate_redis_proxy_config_json() {
     # Generate proper service endpoint for Sentinel
     local service_endpoint="${pod}.redis-headless.${namespace}.svc.cluster.local:26379"
     sentinels+=("\"$service_endpoint\"")
-    echo "   - Adding sentinel: $service_endpoint"
+    log_debug "Adding sentinel: $service_endpoint"
   done
 
   # Join the sentinels with commas
@@ -218,8 +218,10 @@ EOF
 
   if [[ $? -eq 0 ]]; then
     echo "✅ Redis proxy configuration written to: $output_file"
-    echo "🔍 Debug: Generated configuration:"
-    cat "$output_file"
+    log_debug "Generated configuration:"
+    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+      cat "$output_file"
+    fi
     return 0
   else
     echo "❌ Failed to write Redis proxy config to: $output_file"

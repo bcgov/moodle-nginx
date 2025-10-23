@@ -213,23 +213,29 @@ fi
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 
-echo "🔍 Debug: Redis Helm chart information:"
-helm search repo bitnami/redis --versions | head -5
+log_debug "Redis Helm chart information:"
+if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+  helm search repo bitnami/redis --versions | head -5
+fi
 
 echo "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
 
-echo "🔍 Debug: Checking generated redis-values.yaml file..."
-echo "--- FIPS Configuration ---"
-grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
-echo "--- End FIPS Configuration ---"
+log_debug "Checking generated redis-values.yaml file..."
+log_debug "--- FIPS Configuration ---"
+if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+  grep -A 5 -B 5 "Fips\|fips" redis-values.yaml || echo "No FIPS configuration found in values file"
+fi
+log_debug "--- End FIPS Configuration ---"
 
-echo "🔍 Debug info:"
-echo "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
-echo "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
-echo "🔧 Chart: $REDIS_CHART_VERSION"
+log_debug "Redis deployment info:"
+log_debug "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
+log_debug "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+log_debug "Chart: $REDIS_CHART_VERSION"
 
-echo "🔍 Debug: Helm deployment arguments:"
-printf '%s\n' "${REDIS_ARGS[@]}"
+log_debug "Helm deployment arguments:"
+if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+  printf '%s\n' "${REDIS_ARGS[@]}"
+fi
 
 # Handle forced reinstall for StatefulSet image changes
 if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then

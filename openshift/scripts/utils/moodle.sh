@@ -395,7 +395,7 @@ clear_moodle_cache_deployment() {
 
   # Wait for PHP deployment to be fully ready
   echo "⏳ Ensuring PHP deployment is ready..."
-  if ! wait_for "deployment/$php_deployment_name" "ready" "300s"; then
+  if ! wait_for "$php_deployment_name" "ready" "300s"; then
     echo "❌ PHP deployment not ready, skipping cache clearing"
     return 1
   fi
