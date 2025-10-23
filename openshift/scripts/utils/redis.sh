@@ -200,37 +200,79 @@ EOF
 # Function to validate Redis proxy configuration
 validate_redis_proxy_config() {
   local config_file="$1"
-  local expected_pod_count="${2:-1}"
+  local expected_namespace="$2"
+  local expected_sts_name="$3"
 
-  echo "Validating Redis proxy configuration: $config_file (expecting $expected_pod_count servers)"
+  echo "🔍 Validating Redis proxy configuration: $config_file"
 
+  # Check if file exists and is readable
   if [[ ! -f "$config_file" ]]; then
-    echo "❌ Configuration file not found: $config_file"
+    echo "❌ Config file does not exist: $config_file"
     return 1
   fi
 
-  # Check if JSON is valid
-  if ! jq empty "$config_file" 2>/dev/null; then
-    echo "❌ Invalid JSON in configuration file"
+  if [[ ! -r "$config_file" ]]; then
+    echo "❌ Config file is not readable: $config_file"
     return 1
   fi
 
-  # Check cluster configuration
-  local server_count=$(jq '.clusters[0].servers | length' "$config_file" 2>/dev/null)
-
-  if [[ -z "$server_count" ]]; then
-    echo "❌ Unable to read server count from configuration file"
+  # Check if it's valid JSON
+  if ! jq . "$config_file" >/dev/null 2>&1; then
+    echo "❌ Config file is not valid JSON: $config_file"
     return 1
   fi
 
-  if [[ "$server_count" != "$expected_pod_count" ]]; then
-    echo "❌ Expected $expected_pod_count servers, found $server_count"
-    echo "🔍 Debug: Configuration file contents:"
-    cat "$config_file"
+  # Check required fields exist
+  local sentinels_count
+  sentinels_count=$(jq '.Sentinels_addresses_list | length' "$config_file" 2>/dev/null)
+  if [[ -z "$sentinels_count" || "$sentinels_count" == "null" ]]; then
+    echo "❌ Config file missing Sentinels_addresses_list: $config_file"
     return 1
   fi
 
-  echo "✅ Redis proxy configuration is valid ($server_count servers configured)"
+  if [[ "$sentinels_count" -eq 0 ]]; then
+    echo "❌ Config file has empty Sentinels_addresses_list: $config_file"
+    return 1
+  fi
+
+  # Check that sentinels contain the expected namespace
+  local sentinel_namespace_count
+  sentinel_namespace_count=$(jq -r '.Sentinels_addresses_list[]' "$config_file" | grep -c "$expected_namespace" || true)
+  if [[ "$sentinel_namespace_count" -eq 0 ]]; then
+    echo "❌ Config file sentinels do not contain expected namespace '$expected_namespace'"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check that all sentinels contain the expected namespace (not mixed)
+  if [[ "$sentinel_namespace_count" != "$sentinels_count" ]]; then
+    echo "❌ Config file contains mixed namespaces (expected all to be '$expected_namespace')"
+    echo "   Found sentinels:"
+    jq -r '.Sentinels_addresses_list[]' "$config_file" | sed 's/^/     - /'
+    return 1
+  fi
+
+  # Check database configuration
+  local db_name
+  db_name=$(jq -r '.Databases[0].Name' "$config_file" 2>/dev/null)
+  if [[ "$db_name" != "mymaster" ]]; then
+    echo "❌ Config file missing or incorrect database name (expected 'mymaster', got '$db_name')"
+    return 1
+  fi
+
+  local local_port
+  local_port=$(jq -r '.Databases[0].Local_port' "$config_file" 2>/dev/null)
+  if [[ "$local_port" != "6379" ]]; then
+    echo "❌ Config file missing or incorrect local port (expected '6379', got '$local_port')"
+    return 1
+  fi
+
+  echo "✅ Redis proxy configuration validation passed:"
+  echo "   - Found $sentinels_count sentinels for namespace: $expected_namespace"
+  echo "   - Database: $db_name on port $local_port"
+  echo "   - All sentinels correctly reference namespace: $expected_namespace"
+
   return 0
 }
 
