@@ -117,10 +117,32 @@ else
   target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
   target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
 
+  echo "Target images:"
+  echo "  Redis: $target_redis_image"
+  echo "  Sentinel: $target_sentinel_image"
+
   # Check if changes require Helm reinstall (images or persistence settings)
   if [[ "$current_redis_image" != *"$target_redis_image"* ]] || [[ "$current_sentinel_image" != *"$target_sentinel_image"* ]]; then
+    echo "🔍 Decision: Image tags have changed - Redis match: $([[ "$current_redis_image" == *"$target_redis_image"* ]] && echo "YES" || echo "NO"), Sentinel match: $([[ "$current_sentinel_image" == *"$target_sentinel_image"* ]] && echo "YES" || echo "NO")"
     echo "Image tags have changed. Helm reinstall required to handle StatefulSet recreation..."
     echo "Scaling down existing StatefulSet before Helm uninstall..."
+
+    scale_deployment "statefulset" "$redis_node_name" "0" "0"
+    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+      exit 1
+    fi
+
+    # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+    echo "Uninstalling Helm release to allow clean recreation..."
+    helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+
+    # Wait for cleanup
+    echo "Waiting for resources to be cleaned up..."
+    sleep 10
+
+    # Set flag to force install instead of upgrade
+    FORCE_HELM_INSTALL=true
   # Also check if persistent volume claims exist (indicating persistence was enabled)
   elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
     echo "Persistent volume claims detected. Helm reinstall required to disable persistence..."
@@ -143,7 +165,7 @@ else
     # Set flag to force install instead of upgrade
     FORCE_HELM_INSTALL=true
   else
-    echo "Image tags unchanged. Performing standard scaling..."
+    echo "Image tags unchanged and no persistence detected. Performing standard scaling..."
     scale_deployment "statefulset" "$redis_node_name" "0" "0"
     if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
       echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
@@ -176,7 +198,19 @@ printf '%s\n' "${REDIS_ARGS[@]}"
 
 # Handle forced reinstall for StatefulSet image changes
 if [[ "$FORCE_HELM_INSTALL" == "true" ]]; then
-  echo "🔧 Performing Helm install (forced due to image changes)..."
+  echo "🔧 Performing Helm install (forced due to image/persistence changes)..."
+  echo "🔍 Debug: Checking if StatefulSet still exists before install..."
+  if oc get statefulset "$redis_node_name" &> /dev/null; then
+    echo "⚠️  WARNING: StatefulSet still exists after uninstall. Waiting for complete cleanup..."
+    # Wait a bit more for cleanup
+    sleep 15
+    if oc get statefulset "$redis_node_name" &> /dev/null; then
+      echo "❌ StatefulSet still exists. Manual cleanup may be required."
+      echo "🔍 Current StatefulSet status:"
+      oc get statefulset "$redis_node_name" -o wide
+    fi
+  fi
+
   helm install --values redis-values.yaml "${REDIS_ARGS[@]}" "$REDIS_NAME" "$REDIS_HELM_CHART"
 else
   echo "🔧 Performing standard Helm upgrade..."
