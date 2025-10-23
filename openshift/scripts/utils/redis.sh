@@ -153,7 +153,7 @@ generate_redis_proxy_config_json() {
     return 1
   fi
 
-  # Build JSON configuration
+  # Build JSON configuration with proper service endpoints for Sentinel
   local config_json='{"clusters": [{"name": "redis-cluster", "servers": ['
 
   local first=true
@@ -161,7 +161,9 @@ generate_redis_proxy_config_json() {
     if [[ "$first" != "true" ]]; then
       config_json+=','
     fi
-    config_json+="{\"host\": \"$pod\", \"port\": 6379}"
+    # Generate proper service endpoint for Sentinel
+    local service_endpoint="${pod}.redis-headless.${namespace}.svc.cluster.local"
+    config_json+="{\"host\": \"$service_endpoint\", \"port\": 26379}"
     first=false
   done
 
@@ -170,6 +172,8 @@ generate_redis_proxy_config_json() {
   # Write to output file
   echo "$config_json" > "$output_file"
   echo "✅ Redis proxy configuration written to: $output_file"
+  echo "🔍 Debug: Generated configuration:"
+  cat "$output_file"
   return 0
 }
 
