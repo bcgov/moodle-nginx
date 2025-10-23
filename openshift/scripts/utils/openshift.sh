@@ -108,7 +108,7 @@ check_resource_ready() {
         return 1
       fi
     else
-      echo "❌ Error: Unable to get valid replica status for StatefulSet $resource_name" >&2
+      echo "⏳ StatefulSet $resource_name: waiting for status to be available..."
       return 1
     fi
   fi
@@ -130,7 +130,7 @@ check_resource_ready() {
         return 1
       fi
     else
-      echo "❌ Error: Unable to get valid replica status for Deployment $resource_name" >&2
+      echo "⏳ Deployment $resource_name: waiting for status to be available..."
       return 1
     fi
   fi

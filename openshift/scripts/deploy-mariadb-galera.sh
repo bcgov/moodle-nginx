@@ -184,7 +184,7 @@ oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRete
 sleep 10
 
 echo "Waiting for MariaDB Galera nodes to synchronize..."
-if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 300 30 $DB_REPLICAS; then
+if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 10 $DB_REPLICAS; then
   echo "❌ MariaDB Galera nodes failed to synchronize. Exiting..."
   exit 1
 fi
