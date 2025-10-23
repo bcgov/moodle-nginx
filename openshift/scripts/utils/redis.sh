@@ -176,9 +176,9 @@ generate_redis_proxy_config_json() {
 # Function to validate Redis proxy configuration
 validate_redis_proxy_config() {
   local config_file="$1"
-  local expected_pod_count="${2:-5}"
+  local expected_pod_count="${2:-1}"
 
-  echo "Validating Redis proxy configuration: $config_file"
+  echo "Validating Redis proxy configuration: $config_file (expecting $expected_pod_count servers)"
 
   if [[ ! -f "$config_file" ]]; then
     echo "❌ Configuration file not found: $config_file"
@@ -194,8 +194,15 @@ validate_redis_proxy_config() {
   # Check cluster configuration
   local server_count=$(jq '.clusters[0].servers | length' "$config_file" 2>/dev/null)
 
+  if [[ -z "$server_count" ]]; then
+    echo "❌ Unable to read server count from configuration file"
+    return 1
+  fi
+
   if [[ "$server_count" != "$expected_pod_count" ]]; then
     echo "❌ Expected $expected_pod_count servers, found $server_count"
+    echo "🔍 Debug: Configuration file contents:"
+    cat "$config_file"
     return 1
   fi
 

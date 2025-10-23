@@ -143,27 +143,62 @@ else
 
     # Set flag to force install instead of upgrade
     FORCE_HELM_INSTALL=true
-  # Also check if persistent volume claims exist (indicating persistence was enabled)
+  # Also check if the current StatefulSet is actually using persistent volume claims
   elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
-    echo "Persistent volume claims detected. Helm reinstall required to disable persistence..."
-    echo "Scaling down existing StatefulSet before Helm uninstall..."
+    echo "⚠️ Old Redis PVCs detected. Checking if they're actually in use by current StatefulSet..."
 
-    scale_deployment "statefulset" "$redis_node_name" "0" "0"
-    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-      echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-      exit 1
+    # Get PVCs that are actually bound to the current StatefulSet
+    local active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
+    local bound_pvcs=""
+
+    if [[ -n "$active_pvcs" ]]; then
+      # Check if any PVCs are actually bound to the StatefulSet
+      for template in $active_pvcs; do
+        local pvc_pattern="${template}-${redis_node_name}-"
+        if oc get pvc -l app.kubernetes.io/name=redis | grep -q "$pvc_pattern"; then
+          bound_pvcs="$bound_pvcs $pvc_pattern"
+        fi
+      done
     fi
 
-    # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
-    echo "Uninstalling Helm release to allow clean recreation..."
-    helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+    if [[ -n "$bound_pvcs" ]]; then
+      echo "📋 Current StatefulSet is using PVCs: $bound_pvcs"
+      echo "Helm reinstall required to disable persistence..."
+      echo "Scaling down existing StatefulSet before Helm uninstall..."
 
-    # Wait for cleanup
-    echo "Waiting for resources to be cleaned up..."
-    sleep 10
+      scale_deployment "statefulset" "$redis_node_name" "0" "0"
+      if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+        echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+        exit 1
+      fi
 
-    # Set flag to force install instead of upgrade
-    FORCE_HELM_INSTALL=true
+      # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+      echo "Uninstalling Helm release to allow clean recreation..."
+      helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+
+      # Wait for cleanup
+      echo "Waiting for resources to be cleaned up..."
+      sleep 10
+
+      # Set flag to force install instead of upgrade
+      FORCE_HELM_INSTALL=true
+    else
+      echo "✅ Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
+      # Delete unused PVCs safely
+      local old_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+      if [[ -n "$old_pvcs" ]]; then
+        for pvc in $old_pvcs; do
+          echo "🗑️ Deleting unused PVC: $pvc"
+          oc delete pvc "$pvc" || echo "Failed to delete PVC $pvc, continuing..."
+        done
+      fi
+      echo "Performing standard scaling (no Helm reinstall needed)..."
+      scale_deployment "statefulset" "$redis_node_name" "0" "0"
+      if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+        echo "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+        exit 1
+      fi
+    fi
   else
     echo "Image tags unchanged and no persistence detected. Performing standard scaling..."
     scale_deployment "statefulset" "$redis_node_name" "0" "0"
@@ -290,7 +325,7 @@ fi
 
 # Validate the generated configuration
 echo "🔍 Validating initial Redis proxy configuration..."
-if ! validate_redis_proxy_config "$dynamic_config_file" "$OC_PROJECT" "$REDIS_NAME-node"; then
+if ! validate_redis_proxy_config "$dynamic_config_file" "$REDIS_REPLICAS"; then
   echo "❌ Initial Redis proxy configuration failed validation. Exiting..."
   exit 1
 fi
