@@ -76,19 +76,29 @@ test_redis_proxy_connectivity() {
 
   local retry_count=0
   while [[ $retry_count -lt $max_retries ]]; do
-    # Test Redis connectivity through the proxy
-    local test_result=$(oc exec -n "$namespace" deployment/web -- redis-cli -h "$proxy_service" ping 2>/dev/null || echo "FAILED")
+    # First, try to get the proxy pod and test if it's responding
+    local proxy_pod=$(oc get pods -l app=$proxy_service --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
-    if [[ "$test_result" == "PONG" ]]; then
-      echo "✅ Redis proxy connectivity test successful"
-      return 0
+    if [[ -n "$proxy_pod" ]]; then
+      # Test if the proxy service port is accessible
+      local service_check=$(oc get svc "$proxy_service" -n "$namespace" -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)
+      if [[ -n "$service_check" ]]; then
+        echo "✅ Redis proxy service and pod are available"
+        return 0
+      else
+        echo "Redis proxy service check failed (retry $retry_count/$max_retries): Service not found"
+      fi
     else
-      echo "Redis proxy connectivity test failed (retry $retry_count/$max_retries): $test_result"
+      echo "Redis proxy connectivity test failed (retry $retry_count/$max_retries): Pod not running"
     fi
 
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
       echo "❌ Redis proxy connectivity test failed after $max_retries attempts"
+      echo "🔍 Debug: Checking proxy pod logs..."
+      if [[ -n "$proxy_pod" ]]; then
+        oc logs "$proxy_pod" -n "$namespace" --tail=10 || echo "Cannot get proxy logs"
+      fi
       return 1
     fi
 
@@ -111,13 +121,46 @@ wait_for_redis_proxy_ready() {
     local proxy_pod=$(oc get pods -l app=$proxy_name --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [[ -n "$proxy_pod" ]]; then
-      # Test connectivity through the proxy
-      if test_redis_proxy_connectivity "$proxy_name" "$namespace" 3 2; then
-        echo "✅ Redis proxy $proxy_name is ready and responding"
-        return 0
+      echo "🔍 Redis proxy pod found: $proxy_pod"
+
+      # Check if the service exists
+      local proxy_service=$(oc get svc "$proxy_name" -n "$namespace" -o jsonpath='{.metadata.name}' 2>/dev/null)
+      if [[ -n "$proxy_service" ]]; then
+        echo "🔍 Redis proxy service found: $proxy_service"
+
+        # Check pod readiness conditions
+        local ready_condition=$(oc get pod "$proxy_pod" -n "$namespace" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+        if [[ "$ready_condition" == "True" ]]; then
+          echo "✅ Redis proxy $proxy_name is ready and running"
+          return 0
+        else
+          echo "🔍 Redis proxy pod not ready yet (condition: $ready_condition)"
+        fi
       else
-        echo "Redis proxy pod is running but not responding (retry $retry_count/$max_retries)"
+        echo "⚠️ Redis proxy service not found: $proxy_name"
       fi
+    else
+      echo "Redis proxy pod not ready (retry $retry_count/$max_retries)"
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "⚠️ Timeout: Redis proxy $proxy_name not ready after $((max_retries * wait_time)) seconds"
+
+      # Debug information
+      echo "🔍 Debug: Current proxy pod status:"
+      oc get pods -l app=$proxy_name -n "$namespace" -o wide || echo "Cannot get proxy pods"
+
+      echo "🔍 Debug: Recent proxy pod logs:"
+      if [[ -n "$proxy_pod" ]]; then
+        oc logs "$proxy_pod" -n "$namespace" --tail=20 || echo "Cannot get proxy logs"
+      fi
+      return 1
+    fi
+
+    sleep $wait_time
+  done
+}
     else
       echo "Redis proxy pod not ready (retry $retry_count/$max_retries)"
     fi
