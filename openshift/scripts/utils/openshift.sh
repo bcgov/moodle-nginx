@@ -1335,25 +1335,14 @@ apply_resource_patch() {
 
   # Create temporary patch file
   local patch_file="/tmp/patch-${resource_type}-${resource_name}-$$.json"
-  log_debug "$patch_operations" > "$patch_file"
+  echo "$patch_operations" > "$patch_file"
 
   # Debug: Show what we're about to patch
-  log_debug "🔍 Patch file contents: $(cat "$patch_file")"
-  log_debug "🔍 Current resource state before patch:"
-  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
-    oc get "$resource_type" "$resource_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "spec:" || echo "Could not get current state"
-  fi
+  log_debug "Patch file contents: $(cat "$patch_file")"
 
   # Apply the patch
   if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
     log_success "✅ Successfully applied patch to $resource_type/$resource_name"
-    
-    # Debug: Show resource state after patch
-    log_debug "🔍 Current resource state after patch:"
-    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
-      oc get "$resource_type" "$resource_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "spec:" || echo "Could not get updated state"
-    fi
-    
     rm -f "$patch_file"
     return 0
   else
@@ -1361,8 +1350,6 @@ apply_resource_patch() {
     rm -f "$patch_file"
     return 1
   fi
-}
-
 # Generic function to verify patch results using JSONPath
 verify_patch_result() {
   local resource_type="$1"
@@ -1408,14 +1395,48 @@ patch_route_fast() {
     local current_target
     current_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
     log_info "  Current: $route_name → $current_target"
+
+    # Early exit if already pointing to target service
+    if [[ "$current_target" == "$target_service" ]]; then
+      log_info "  Route already pointing to $target_service, skipping patch"
+      return 0
+    fi
+  fi
+
+  # Verify target service exists before patching
+  if ! oc get service "$target_service" -n "$namespace" &> /dev/null; then
+    log_error "Target service '$target_service' does not exist in namespace '$namespace'"
+    log_debug "Available services:"
+    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+      oc get services -n "$namespace" -o name | head -10
+    fi
+    return 1
   fi
 
   # Create patch operation
   local patch_ops='[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
+  log_debug "🔍 Route patch details:"
+  log_debug "  Route: $route_name"
+  log_debug "  Namespace: $namespace"
+  log_debug "  Target service: $target_service"
+  log_debug "  Patch operations: $patch_ops"
+
   # Apply the patch using generic function
   if apply_resource_patch "route" "$route_name" "$patch_ops" "$namespace" "Updating route target"; then
     log_success "Patch applied to route $route_name"
+
+    # Verify the patch actually took effect
+    sleep 2  # Brief wait for patch to apply
+    local new_target
+    new_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
+    if [[ "$new_target" == "$target_service" ]]; then
+      log_success "✅ Route patch verified: $route_name → $new_target"
+    else
+      log_error "❌ Route patch failed verification: $route_name → $new_target (expected: $target_service)"
+      return 1
+    fi
+
     return 0
   else
     log_error "Failed to apply patch to route $route_name"
