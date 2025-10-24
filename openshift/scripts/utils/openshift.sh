@@ -1337,9 +1337,23 @@ apply_resource_patch() {
   local patch_file="/tmp/patch-${resource_type}-${resource_name}-$$.json"
   log_debug "$patch_operations" > "$patch_file"
 
+  # Debug: Show what we're about to patch
+  log_debug "🔍 Patch file contents: $(cat "$patch_file")"
+  log_debug "🔍 Current resource state before patch:"
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    oc get "$resource_type" "$resource_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "spec:" || echo "Could not get current state"
+  fi
+
   # Apply the patch
   if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
     log_success "✅ Successfully applied patch to $resource_type/$resource_name"
+    
+    # Debug: Show resource state after patch
+    log_debug "🔍 Current resource state after patch:"
+    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+      oc get "$resource_type" "$resource_name" -n "$namespace" -o yaml | grep -A 10 -B 5 "spec:" || echo "Could not get updated state"
+    fi
+    
     rm -f "$patch_file"
     return 0
   else
@@ -1387,7 +1401,7 @@ patch_route_fast() {
   local target_service="$2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
-  log_info "🔄 Patching route $route_name to point to $target_service..."
+  log_info "🔄 Patching route [fast] $route_name to point to $target_service..."
 
   # Show current route target
   if oc get route "$route_name" -n "$namespace" &> /dev/null; then
