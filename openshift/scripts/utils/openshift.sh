@@ -1350,6 +1350,8 @@ apply_resource_patch() {
     rm -f "$patch_file"
     return 1
   fi
+}
+
 # Generic function to verify patch results using JSONPath
 verify_patch_result() {
   local resource_type="$1"
