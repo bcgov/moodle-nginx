@@ -1342,11 +1342,11 @@ apply_resource_patch() {
 
   # Apply the patch
   if oc patch "$resource_type" "$resource_name" -n "$namespace" --type=json --patch-file="$patch_file"; then
-    log_success "✅ Successfully applied patch to $resource_type/$resource_name"
+    log_success "Successfully applied patch to $resource_type/$resource_name"
     rm -f "$patch_file"
     return 0
   else
-    log_warning "⚠️ Warning: Failed to apply patch to $resource_type/$resource_name"
+    log_warning "Warning: Failed to apply patch to $resource_type/$resource_name"
     rm -f "$patch_file"
     return 1
   fi
@@ -1418,7 +1418,7 @@ patch_route_fast() {
   # Create patch operation
   local patch_ops='[{"op": "replace", "path": "/spec/to/name", "value": "'"$target_service"'"}]'
 
-  log_debug "🔍 Route patch details:"
+  log_debug " Route patch details:"
   log_debug "  Route: $route_name"
   log_debug "  Namespace: $namespace"
   log_debug "  Target service: $target_service"
@@ -1433,9 +1433,9 @@ patch_route_fast() {
     local new_target
     new_target=$(oc get route "$route_name" -n "$namespace" -o jsonpath='{.spec.to.name}' 2>/dev/null)
     if [[ "$new_target" == "$target_service" ]]; then
-      log_success "✅ Route patch verified: $route_name → $new_target"
+      log_success "Route patch verified: $route_name → $new_target"
     else
-      log_error "❌ Route patch failed verification: $route_name → $new_target (expected: $target_service)"
+      log_error "Route patch failed verification: $route_name → $new_target (expected: $target_service)"
       return 1
     fi
 
@@ -1580,8 +1580,8 @@ disable_maintenance_mode() {
     patch_route "$route_mode" "$target_service_name"
   fi
 
-  log_success "✅ Route redirection completed - traffic now directed to $target_service_name"
-  log_warning "⚠️ Note: Maintenance service scaling should be handled by caller after verification"
+  log_success "Route redirection completed - traffic now directed to $target_service_name"
+  log_warning "Note: Maintenance service scaling should be handled by caller after verification"
 }
 
 # =============================================================================
@@ -1609,11 +1609,11 @@ validate_secret_values() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
   if ! oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
-    log_error "❌ Secret '$secret_name' does not exist"
+    log_error "Secret '$secret_name' does not exist"
     return 1
   fi
 
-  log_info "🔍 Validating secret '$secret_name' values..."
+  log_info "Validating secret '$secret_name' values..."
 
   # Parse expected values
   IFS=',' read -ra expected_pairs <<< "$expected_values"
