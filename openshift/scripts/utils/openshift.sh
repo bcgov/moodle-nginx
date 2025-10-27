@@ -1003,6 +1003,95 @@ EOF
 }
 
 # =============================================================================
+# RESOURCE UTILITY FUNCTIONS
+# =============================================================================
+
+# Function to normalize OpenShift resource names to proper format
+# Handles conversion between "name" and "type/name" formats
+normalize_resource_name() {
+  local resource="$1"
+  local default_type="${2:-deployment}"  # Default resource type if none specified
+  local operation="${3:-format}"         # 'format' (ensure type/name) or 'extract' (get just name)
+
+  if [[ -z "$resource" ]]; then
+    log_error "normalize_resource_name: Resource name cannot be empty"
+    return 1
+  fi
+
+  case "$operation" in
+    "format")
+      # Ensure resource is in "type/name" format
+      if [[ "$resource" == */* ]]; then
+        # Already has type, clean up any redundant API group suffixes
+        local resource_type=${resource%%/*}
+        local resource_name=${resource##*/}
+
+        # Handle full API resource names (e.g., deployment.apps -> deployment)
+        case "$resource_type" in
+          "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+          "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+          "service.v1" | "services.v1") resource_type="service" ;;
+          "job.batch" | "jobs.batch") resource_type="job" ;;
+          "pod.v1" | "pods.v1") resource_type="pod" ;;
+        esac
+
+        echo "$resource_type/$resource_name"
+      else
+        # Just a name, prepend default type
+        echo "$default_type/$resource"
+      fi
+      ;;
+    "extract")
+      # Extract just the name part (remove type prefix if present)
+      if [[ "$resource" == */* ]]; then
+        echo "${resource##*/}"
+      else
+        echo "$resource"
+      fi
+      ;;
+    "type")
+      # Extract just the type part
+      if [[ "$resource" == */* ]]; then
+        local resource_type=${resource%%/*}
+        # Clean up API group suffixes
+        case "$resource_type" in
+          "deployment.apps" | "deployments.apps") echo "deployment" ;;
+          "statefulset.apps" | "statefulsets.apps") echo "statefulset" ;;
+          "service.v1" | "services.v1") echo "service" ;;
+          "job.batch" | "jobs.batch") echo "job" ;;
+          "pod.v1" | "pods.v1") echo "pod" ;;
+          *) echo "$resource_type" ;;
+        esac
+      else
+        echo "$default_type"
+      fi
+      ;;
+    *)
+      log_error "normalize_resource_name: Invalid operation '$operation'. Use 'format', 'extract', or 'type'"
+      return 1
+      ;;
+  esac
+}
+
+# Function to validate resource name format for functions that require "type/name"
+validate_resource_format() {
+  local resource="$1"
+  local function_name="${2:-unknown}"
+
+  if [[ -z "$resource" ]]; then
+    log_error "$function_name: Resource name cannot be empty"
+    return 1
+  fi
+
+  if [[ "$resource" != */* ]]; then
+    log_error "$function_name: Invalid resource format: $resource. Expected format: <type>/<name>"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
 # WAIT AND MONITORING FUNCTIONS
 # =============================================================================
 
@@ -1019,22 +1108,14 @@ wait_for() {
   # Wait to ensure the resource has had enough time to set the desired state
   sleep 10
 
-  # Extract resource type and name
-  if [[ $resource == */* ]]; then
-    local resource_type=${resource%%/*}
-    local resource_name=${resource##*/}
-
-    # Handle full API resource names (e.g., deployment.apps -> deployment)
-    case "$resource_type" in
-      "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
-      "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
-      "service.v1" | "services.v1") resource_type="service" ;;
-      "job.batch" | "jobs.batch") resource_type="job" ;;
-    esac
-  else
-    log_error "Invalid resource format: $resource. Expected format: <type>/<name>"
+  # Validate and normalize resource format
+  if ! validate_resource_format "$resource" "wait_for"; then
     return 1
   fi
+
+  # Extract resource type and name using utility function
+  local resource_type=$(normalize_resource_name "$resource" "" "type")
+  local resource_name=$(normalize_resource_name "$resource" "" "extract")
 
   # Convert timeout to seconds for calculation
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')

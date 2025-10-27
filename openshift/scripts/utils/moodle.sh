@@ -382,9 +382,12 @@ clear_moodle_cache() {
 
 # Deployment-time cache clearing function
 clear_moodle_cache_deployment() {
-  local php_deployment_name="${1:-deployment/$PHP_DEPLOYMENT_NAME}"
+  local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
+
+  # Ensure proper resource format using utility function
+  php_deployment_name=$(normalize_resource_name "$php_deployment_name" "deployment" "format")
 
   echo ""
   echo "🚀 Clearing Moodle cache and rebuilding theme across PHP deployments..."
@@ -412,11 +415,14 @@ clear_moodle_cache_deployment() {
 
 # Function to clear Moodle cache across all PHP pods
 clear_moodle_cache_across_pods() {
-  local php_resource_name="${1:-deployment/php}"  # Default to 'php' deployment
+  local php_resource_name="${1:-php}"  # Default to 'php' deployment
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
   local max_retries="${4:-30}"
   local wait_time="${5:-10}"
+
+  # Ensure proper resource format using utility function
+  php_resource_name=$(normalize_resource_name "$php_resource_name" "deployment" "format")
 
   echo "🌐 Clearing Moodle cache across all PHP pods..."
   echo "📍 Namespace: $namespace"
