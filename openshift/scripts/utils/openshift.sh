@@ -5,6 +5,211 @@
 # secret management, logging, and validation functions
 
 # =============================================================================
+# CLUSTER HEALTH AND EVENT MONITORING FUNCTIONS
+# =============================================================================
+
+# Function to check for critical cluster events that would prevent successful deployment
+check_cluster_health() {
+  local resource_type="$1"     # e.g., "pod", "deployment", "statefulset"
+  local resource_name="$2"     # e.g., "mariadb-galera", "maintenance-message"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local check_duration="${4:-5m}"  # How far back to check events (5m, 10m, 1h)
+
+  log_debug "🔍 Checking cluster health for $resource_type/$resource_name..."
+
+  # Get recent events for the specific resource
+  local events_output
+  events_output=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name",involvedObject.kind="$resource_type" --sort-by='.lastTimestamp' -o json 2>/dev/null)
+
+  if [[ -z "$events_output" || "$events_output" == '{"items":[]}' ]]; then
+    # No specific events found, check for general cluster issues
+    events_output=$(oc get events -n "$namespace" --sort-by='.lastTimestamp' -o json 2>/dev/null)
+  fi
+
+  # Parse events and look for critical issues
+  local critical_issues=()
+  local pvc_issues=0
+  local csi_issues=0
+  local node_issues=0
+  local network_issues=0
+
+  if [[ -n "$events_output" && "$events_output" != '{"items":[]}' ]]; then
+    # Check for PVC/storage issues
+    if echo "$events_output" | grep -qi "AttachVolume.Attach failed\|timed out waiting for external-attacher\|CSI driver.*attach.*failed\|volume.*attach.*failed"; then
+      pvc_issues=$((pvc_issues + 1))
+      critical_issues+=("PVC_ATTACH_FAILURES")
+    fi
+
+    # Check for CSI/storage driver issues
+    if echo "$events_output" | grep -qi "csi.trident.netapp.io\|DeadlineExceeded.*attach\|context deadline exceeded.*volume"; then
+      csi_issues=$((csi_issues + 1))
+      critical_issues+=("CSI_DRIVER_ISSUES")
+    fi
+
+    # Check for node/scheduling issues
+    if echo "$events_output" | grep -qi "FailedScheduling\|InsufficientMemory\|InsufficientCPU\|NodeNotReady"; then
+      node_issues=$((node_issues + 1))
+      critical_issues+=("NODE_SCHEDULING_ISSUES")
+    fi
+
+    # Check for network issues
+    if echo "$events_output" | grep -qi "NetworkNotReady\|CNI.*failed\|network.*timeout"; then
+      network_issues=$((network_issues + 1))
+      critical_issues+=("NETWORK_ISSUES")
+    fi
+  fi
+
+  # Determine severity and recommended action
+  local total_issues=$((pvc_issues + csi_issues + node_issues + network_issues))
+
+  if [[ $total_issues -gt 0 ]]; then
+    log_warn "⚠️ Cluster health issues detected for $resource_type/$resource_name:"
+    [[ $pvc_issues -gt 0 ]] && log_warn "  - PVC attachment failures: $pvc_issues"
+    [[ $csi_issues -gt 0 ]] && log_warn "  - CSI driver issues: $csi_issues"
+    [[ $node_issues -gt 0 ]] && log_warn "  - Node/scheduling issues: $node_issues"
+    [[ $network_issues -gt 0 ]] && log_warn "  - Network issues: $network_issues"
+
+    # Return the most severe issue type
+    if [[ $pvc_issues -gt 0 || $csi_issues -gt 0 ]]; then
+      echo "STORAGE_CRITICAL"
+      return 2  # Critical storage issues
+    elif [[ $node_issues -gt 0 ]]; then
+      echo "NODE_CRITICAL"
+      return 1  # Node issues
+    elif [[ $network_issues -gt 0 ]]; then
+      echo "NETWORK_WARNING"
+      return 1  # Network issues
+    fi
+  else
+    log_debug "✅ No critical cluster health issues detected"
+    echo "HEALTHY"
+    return 0
+  fi
+}
+
+# Function to display detailed cluster events for troubleshooting
+show_cluster_events() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  log_info "📋 Recent cluster events for $resource_type/$resource_name:"
+  echo "----------------------------------------"
+
+  # Show events for the specific resource
+  local specific_events
+  specific_events=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | tail -10)
+
+  if [[ -n "$specific_events" ]]; then
+    echo "🎯 Specific events for $resource_name:"
+    echo "$specific_events"
+    echo ""
+  fi
+
+  # Show general cluster events that might be relevant
+  echo "🌐 General cluster events (last 10):"
+  oc get events -n "$namespace" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | grep -E "(Failed|Error|Warning)" | tail -10 | head -5
+  echo "----------------------------------------"
+}
+
+# Function to wait with centralized cluster health monitoring
+wait_with_cluster_monitoring() {
+  local resource_type="$1"      # e.g., "deployment", "statefulset"
+  local resource_name="$2"      # e.g., "mariadb-galera"
+  local wait_function="$3"      # Function to call for actual waiting
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local max_wait_time="${5:-1800}"  # 30 minutes default
+
+  # Centralized cluster monitoring configuration
+  local cluster_monitoring_enabled="${CLUSTER_HEALTH_MONITORING:-YES}"
+  local last_health_check=0
+  local health_check_interval=300  # Check every 5 minutes
+  local consecutive_storage_failures=0
+  local max_storage_failures=3
+
+  local elapsed_time=0
+
+  # Show monitoring configuration
+  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+    log_info "🔄 Starting deployment wait with centralized cluster health monitoring..."
+    log_info "  Resource: $resource_type/$resource_name"
+    log_info "  Max wait time: ${max_wait_time}s"
+    log_info "  Health check interval: ${health_check_interval}s"
+    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
+  else
+    log_info "🔄 Starting deployment wait (cluster monitoring disabled)..."
+    log_info "  Resource: $resource_type/$resource_name"
+    log_info "  Max wait time: ${max_wait_time}s"
+    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
+  fi
+
+  while [[ $elapsed_time -lt $max_wait_time ]]; do
+    # Run the actual wait function (non-blocking check)
+    if $wait_function; then
+      log_success "✅ Resource deployment completed successfully!"
+      return 0
+    fi
+
+    # Perform cluster health check if enabled
+    if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+      if [[ $((elapsed_time - last_health_check)) -ge $health_check_interval ]]; then
+        log_debug "🔍 Performing centralized cluster health check for $resource_type/$resource_name..."
+
+        local health_status
+        health_status=$(check_cluster_health "$resource_type" "$resource_name" "$namespace")
+        local health_exit_code=$?
+
+        case "$health_status" in
+          "STORAGE_CRITICAL")
+            consecutive_storage_failures=$((consecutive_storage_failures + 1))
+            log_warn "⚠️ Storage issues detected while waiting for $resource_type/$resource_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+
+            if [[ $consecutive_storage_failures -ge $max_storage_failures ]]; then
+              log_warn "� Extending wait time due to persistent storage issues..."
+              # Extend max_wait_time for storage issues
+              max_wait_time=$((max_wait_time + 900))  # Add 15 minutes
+              log_info "� Showing cluster events for troubleshooting..."
+              show_cluster_events "$resource_type" "$resource_name" "$namespace"
+            fi
+            ;;
+          "NODE_CRITICAL"|"NETWORK_WARNING")
+            log_warn "⚠️ Cluster infrastructure issues detected while waiting for $resource_type/$resource_name"
+            show_cluster_events "$resource_type" "$resource_name" "$namespace"
+            ;;
+          "HEALTHY")
+            consecutive_storage_failures=0
+            log_debug "✅ Centralized cluster health check: Normal (waiting for $resource_type/$resource_name)"
+            ;;
+        esac
+
+        last_health_check=$elapsed_time
+      fi
+    fi
+
+    # Sleep and update elapsed time
+    sleep 10
+    elapsed_time=$((elapsed_time + 10))
+
+    # Provide periodic status updates
+    if [[ $((elapsed_time % 300)) -eq 0 ]]; then  # Every 5 minutes
+      local minutes_elapsed=$((elapsed_time / 60))
+      local minutes_remaining=$(((max_wait_time - elapsed_time) / 60))
+      log_info "⏳ Still waiting... ${minutes_elapsed}m elapsed, ${minutes_remaining}m remaining"
+    fi
+  done
+
+  log_error "❌ Deployment wait timed out after ${max_wait_time} seconds"
+
+  # Show final cluster health check on timeout if monitoring enabled
+  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+    log_info "📋 Final centralized cluster health check..."
+    show_cluster_events "$resource_type" "$resource_name" "$namespace"
+  fi
+
+  return 1
+}
+
+# =============================================================================
 # RESOURCE MANAGEMENT FUNCTIONS
 # =============================================================================
 
@@ -149,21 +354,65 @@ wait_for_resource_ready() {
 
   echo "⏳ Waiting for $description to be ready (selector: $selector)..."
 
-  local retries=0
-  while [[ $retries -lt $max_retries ]]; do
-    if check_resource_ready "$selector" "$namespace"; then
+  # Extract resource type and name for cluster monitoring (if available)
+  local resource_type=""
+  local resource_name=""
+  if [[ "$selector" =~ = ]]; then
+    resource_name="${selector##*=}"
+    # Try to determine resource type by checking what exists
+    if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
+      resource_type="statefulset"
+    elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
+      resource_type="deployment"
+    fi
+  fi
+
+  # Use cluster health monitoring if enabled and resource type is available
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" && -n "$resource_type" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $description ($resource_type/$resource_name)..."
+
+    # Create a single-iteration wrapper function for the centralized monitoring
+    eval "
+    readiness_check_wrapper() {
+      check_resource_ready \"$selector\" \"$namespace\"
+      return \$?
+    }
+    "
+
+    # Calculate timeout in seconds (max_retries * wait_time)
+    local timeout_seconds=$((max_retries * wait_time))
+
+    # Use centralized cluster health monitoring
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "readiness_check_wrapper" "$namespace" "$timeout_seconds"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
       echo "✅ $description is ready"
-      return 0
     else
-      echo "    $description not ready yet... (retry $retries/$max_retries)"
+      echo "⚠️ Timeout: $description did not become ready after $timeout_seconds seconds"
     fi
 
-    retries=$((retries + 1))
-    sleep $wait_time
-  done
+    return $result
+  else
+    log_debug "🔄 Using traditional waiting for $description (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO} or resource type unavailable)..."
 
-  echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
-  return 1
+    # Use traditional waiting without cluster monitoring
+    local retries=0
+    while [[ $retries -lt $max_retries ]]; do
+      if check_resource_ready "$selector" "$namespace"; then
+        echo "✅ $description is ready"
+        return 0
+      else
+        echo "    $description not ready yet... (retry $retries/$max_retries)"
+      fi
+
+      retries=$((retries + 1))
+      sleep $wait_time
+    done
+
+    echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
+    return 1
+  fi
 }
 
 # Define error handling functions
@@ -799,10 +1048,28 @@ wait_for() {
     return 0
   fi
 
-  if [[ $resource_type == "job" ]]; then
-    handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+  # Use cluster health monitoring if enabled via environment variable
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" && "$resource_type" != "job" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING})..."
+
+    # Create a wrapper function for the actual wait logic
+    eval "
+    handle_deployment_status_wrapper() {
+      handle_deployment_status \"$resource_name\" \"$condition\" \"$scale_direction\" 1 0 \"$wait_time\" \"$resource_type\"
+      return \$?
+    }
+    "
+
+    # Use centralized cluster health monitoring
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "handle_deployment_status_wrapper" "$DEPLOY_NAMESPACE" "$timeout_seconds"
   else
-    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
+    log_debug "🔄 Using traditional waiting for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO})..."
+    # Use traditional waiting without cluster monitoring
+    if [[ $resource_type == "job" ]]; then
+      handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+    else
+      handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
+    fi
   fi
 }
 
@@ -813,6 +1080,7 @@ wait_for_deployment_without_errors() {
   local error_handler=${3:-delete_pod}
   local max_retries=${4:-30}
   local wait_time=${5:-30}
+  local enable_cluster_monitoring=${6:-true}  # New parameter to control cluster health monitoring
 
   # Split the resource into type and name
   local resource_type=${resource%%/*}
@@ -847,14 +1115,43 @@ wait_for_deployment_without_errors() {
     return 0
   fi
 
-  # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
-    log_error "Errors detected in pods for $resource. Exiting..."
-    return 1
-  fi
+  # Use cluster health monitoring if enabled via environment variable
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $resource deployment..."
 
-  log_success "All pods in $resource are ready and error-free."
-  return 0
+    # Create a wrapper function for the handle_pods_in_resource logic
+    eval "
+    handle_pods_wrapper() {
+      handle_pods_in_resource \"$resource_type/$resource_name\" \"$DEPLOY_NAMESPACE\" \"check_pod_logs\" \"$error_search_string\" \"$error_handler\" 1 \"$wait_time\"
+      return \$?
+    }
+    "
+
+    # Calculate timeout in seconds (max_retries * wait_time)
+    local timeout_seconds=$((max_retries * wait_time))
+
+    # Use centralized cluster health monitoring with wrapper function
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "handle_pods_wrapper" "$DEPLOY_NAMESPACE" "$timeout_seconds"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
+      log_success "All pods in $resource are ready and error-free."
+    else
+      log_error "Errors detected in pods for $resource or timeout occurred."
+    fi
+
+    return $result
+  else
+    log_debug "🔄 Using traditional waiting for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO})..."
+    # Use traditional waiting without cluster monitoring
+    if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
+      log_error "Errors detected in pods for $resource. Exiting..."
+      return 1
+    fi
+
+    log_success "All pods in $resource are ready and error-free."
+    return 0
+  fi
 }
 
 check_timestamp() {

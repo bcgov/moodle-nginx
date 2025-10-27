@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         default: "INFO"
+      CLUSTER_HEALTH_MONITORING:
+        required: false
+        type: string
+        default: "YES"
       FORCE_MIGRATE:
         required: true
         type: string
@@ -198,6 +202,7 @@ jobs:
         run: bash ./openshift/scripts/deploy-mariadb-galera.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           DB_IMAGE: ${{ inputs.DB_IMAGE }}
@@ -215,6 +220,7 @@ jobs:
         run: bash ./openshift/scripts/deploy-redis-sentinel.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           REDIS_HELM_CHART: ${{ inputs.REDIS_HELM_CHART }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
@@ -234,6 +240,7 @@ jobs:
         run: bash ./openshift/scripts/deploy-template.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           FORCE_MIGRATE: ${{ inputs.FORCE_MIGRATE }}
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}

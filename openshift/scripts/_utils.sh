@@ -22,6 +22,9 @@ timestamp_file='/var/www/html/last_migration_timestamp'
 # Set default debug level if not provided
 DEBUG_LEVEL="${DEBUG_LEVEL:-INFO}"
 
+# Set default cluster health monitoring if not provided
+CLUSTER_HEALTH_MONITORING="${CLUSTER_HEALTH_MONITORING:-YES}"
+
 # =============================================================================
 # CORE MODULE LOADING
 # =============================================================================

@@ -9,6 +9,7 @@ env:
   USER: ${{ github.actor }}
 
   DEBUG_LEVEL: "INFO" # Options: INFO, DEBUG
+  CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
@@ -52,6 +53,7 @@ jobs:
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
       DEBUG_LEVEL: ${{ env.DEBUG_LEVEL }}
+      CLUSTER_HEALTH_MONITORING: ${{ env.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ env.FORCE_MIGRATE }}
       MOODLE_URL: ${{ env.MOODLE_URL }}
       MOODLE_BRANCH_VERSION: ${{ env.MOODLE_BRANCH_VERSION }}
@@ -224,6 +226,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     with:
       DEBUG_LEVEL: ${{ needs.checkEnv.outputs.DEBUG_LEVEL }}
+      CLUSTER_HEALTH_MONITORING: ${{ needs.checkEnv.outputs.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ needs.checkEnv.outputs.FORCE_MIGRATE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
