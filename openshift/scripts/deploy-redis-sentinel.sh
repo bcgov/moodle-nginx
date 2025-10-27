@@ -148,13 +148,13 @@ else
     echo "⚠️ Old Redis PVCs detected. Checking if they're actually in use by current StatefulSet..."
 
     # Get PVCs that are actually bound to the current StatefulSet
-    local active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
-    local bound_pvcs=""
+    active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
+    bound_pvcs=""
 
     if [[ -n "$active_pvcs" ]]; then
       # Check if any PVCs are actually bound to the StatefulSet
       for template in $active_pvcs; do
-        local pvc_pattern="${template}-${redis_node_name}-"
+        pvc_pattern="${template}-${redis_node_name}-"
         if oc get pvc -l app.kubernetes.io/name=redis | grep -q "$pvc_pattern"; then
           bound_pvcs="$bound_pvcs $pvc_pattern"
         fi
@@ -185,7 +185,7 @@ else
     else
       log_info "✅ Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
       # Delete unused PVCs safely
-      local old_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+      old_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
       if [[ -n "$old_pvcs" ]]; then
         for pvc in $old_pvcs; do
           log_info "🗑️ Deleting unused PVC: $pvc"
