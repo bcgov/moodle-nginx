@@ -63,10 +63,11 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set global.security.allowInsecureImages=true \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
+    --set replicaCount=$DB_REPLICAS \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
-   # Output the response for debugging purposes
+  # Output the response for debugging purposes
   # echo "$helm_upgrade_response"
 
   # Check if the helm upgrade command failed
@@ -184,7 +185,7 @@ oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRete
 sleep 10
 
 echo "Waiting for MariaDB Galera nodes to synchronize..."
-if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" "$OC_PROJECT" $DB_REPLICAS 300 30; then
+if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 30 $DB_REPLICAS; then
   echo "❌ MariaDB Galera nodes failed to synchronize. Exiting..."
   exit 1
 fi

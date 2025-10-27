@@ -35,8 +35,8 @@ if check_timestamp; then
   echo "Ensuring database encoding is utf8..."
   php /var/www/html/admin/cli/mysql_collation.php --collation=utf8mb4_unicode_ci  > /dev/null
 
-  echo "Searching for encoding issues in content tables..."
-  moodle_content_cleanup find
+  # echo "Searching for encoding issues in content tables..."
+  # moodle_content_cleanup find
   # echo "Replace improperly encoded characters in content tables"
   # moodle_content_cleanup replace
 

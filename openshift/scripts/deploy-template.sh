@@ -9,7 +9,7 @@ oc project $DEPLOY_NAMESPACE
 echo "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
-manage_maintenance_mode "enable" "$MAINTENANCE_SERVICE_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
+manage_maintenance_mode "enable" "maintenance-message"
 
 # Ensure secrets are linked for pulling from Artifactory
 oc secrets link default artifactory-m950-learning --for=pull
@@ -150,19 +150,21 @@ sleep 60
 echo "🧹 Clearing Moodle cache across PHP deployment..."
 
 # Debug: Check if the function exists before calling it
-echo "🔍 Debugging function availability..."
+log_debug "Debugging function availability..."
 if declare -f clear_moodle_cache_deployment > /dev/null 2>&1; then
-  echo "✅ Function clear_moodle_cache_deployment is available"
+  log_debug "Function clear_moodle_cache_deployment is available"
 else
-  echo "❌ Function clear_moodle_cache_deployment is NOT available"
-  echo "📋 Available cache-related functions:"
-  declare -F | grep -i cache || echo "   No cache functions found"
-  echo "📋 All available functions from _utils.sh:"
-  declare -F | grep -E "(moodle|cache|clear)" || echo "   No matching functions found"
+  log_error "Function clear_moodle_cache_deployment is NOT available"
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    echo "📋 Available cache-related functions:"
+    declare -F | grep -i cache || echo "   No cache functions found"
+    echo "📋 All available functions from _utils.sh:"
+    declare -F | grep -E "(moodle|cache|clear)" || echo "   No matching functions found"
+  fi
 fi
 
 # Syntax check of _utils.sh
-echo "🔍 Validating _utils.sh syntax..."
+log_debug "Validating _utils.sh syntax..."
 if bash -n ./openshift/scripts/_utils.sh; then
   echo "✅ _utils.sh syntax is valid"
 else
@@ -172,18 +174,12 @@ fi
 
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
-# Disable maintenance mode and verify output
-manage_maintenance_mode "disable" "$PHP_DEPLOYMENT_NAME" "$APP-$WEB_DEPLOYMENT_NAME"
+# Update Redis proxy configuration after right-sizing (Phase 2)
+echo "🔧 Updating Redis proxy configuration after right-sizing..."
+update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAMESPACE"
 
-sleep 30
-
-echo "Directing traffic / route to Moodle..."
-patch_route "$APP-$WEB_DEPLOYMENT_NAME" "$WEB_DEPLOYMENT_NAME"
-
-echo "Waiting for route to be ready..."
-sleep 60
-
-echo "Shutting down maintenance message..."
-oc scale deployment/maintenance-message --replicas=0
+# Disable maintenance mode with integrated verification and scaling
+echo "🔄 Disabling maintenance mode with automatic verification and cleanup..."
+manage_maintenance_mode "disable" "web" "auto"
 
 echo "Deployment complete."
