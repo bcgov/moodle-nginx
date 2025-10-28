@@ -532,8 +532,33 @@ should_migrate_by_version() {
       ;;
   esac
 
-  echo "ℹ️ No migration required for $migration_type version change"
-  return 1
+  # Provide more specific messaging based on version comparison
+  if [[ "$current_version" == "$target_version" ]]; then
+    echo "ℹ️ Versions are identical ($current_version) - no migration needed"
+    return 1
+  else
+    # Check if this is a downgrade scenario (dangerous!)
+    local is_downgrade=false
+
+    if [[ $target_major -lt $current_major ]]; then
+      is_downgrade=true
+    elif [[ $target_major -eq $current_major && $target_minor -lt $current_minor ]]; then
+      is_downgrade=true
+    elif [[ $target_major -eq $current_major && $target_minor -eq $current_minor && $target_patch -lt $current_patch ]]; then
+      is_downgrade=true
+    fi
+
+    if [[ "$is_downgrade" == "true" ]]; then
+      echo "🚨 CRITICAL: Downgrade detected! Target version ($target_version) is older than current ($current_version)"
+      echo "❌ Database downgrade is dangerous and could cause data corruption or loss"
+      echo "❌ Deployment aborted to protect database integrity"
+      return 2  # Error code 2 indicates dangerous downgrade
+    else
+      # This shouldn't happen given our logic above, but just in case
+      echo "ℹ️ Target version ($target_version) is not newer than current ($current_version) - no $migration_type migration needed"
+      return 1
+    fi
+  fi
 }
 
 # Function to manage backup storage secrets with environment-specific values

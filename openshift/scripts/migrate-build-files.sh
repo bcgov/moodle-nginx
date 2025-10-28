@@ -13,9 +13,17 @@ src_dir='/app/public'
 dest_dir='/var/www/html'
 
 # Check if the build is newer than the last migration
-if should_migrate_by_version; then
+should_migrate_by_version
+migration_result=$?
+
+if [ $migration_result -eq 0 ]; then
   log_info "Source and destination versions do not match. Proceeding..."
+elif [ $migration_result -eq 2 ]; then
+  log_error "CRITICAL: Dangerous version downgrade detected!"
+  log_error "Migration aborted to protect against deploying outdated code"
+  exit 1
 else
+  # migration_result -eq 1 (no migration needed)
   # Compare file counts in src_dir and dest_dir
   log_info "Source and destination versions match. Checking file counts..."
   src_count=$(find "$src_dir" -type f | wc -l)
