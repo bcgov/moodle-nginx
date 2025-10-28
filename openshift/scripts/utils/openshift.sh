@@ -1203,7 +1203,7 @@ wait_for_deployment_without_errors() {
     # Create a wrapper function for the handle_pods_in_resource logic
     eval "
     handle_pods_wrapper() {
-      handle_pods_in_resource \"$resource_type/$resource_name\" \"$DEPLOY_NAMESPACE\" \"check_pod_logs\" \"$error_search_string\" \"$error_handler\" 1 \"$wait_time\"
+      handle_pods_in_resource \"$resource_type/$resource_name\" \"$DEPLOY_NAMESPACE\" \"check_pod_logs\" \"$error_search_string\" \"$error_handler\" \"$max_retries\" \"$wait_time\"
       return \$?
     }
     "
