@@ -146,56 +146,75 @@ else
 
     # Set flag to force install instead of upgrade
     FORCE_HELM_INSTALL=true
-  # Also check if the current StatefulSet is actually using persistent volume claims
-  elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
-    echo "⚠️ Old Redis PVCs detected. Checking if they're actually in use by current StatefulSet..."
+  else
+    # Check if the current StatefulSet is actually using persistent volume claims
+    log_debug "Checking for existing Redis PVCs..."
+    existing_redis_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+    log_debug "Found Redis PVCs: '${existing_redis_pvcs}' (empty means none found)"
 
-    # Get PVCs that are actually bound to the current StatefulSet
-    active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
-    bound_pvcs=""
+    if [[ -n "$existing_redis_pvcs" ]]; then
+      log_warn "Old Redis PVCs detected: $existing_redis_pvcs"
+      log_info "Checking if they're actually in use by current StatefulSet..."
 
-    if [[ -n "$active_pvcs" ]]; then
-      # Check if any PVCs are actually bound to the StatefulSet
-      for template in $active_pvcs; do
-        pvc_pattern="${template}-${redis_node_name}-"
-        if oc get pvc -l app.kubernetes.io/name=redis | grep -q "$pvc_pattern"; then
-          bound_pvcs="$bound_pvcs $pvc_pattern"
-        fi
-      done
-    fi
+      # Get PVCs that are actually bound to the current StatefulSet
+      active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
+      log_debug "StatefulSet volume claim templates: '${active_pvcs}'"
+      bound_pvcs=""
 
-    if [[ -n "$bound_pvcs" ]]; then
-      log_info "Current StatefulSet is using PVCs: $bound_pvcs"
-      log_info "Helm reinstall required to disable persistence..."
-      log_info "Scaling down existing StatefulSet before Helm uninstall..."
-
-      scale_deployment "statefulset" "$redis_node_name" "0" "0"
-      if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-        log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-        exit 1
-      fi
-
-      # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
-      log_info "Uninstalling Helm release to allow clean recreation..."
-      helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
-
-      # Wait for cleanup
-      log_info "Waiting for resources to be cleaned up..."
-      sleep 10
-
-      # Set flag to force install instead of upgrade
-      FORCE_HELM_INSTALL=true
-    else
-      log_info "✅ Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
-      # Delete unused PVCs safely
-      old_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-      if [[ -n "$old_pvcs" ]]; then
-        for pvc in $old_pvcs; do
-          log_info "🗑️ Deleting unused PVC: $pvc"
-          oc delete pvc "$pvc" || log_error "Failed to delete PVC $pvc, continuing..."
+      if [[ -n "$active_pvcs" ]]; then
+        # Check if any PVCs are actually bound to the StatefulSet
+        for template in $active_pvcs; do
+          pvc_pattern="${template}-${redis_node_name}-"
+          log_debug "Checking for PVCs matching pattern: $pvc_pattern"
+          if echo "$existing_redis_pvcs" | grep -q "$pvc_pattern"; then
+            bound_pvcs="$bound_pvcs $pvc_pattern"
+            log_debug "Found bound PVC pattern: $pvc_pattern"
+          fi
         done
       fi
-      log_info "Performing standard scaling (no Helm reinstall needed)..."
+
+      if [[ -n "$bound_pvcs" ]]; then
+        log_info "Current StatefulSet is using PVCs: $bound_pvcs"
+        log_info "Helm reinstall required to disable persistence..."
+        log_info "Scaling down existing StatefulSet before Helm uninstall..."
+
+        scale_deployment "statefulset" "$redis_node_name" "0" "0"
+        if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+          log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+          exit 1
+        fi
+
+        # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+        log_info "Uninstalling Helm release to allow clean recreation..."
+        helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+
+        # Wait for cleanup
+        log_info "Waiting for resources to be cleaned up..."
+        sleep 10
+
+        # Set flag to force install instead of upgrade
+        FORCE_HELM_INSTALL=true
+      else
+        log_info "Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
+        log_debug "PVCs to delete: $existing_redis_pvcs"
+        # Delete unused PVCs safely
+        for pvc in $existing_redis_pvcs; do
+          log_info "Deleting unused PVC: $pvc"
+          if oc delete pvc "$pvc"; then
+            log_debug "Successfully deleted PVC: $pvc"
+          else
+            log_error "Failed to delete PVC $pvc, continuing..."
+          fi
+        done
+        log_info "Performing standard scaling (no Helm reinstall needed)..."
+        scale_deployment "statefulset" "$redis_node_name" "0" "0"
+        if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+          log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+          exit 1
+        fi
+      fi
+    else
+      log_debug "No Redis PVCs found. Performing standard scaling..."
       scale_deployment "statefulset" "$redis_node_name" "0" "0"
       if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
         log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."

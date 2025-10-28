@@ -8,7 +8,7 @@ env:
   APP: moodle
   USER: ${{ github.actor }}
 
-  DEBUG_LEVEL: "INFO" # Options: INFO, DEBUG
+  DEBUG_LEVEL: "DEBUG" # Options: INFO, DEBUG
   CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
   # Skip builds for faster deployments / testing ("YES" or build)

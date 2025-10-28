@@ -9,6 +9,9 @@ fi
 # Source the utility script
 source /scripts/_utils.sh
 
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 # Ensure kubeconfig is in a writeable location
 export KUBECONFIG=/tmp/kubeconfig
 
