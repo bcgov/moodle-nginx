@@ -61,3 +61,43 @@ if [[ -f "$UTILS_DIR/moodle.sh" ]]; then
 else
   log_warn "Warning: Moodle utilities module not found at $UTILS_DIR/moodle.sh"
 fi
+
+# =============================================================================
+# UTILITY FILE MANAGEMENT FOR CONFIGMAPS
+# =============================================================================
+
+# Generate the list of all utility files for deployment consistency
+# This ensures that any script using _utils.sh in containers has access to all modules
+get_utility_files() {
+  local base_dir="${1:-./openshift/scripts}"
+  local files=("$base_dir/_utils.sh")
+
+  # Dynamically discover all utility modules
+  if [[ -d "$base_dir/utils" ]]; then
+    while IFS= read -r -d '' file; do
+      files+=("$file")
+    done < <(find "$base_dir/utils" -name "*.sh" -type f -print0 | sort -z)
+  fi
+
+  printf '%s\n' "${files[@]}"
+}
+
+# Generate configmap arguments for all utility files
+# Format: "filename=./path/to/file"
+get_utility_configmap_args() {
+  local base_dir="${1:-./openshift/scripts}"
+  local args=()
+
+  # Add main utils file
+  args+=("_utils.sh=$base_dir/_utils.sh")
+
+  # Add all utility modules
+  if [[ -d "$base_dir/utils" ]]; then
+    while IFS= read -r -d '' file; do
+      local basename=$(basename "$file")
+      args+=("$basename=$file")
+    done < <(find "$base_dir/utils" -name "*.sh" -type f -print0 | sort -z)
+  fi
+
+  printf '%s\n' "${args[@]}"
+}

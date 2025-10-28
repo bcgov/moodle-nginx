@@ -4,6 +4,11 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Generate utility files list and configmap arguments dynamically
+# This ensures we always have the complete and up-to-date list of utility files
+mapfile -t UTILITY_FILES < <(get_utility_files)
+mapfile -t UTILITY_CONFIGMAP_ARGS < <(get_utility_configmap_args)
+
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
 log_info "Current namespace is $DEPLOY_NAMESPACE"
@@ -45,7 +50,10 @@ create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./c
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "$CRON_NAME-php-config" "moodle-php.ini=./config/php/php.ini"
 create_or_update_configmap "$CRON_NAME-shell" "cron.sh=./config/cron/cron.sh"
-create_or_update_configmap "check-pod-logs-script" "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" "_utils.sh=./openshift/scripts/_utils.sh" "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv"
+create_or_update_configmap "check-pod-logs-script" \
+  "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" \
+  "${UTILITY_CONFIGMAP_ARGS[@]}" \
+  "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv"
 create_or_update_configmap "migrate-courses" "update-course-tag.php=./config/moodle/update-course-tag.php" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 
 # Annotate the web deployment to trigger a restart if it already exists
@@ -163,14 +171,31 @@ else
   fi
 fi
 
-# Syntax check of _utils.sh
-log_debug "Validating _utils.sh syntax..."
-if bash -n ./openshift/scripts/_utils.sh; then
-  log_debug "✅ _utils.sh syntax is valid"
-else
-  log_error "❌ _utils.sh has syntax errors"
+# Syntax check of utility files
+log_debug "Validating utility files syntax..."
+
+# Validate each utility file using the centralized array
+validation_failed=false
+for util_file in "${UTILITY_FILES[@]}"; do
+  if [[ -f "$util_file" ]]; then
+    if bash -n "$util_file"; then
+      log_debug "Syntax validation passed for: $(basename "$util_file")"
+    else
+      log_error "Syntax validation failed for: $util_file"
+      validation_failed=true
+    fi
+  else
+    log_warn "Utility file not found: $util_file"
+    validation_failed=true
+  fi
+done
+
+if [[ "$validation_failed" == "true" ]]; then
+  log_error "One or more utility files failed validation. Exiting..."
   exit 1
 fi
+
+log_debug "All utility files passed syntax validation"
 
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 

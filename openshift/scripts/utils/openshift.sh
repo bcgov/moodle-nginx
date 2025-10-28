@@ -1959,7 +1959,7 @@ disable_maintenance_mode() {
   fi
 
   log_success "Route redirection completed - traffic now directed to $target_service_name"
-  log_warn "Note: Maintenance service scaling should be handled by caller after verification"
+  log_info "Note: Maintenance service scaling should be handled by caller after verification"
 }
 
 # =============================================================================
