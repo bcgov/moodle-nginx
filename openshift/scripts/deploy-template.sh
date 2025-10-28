@@ -6,7 +6,7 @@ source ./openshift/scripts/_utils.sh
 
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
-echo "Current namespace is $DEPLOY_NAMESPACE"
+log_info "Current namespace is $DEPLOY_NAMESPACE"
 
 # Enable Moodle maintenance mode
 manage_maintenance_mode "enable" "maintenance-message"
@@ -17,18 +17,18 @@ oc secrets link default artifactory-m950-learning --for=pull
 # Scale [down] php to 0 replicas
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "0" "0"
 if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "120s" "down"; then
-  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 0 replicas. Exiting..."
+  log_error "Failed to scale $PHP_DEPLOYMENT_NAME to 0 replicas. Exiting..."
   exit 1
 fi
 
 # Scale [down] web to 0 replicas
 scale_deployment "deployment" "$WEB_DEPLOYMENT_NAME" "0" "0"
 if ! wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "600s" "down"; then
-  echo "Failed to scale $WEB_DEPLOYMENT_NAME to 0 replicas. Exiting..."
+  log_error "Failed to scale $WEB_DEPLOYMENT_NAME to 0 replicas. Exiting..."
   exit 1
 fi
 
-echo "Delete jobs..."
+log_info "Delete jobs..."
 delete_resource_if_exists cronjob check-pod-logs
 delete_resource_if_exists deployment $CRON_NAME
 delete_resource_if_exists job moodle-upgrade
@@ -50,13 +50,13 @@ create_or_update_configmap "migrate-courses" "update-course-tag.php=./config/moo
 
 # Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
-  echo "$WEB_DEPLOYMENT_NAME NOT FOUND..."
+  log_debug "$WEB_DEPLOYMENT_NAME NOT FOUND..."
 else
-  echo "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
+  log_info "$WEB_DEPLOYMENT_NAME Installation FOUND...UPDATING..."
   oc annotate --overwrite  deployment/$WEB_DEPLOYMENT_NAME kubectl.kubernetes.io/restartedAt=`date +%FT%T`
 fi
 
-echo "Deploy Template to OpenShift ..."
+log_info "Deploy Template to OpenShift ..."
 deploy_resource_from_template ./openshift/template.json \
   "APP_NAME=$APP" \
   "DB_HOST=$DB_HOST" \
@@ -75,14 +75,14 @@ deploy_resource_from_template ./openshift/template.json \
   "REDIS_PORT=$REDIS_PORT" \
   "MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME"
 
-echo "Create and run migrate-build-files job..."
+log_info "Create and run migrate-build-files job..."
 deploy_resource_from_template ./openshift/migrate-build-files.yml \
     IMAGE_REPO=$IMAGE_REPO \
     BUILD_NAME=moodle \
     BUILD_NAMESPACE=$BUILD_NAMESPACE \
     FORCE_MIGRATE=$FORCE_MIGRATE
 if ! wait_for "job/migrate-build-files" "complete" "800s"; then
-  echo "Failed to run migrate-build-files job. Exiting..."
+  log_error "Failed to run migrate-build-files job. Exiting..."
   exit 1
 fi
 
@@ -90,13 +90,13 @@ while true; do
   # Ensure that the Redis proxy is deployed and error-free
   wait_for_deployment_without_errors "deployment/redis-proxy"
 
-  echo "Create and run Moodle upgrade job..."
+    log_info "Create and run Moodle upgrade job..."
   deploy_resource_from_template ./openshift/moodle-upgrade.yml \
     IMAGE_REPO=$IMAGE_REPO \
     DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
     BUILD_NAME=$PHP_DEPLOYMENT_NAME
   if ! wait_for "job/moodle-upgrade" "complete" "800s"; then
-    echo "Failed to run Moodle upgrade job. Exiting..."
+    log_error "Failed to run Moodle upgrade job. Exiting..."
     exit 1
   fi
 
@@ -106,18 +106,18 @@ while true; do
   error_detected=false
   oc logs -f $pod_name | while read line; do
     if [[ $line == *"Exception"* || $line == *"read error on connection to redis-proxy"* ]]; then
-      echo "Error detected during Moodle upgrade: $line"
+      log_error "Error detected during Moodle upgrade: $line"
       error_detected=true
       pkill -P $$ oc
     fi
     if [[ $line == *"Maintenance mode has been disabled and the site is running normally again"* ]]; then
-      echo $line
+      log_info "$line"
       pkill -P $$ oc
     fi
   done
 
   if $error_detected; then
-    echo "Restarting Redis proxy and retrying Moodle upgrade..."
+    log_warn "Restarting Redis proxy and retrying Moodle upgrade..."
     wait_for_deployment_without_errors "deployment/redis-proxy"
     continue
   fi
@@ -129,7 +129,7 @@ done
 # Scale [up] php to 1 replica
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
 if ! wait_for "deployment/$PHP_DEPLOYMENT_NAME" "ready" "600s"; then
-  echo "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."
+  log_error "Failed to scale $PHP_DEPLOYMENT_NAME to 1 replica. Exiting..."
   exit 1
 fi
 
@@ -147,7 +147,7 @@ deploy_resource_from_template ./openshift/check-pod-logs.yml \
 sleep 60
 
 # Clear Moodle cache across all PHP pods after successful deployment
-echo "🧹 Clearing Moodle cache across PHP deployment..."
+log_info "🧹 Clearing Moodle cache across PHP deployment..."
 
 # Debug: Check if the function exists before calling it
 log_debug "Debugging function availability..."
@@ -156,30 +156,30 @@ if declare -f clear_moodle_cache_deployment > /dev/null 2>&1; then
 else
   log_error "Function clear_moodle_cache_deployment is NOT available"
   if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
-    echo "📋 Available cache-related functions:"
-    declare -F | grep -i cache || echo "   No cache functions found"
-    echo "📋 All available functions from _utils.sh:"
-    declare -F | grep -E "(moodle|cache|clear)" || echo "   No matching functions found"
+    log_debug "📋 Available cache-related functions:"
+    declare -F | grep -i cache || log_debug "   No cache functions found"
+    log_debug "📋 All available functions from _utils.sh:"
+    declare -F | grep -E "(moodle|cache|clear)" || log_debug "   No matching functions found"
   fi
 fi
 
 # Syntax check of _utils.sh
 log_debug "Validating _utils.sh syntax..."
 if bash -n ./openshift/scripts/_utils.sh; then
-  echo "✅ _utils.sh syntax is valid"
+  log_debug "✅ _utils.sh syntax is valid"
 else
-  echo "❌ _utils.sh has syntax errors"
+  log_error "❌ _utils.sh has syntax errors"
   exit 1
 fi
 
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
 # Update Redis proxy configuration after right-sizing (Phase 2)
-echo "🔧 Updating Redis proxy configuration after right-sizing..."
+log_info "🔧 Updating Redis proxy configuration after right-sizing..."
 update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAMESPACE"
 
 # Disable maintenance mode with integrated verification and scaling
-echo "🔄 Disabling maintenance mode with automatic verification and cleanup..."
+log_info "🔄 Disabling maintenance mode with automatic verification and cleanup..."
 manage_maintenance_mode "disable" "web" "auto"
 
-echo "Deployment complete."
+log_info "Deployment complete."

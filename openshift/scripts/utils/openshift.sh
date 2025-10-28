@@ -2148,15 +2148,30 @@ handle_job_status() {
   local retry_count=$3
   local wait_time=$4
 
+  # Enhanced monitoring variables for jobs
+  local cluster_monitoring_enabled="${CLUSTER_HEALTH_MONITORING:-YES}"
+  local last_health_check=0
+  local health_check_interval=300  # Check every 5 minutes
+  local consecutive_storage_failures=0
+  local max_storage_failures=3
+  local original_max_retries=$max_retries
+  local storage_extension_applied=false
+
+  log_debug "🔄 Starting job monitoring with cluster health enabled: $cluster_monitoring_enabled"
+
   while true; do
     # Check if the job has failed
     local job_failed=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
     if [[ $job_failed -gt 0 ]]; then
       log_error "Job $job_name has failed. Retrieving logs..."
       local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
-      local error_log_text=$(oc logs $pod_name)
-      log_error "Error log:"
-      log_error "$error_log_text"
+      if [[ -n "$pod_name" ]]; then
+        local error_log_text=$(oc logs $pod_name 2>/dev/null || echo "No logs available")
+        log_error "Error log:"
+        log_error "$error_log_text"
+      else
+        log_warn "No pod found for job $job_name to retrieve logs"
+      fi
       return 1
     fi
 
@@ -2167,9 +2182,83 @@ handle_job_status() {
       return 0
     fi
 
+    # Perform cluster health check if enabled and enough time has passed
+    if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+      local current_time=$((retry_count * wait_time))
+      if [[ $((current_time - last_health_check)) -ge $health_check_interval ]]; then
+        log_debug "🔍 Performing cluster health check for job $job_name..."
+
+        # Get pod associated with the job for health checking
+        local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+        local health_status
+        if [[ -n "$pod_name" ]]; then
+          health_status=$(check_cluster_health "Pod" "$pod_name" "$DEPLOY_NAMESPACE")
+        else
+          health_status=$(check_cluster_health "Job" "$job_name" "$DEPLOY_NAMESPACE")
+        fi
+        local health_exit_code=$?
+
+        case "$health_status" in
+          "STORAGE_CRITICAL")
+            consecutive_storage_failures=$((consecutive_storage_failures + 1))
+            log_warn "⚠️ Storage issues detected for job $job_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+
+            if [[ $consecutive_storage_failures -ge $max_storage_failures && "$storage_extension_applied" == "false" ]]; then
+              # Extend max_retries for persistent storage issues
+              local extension_retries=$((15 * 60 / wait_time))  # Add 15 minutes worth of retries
+              max_retries=$((max_retries + extension_retries))
+              storage_extension_applied=true
+              log_warn "🕒 Extending job timeout due to persistent storage issues..."
+              log_info "   Original timeout: $((original_max_retries * wait_time))s"
+              log_info "   Extended timeout: $((max_retries * wait_time))s"
+              log_info "🔍 Showing cluster events for troubleshooting..."
+              show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+
+              # Also show pod-specific events if available
+              if [[ -n "$pod_name" ]]; then
+                log_info "🔍 Showing pod events for $pod_name..."
+                show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+              fi
+            fi
+            ;;
+          "NODE_CRITICAL"|"NETWORK_WARNING")
+            log_warn "⚠️ Cluster infrastructure issues detected for job $job_name"
+            show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+            if [[ -n "$pod_name" ]]; then
+              show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+            fi
+            ;;
+          "HEALTHY")
+            consecutive_storage_failures=0
+            log_debug "✅ Cluster health check: Normal for job $job_name"
+            ;;
+        esac
+
+        last_health_check=$current_time
+      fi
+    fi
+
     # Retry logic
     if [[ $retry_count -ge $max_retries ]]; then
-      log_error "Timeout waiting for job $job_name to complete. Exiting..."
+      if [[ "$storage_extension_applied" == "true" ]]; then
+        log_error "Timeout waiting for job $job_name to complete (extended timeout due to storage issues). Exiting..."
+        log_info "💡 Consider checking cluster storage health or increasing PVC attachment timeout settings."
+      else
+        log_error "Timeout waiting for job $job_name to complete. Exiting..."
+      fi
+
+      # Show final cluster status for troubleshooting
+      if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+        log_info "🔍 Final cluster health check for troubleshooting..."
+        local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [[ -n "$pod_name" ]]; then
+          show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+        else
+          show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+        fi
+      fi
+
       return 1
     fi
 
