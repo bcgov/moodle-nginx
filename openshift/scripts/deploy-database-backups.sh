@@ -1,6 +1,9 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
 

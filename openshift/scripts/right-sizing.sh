@@ -19,6 +19,9 @@ echo "Right-sizing cluster..."
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 # Read the CSV file line by line to set deployment resources
 # based on those values
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue

@@ -3,6 +3,9 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"

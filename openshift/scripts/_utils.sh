@@ -101,3 +101,56 @@ get_utility_configmap_args() {
 
   printf '%s\n' "${args[@]}"
 }
+
+# Initialize utility file arrays and show debug output if enabled
+# This function should be called by scripts that need utility file management
+initialize_utility_arrays() {
+  # Generate utility files list and configmap arguments dynamically
+  mapfile -t UTILITY_FILES < <(get_utility_files)
+  mapfile -t UTILITY_CONFIGMAP_ARGS < <(get_utility_configmap_args)
+
+  # Export arrays so they're available to called scripts
+  export UTILITY_FILES
+  export UTILITY_CONFIGMAP_ARGS
+
+  # Debug: Show what files will be included in configmaps
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    log_debug "📋 Utility files for configmap inclusion (${#UTILITY_FILES[@]} files):"
+    for file in "${UTILITY_FILES[@]}"; do
+      log_debug "  - $file"
+    done
+    log_debug "📋 Configmap arguments (${#UTILITY_CONFIGMAP_ARGS[@]} args):"
+    for arg in "${UTILITY_CONFIGMAP_ARGS[@]}"; do
+      log_debug "  - $arg"
+    done
+  fi
+}
+
+# Validate all utility files syntax
+# Returns 0 if all files pass validation, 1 if any fail
+validate_utility_files() {
+  log_debug "Validating utility files syntax..."
+
+  local validation_failed=false
+  for util_file in "${UTILITY_FILES[@]}"; do
+    if [[ -f "$util_file" ]]; then
+      if bash -n "$util_file"; then
+        log_debug "Syntax validation passed for: $(basename "$util_file")"
+      else
+        log_error "Syntax validation failed for: $util_file"
+        validation_failed=true
+      fi
+    else
+      log_warn "Utility file not found: $util_file"
+      validation_failed=true
+    fi
+  done
+
+  if [[ "$validation_failed" == "true" ]]; then
+    log_error "One or more utility files failed validation"
+    return 1
+  fi
+
+  log_debug "All utility files passed syntax validation"
+  return 0
+}

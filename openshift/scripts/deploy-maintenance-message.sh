@@ -6,6 +6,9 @@ ROUTE_NAME="moodle-web"
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 # Check if the utility script is sourced correctly
 if ! type deploy_resource_from_template &> /dev/null; then
   echo "Error: deploy_resource_from_template function not found. Ensure _utils.sh is sourced correctly."

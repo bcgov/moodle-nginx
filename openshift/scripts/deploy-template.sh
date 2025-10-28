@@ -4,10 +4,9 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
-# Generate utility files list and configmap arguments dynamically
+# Initialize utility file arrays and show debug output
 # This ensures we always have the complete and up-to-date list of utility files
-mapfile -t UTILITY_FILES < <(get_utility_files)
-mapfile -t UTILITY_CONFIGMAP_ARGS < <(get_utility_configmap_args)
+initialize_utility_arrays
 
 test -n $DEPLOY_NAMESPACE
 oc project $DEPLOY_NAMESPACE
@@ -172,30 +171,10 @@ else
 fi
 
 # Syntax check of utility files
-log_debug "Validating utility files syntax..."
-
-# Validate each utility file using the centralized array
-validation_failed=false
-for util_file in "${UTILITY_FILES[@]}"; do
-  if [[ -f "$util_file" ]]; then
-    if bash -n "$util_file"; then
-      log_debug "Syntax validation passed for: $(basename "$util_file")"
-    else
-      log_error "Syntax validation failed for: $util_file"
-      validation_failed=true
-    fi
-  else
-    log_warn "Utility file not found: $util_file"
-    validation_failed=true
-  fi
-done
-
-if [[ "$validation_failed" == "true" ]]; then
-  log_error "One or more utility files failed validation. Exiting..."
+if ! validate_utility_files; then
+  log_error "Utility file validation failed. Exiting..."
   exit 1
 fi
-
-log_debug "All utility files passed syntax validation"
 
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovpsa"
 
