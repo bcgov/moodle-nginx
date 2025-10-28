@@ -61,35 +61,37 @@ sleep 5
 log_debug "Copy moodledata/muc/config.php..."
 cp /var/www/moodledata/muc/config.php /tmp/moodle.config.php
 
-# Use find with -not -name to exclude directories from the file count
-initial_count=$(find ${dest_dir} -not -name '.*' | wc -l)
-log_debug "Initial file count: $initial_count"
+# Count all files (including hidden ones) before deletion for accurate tracking
+initial_count=$(find ${dest_dir} -mindepth 1 -type f | wc -l)
+log_debug "Initial file count (including all files): $initial_count"
 
 # Delete all files - including hidden ones
 log_info "Deleting all files in ${dest_dir}..."
-# Delate all files, excluding hidden files and directories
 find ${dest_dir} -mindepth 1 -delete
 
 log_debug "Clearing config caches..."
-rm /var/www/moodledata/muc/config.php
+rm -f /var/www/moodledata/muc/config.php
 
-# Count the number of files in the destination directory, excluding hidden files and directories
-final_count=$(find ${dest_dir} -not -name '.*' | wc -l)
+# Count remaining files after deletion
+final_count=$(find ${dest_dir} -mindepth 1 -type f | wc -l)
 log_debug "Final file count: $final_count"
 
-# Calculate the number of files deleted
+# Calculate the number of files actually deleted
 deleted_count=$((initial_count - final_count))
 log_info "Deleted $deleted_count of $initial_count files."
 
-# Count the number of files remaining in the destination directory
-remaining_count=$((initial_count - deleted_count))
-
 # Check if all files have been deleted
-if [ $((remaining_count)) -eq 0 ]; then
-  log_info "All files have been deleted."
+if [ $final_count -eq 0 ]; then
+  log_info "All files have been deleted successfully."
 else
-  log_warn "Not all files have been deleted. Remaining files:"
-  ls -lA ${dest_dir}
+  log_warn "Not all files have been deleted. $final_count files remaining:"
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    ls -lA ${dest_dir}
+  else
+    # Just show count of remaining files by type in normal mode
+    log_info "  Regular files: $(find ${dest_dir} -type f | wc -l)"
+    log_info "  Directories: $(find ${dest_dir} -type d | wc -l)"
+  fi
 fi
 
 log_info "Replace Moodle index with maintenance page (again, since we deleted it)..."
