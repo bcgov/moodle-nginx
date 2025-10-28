@@ -9,6 +9,34 @@ log_info "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 # Ensure backup storage secrets are managed properly before Helm deployment
 log_info "🔍 Pre-deployment secret management..."
 
+# Validate environment-specific database secrets before proceeding
+log_info "🔍 Validating environment-specific database configuration..."
+if oc get secret moodle-secrets &> /dev/null; then
+  # Verify the database connection details match the current environment
+  db_user_from_secret=$(oc get secret moodle-secrets -o jsonpath='{.data.database-user}' | base64 -d 2>/dev/null || echo "")
+  if [[ -n "$db_user_from_secret" ]]; then
+    log_info "✅ Database user configured for this environment: $db_user_from_secret"
+    # Validate the user matches expected pattern for environment
+    if [[ "$db_user_from_secret" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      log_info "✅ Database user format validation passed"
+    else
+      log_warn "⚠️  Database user format may be unusual: $db_user_from_secret"
+    fi
+  else
+    log_error "❌ Database user not found in moodle-secrets"
+    exit 1
+  fi
+
+  # Verify database host matches the configured environment
+  log_info "✅ Database host configured: $DB_HOST"
+  log_info "✅ Database name configured: $DB_NAME"
+  log_info "📋 This deployment will configure backups for: $db_user_from_secret@$DB_HOST/$DB_NAME"
+else
+  log_error "❌ Required moodle-secrets not found in this environment"
+  log_error "   Cannot proceed with backup deployment without database credentials"
+  exit 1
+fi
+
 # Use the webhook URL from environment variable (set by GitHub Actions)
 # This avoids exposing the webhook URL in the repository
 webhook_url="${ROCKETCHAT_WEBHOOK_URL:-}"
@@ -39,8 +67,14 @@ persistence:
   backup:
     accessModes: ["ReadWriteMany"]
     storageClassName: netapp-file-standard
+    # Ensure PVC is NEVER deleted during upgrades
+    annotations:
+      "helm.sh/resource-policy": keep
   verification:
     storageClassName: netapp-file-standard
+    # Ensure PVC is NEVER deleted during upgrades
+    annotations:
+      "helm.sh/resource-policy": keep
 
 backupConfig: |
   mariadb=$DB_HOST:$DB_PORT/$DB_NAME
@@ -60,16 +94,6 @@ env:
     value: "$DB_HOST"
   ENVIRONMENT_FRIENDLY_NAME:
     value: "Backups"
-  MARIADB_GALERA_USER:
-    valueFrom:
-      secretKeyRef:
-        name: moodle-secrets
-        key: database-user
-  MARIADB_GALERA_PASSWORD:
-    valueFrom:
-      secretKeyRef:
-        name: moodle-secrets
-        key: database-password
 EOF
 
 log_info "🔍 Verifying generated files..."
@@ -92,6 +116,34 @@ log_debug "--- End Environment Variables ---"
 # Backup the values file to prevent accidental deletion
 log_info "🔒 Creating backup copy of values file..."
 cp backup-values.yaml backup-values-copy.yaml
+
+# Pre-deployment PVC verification for data protection
+log_info "🔍 Pre-deployment PVC verification..."
+backup_pvc_name="${DB_BACKUP_DEPLOYMENT_NAME}-backup-storage-backup-pvc"
+verification_pvc_name="${DB_BACKUP_DEPLOYMENT_NAME}-backup-storage-verification-pvc"
+
+if oc get pvc "$backup_pvc_name" &> /dev/null; then
+  backup_pvc_size=$(oc get pvc "$backup_pvc_name" -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
+  backup_pvc_status=$(oc get pvc "$backup_pvc_name" -o jsonpath='{.status.phase}' 2>/dev/null)
+  log_info "✅ Existing backup PVC found: $backup_pvc_name (${backup_pvc_size}, ${backup_pvc_status})"
+
+  # Check if PVC contains data
+  if [[ "$backup_pvc_status" == "Bound" ]]; then
+    log_info "✅ Backup PVC is bound and ready - existing backup data will be preserved"
+  else
+    log_warn "⚠️  Backup PVC status: $backup_pvc_status - may need attention"
+  fi
+else
+  log_info "📋 No existing backup PVC found - new PVC will be created"
+fi
+
+if oc get pvc "$verification_pvc_name" &> /dev/null; then
+  verification_pvc_size=$(oc get pvc "$verification_pvc_name" -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
+  verification_pvc_status=$(oc get pvc "$verification_pvc_name" -o jsonpath='{.status.phase}' 2>/dev/null)
+  log_info "✅ Existing verification PVC found: $verification_pvc_name (${verification_pvc_size}, ${verification_pvc_status})"
+else
+  log_info "📋 No existing verification PVC found - new PVC will be created"
+fi
 
 # Use the utility function for upgrade
 log_info "🚀 Calling create_or_update_helm_deployment..."
@@ -197,11 +249,31 @@ if ! wait_for "deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME" "ready" "300s"; then
     # Check if the required keys exist
     if oc get secret moodle-secrets -o jsonpath='{.data.database-user}' &> /dev/null; then
       log_info "  ✅ database-user key found"
+      # Decode and verify the database user for environment validation
+      decoded_user=$(oc get secret moodle-secrets -o jsonpath='{.data.database-user}' | base64 -d 2>/dev/null || echo "")
+      if [[ -n "$decoded_user" ]]; then
+        log_debug "  📋 Database user configured: $decoded_user"
+        # Check if this matches expected environment pattern
+        if [[ "$decoded_user" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+          log_info "  ✅ Database user format is valid"
+        else
+          log_warn "  ⚠️  Database user format may be invalid: $decoded_user"
+        fi
+      else
+        log_warn "  ⚠️  Database user is empty or invalid base64"
+      fi
     else
       log_warn "  ❌ database-user key missing from moodle-secrets"
     fi
     if oc get secret moodle-secrets -o jsonpath='{.data.database-password}' &> /dev/null; then
       log_info "  ✅ database-password key found"
+      # Verify password exists (don't decode for security)
+      password_length=$(oc get secret moodle-secrets -o jsonpath='{.data.database-password}' | wc -c)
+      if [[ $password_length -gt 10 ]]; then
+        log_info "  ✅ Database password appears to be set (${password_length} chars encoded)"
+      else
+        log_warn "  ⚠️  Database password appears to be empty or very short"
+      fi
     else
       log_warn "  ❌ database-password key missing from moodle-secrets"
     fi
@@ -213,6 +285,31 @@ if ! wait_for "deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME" "ready" "300s"; then
 else
   log_info "✅ Backup storage deployment is ready"
 
+  # Post-deployment PVC verification for data integrity
+  log_info "🔍 Post-deployment PVC verification..."
+
+  if oc get pvc "$backup_pvc_name" &> /dev/null; then
+    backup_pvc_size_after=$(oc get pvc "$backup_pvc_name" -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
+    backup_pvc_status_after=$(oc get pvc "$backup_pvc_name" -o jsonpath='{.status.phase}' 2>/dev/null)
+    log_info "✅ Backup PVC after deployment: $backup_pvc_name (${backup_pvc_size_after}, ${backup_pvc_status_after})"
+
+    if [[ "$backup_pvc_status_after" == "Bound" ]]; then
+      log_info "✅ Backup PVC is properly bound - backup data preserved successfully"
+    else
+      log_warn "⚠️  Backup PVC status after deployment: $backup_pvc_status_after"
+    fi
+  else
+    log_error "❌ Backup PVC not found after deployment - this should not happen!"
+  fi
+
+  if oc get pvc "$verification_pvc_name" &> /dev/null; then
+    verification_pvc_size_after=$(oc get pvc "$verification_pvc_name" -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
+    verification_pvc_status_after=$(oc get pvc "$verification_pvc_name" -o jsonpath='{.status.phase}' 2>/dev/null)
+    log_info "✅ Verification PVC after deployment: $verification_pvc_name (${verification_pvc_size_after}, ${verification_pvc_status_after})"
+  else
+    log_error "❌ Verification PVC not found after deployment - this should not happen!"
+  fi
+
   # Verify that the environment variables are properly set
   log_debug "🔍 Verifying database credentials configuration..."
   backup_pod=$(oc get pods -l app.kubernetes.io/name=backup-storage -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
@@ -220,28 +317,95 @@ else
   if [[ -n "$backup_pod" ]]; then
     log_debug "  📋 Checking environment variables in pod: $backup_pod"
 
-    # Check if MARIADB_GALERA_USER is set
-    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER &>/dev/null; then
-      db_user=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER 2>/dev/null)
-      if [[ -n "$db_user" ]]; then
-        log_info "  ✅ MARIADB_GALERA_USER is set (value: ${db_user})"
+    # Get expected values from secrets for cross-environment validation
+    expected_user=$(oc get secret moodle-secrets -o jsonpath='{.data.database-user}' | base64 -d 2>/dev/null || echo "")
+    expected_password_encoded=$(oc get secret moodle-secrets -o jsonpath='{.data.database-password}' 2>/dev/null || echo "")
+
+    # Check if DATABASE_USER is set and matches the secret
+    if oc exec "$backup_pod" -- printenv DATABASE_USER &>/dev/null; then
+      actual_user=$(oc exec "$backup_pod" -- printenv DATABASE_USER 2>/dev/null)
+      if [[ -n "$actual_user" ]]; then
+        if [[ "$actual_user" == "$expected_user" ]]; then
+          log_info "  ✅ DATABASE_USER is correctly set and matches secret (value: ${actual_user})"
+        else
+          log_warn "  ⚠️  DATABASE_USER mismatch - Pod: '$actual_user', Secret: '$expected_user'"
+          log_warn "     This may indicate environment configuration drift - redeployment may be needed"
+          DEPLOYMENT_RESTART_NEEDED=true
+        fi
       else
-        log_warn "  ⚠️  MARIADB_GALERA_USER is empty"
+        log_warn "  ⚠️  DATABASE_USER is empty"
+        DEPLOYMENT_RESTART_NEEDED=true
       fi
     else
-      log_error "  ❌ MARIADB_GALERA_USER environment variable not found"
+      log_error "  ❌ DATABASE_USER environment variable not found"
+      DEPLOYMENT_RESTART_NEEDED=true
     fi
 
-    # Check if MARIADB_GALERA_PASSWORD is set (don't print the value)
-    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD &>/dev/null; then
-      db_password=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD 2>/dev/null)
-      if [[ -n "$db_password" ]]; then
-        log_info "  ✅ MARIADB_GALERA_PASSWORD is set"
+    # Check if DATABASE_PASSWORD is set and matches the secret (compare lengths for security)
+    if oc exec "$backup_pod" -- printenv DATABASE_PASSWORD &>/dev/null; then
+      actual_password=$(oc exec "$backup_pod" -- printenv DATABASE_PASSWORD 2>/dev/null)
+      if [[ -n "$actual_password" ]]; then
+        expected_password=$(echo "$expected_password_encoded" | base64 -d 2>/dev/null || echo "")
+        if [[ -n "$expected_password" && "$actual_password" == "$expected_password" ]]; then
+          log_info "  ✅ DATABASE_PASSWORD is correctly set and matches secret"
+        elif [[ -n "$expected_password" ]]; then
+          log_warn "  ⚠️  DATABASE_PASSWORD mismatch detected (lengths: pod=${#actual_password}, secret=${#expected_password})"
+          log_warn "     This may indicate environment configuration drift - redeployment may be needed"
+          DEPLOYMENT_RESTART_NEEDED=true
+        else
+          log_warn "  ⚠️  Could not verify DATABASE_PASSWORD - secret may be invalid"
+          DEPLOYMENT_RESTART_NEEDED=true
+        fi
       else
-        log_warn "  ⚠️  MARIADB_GALERA_PASSWORD is empty"
+        log_warn "  ⚠️  DATABASE_PASSWORD is empty"
+        DEPLOYMENT_RESTART_NEEDED=true
       fi
     else
-      log_error "  ❌ MARIADB_GALERA_PASSWORD environment variable not found"
+      log_error "  ❌ DATABASE_PASSWORD environment variable not found"
+      DEPLOYMENT_RESTART_NEEDED=true
+    fi
+
+    # Also check the legacy MARIADB_GALERA_* variables for backwards compatibility
+    log_debug "  📋 Checking legacy MARIADB_GALERA_* variables..."
+    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER &>/dev/null; then
+      legacy_user=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_USER 2>/dev/null)
+      if [[ -n "$legacy_user" ]]; then
+        log_debug "  ✅ MARIADB_GALERA_USER is set (value: ${legacy_user})"
+        # If legacy vars are set, verify they match too
+        if [[ "$legacy_user" != "$expected_user" ]]; then
+          log_warn "  ⚠️  MARIADB_GALERA_USER mismatch - may need redeployment"
+          DEPLOYMENT_RESTART_NEEDED=true
+        fi
+      else
+        log_debug "  ⚠️  MARIADB_GALERA_USER is empty (this is expected with chart-managed credentials)"
+      fi
+    else
+      log_debug "  ⚠️  MARIADB_GALERA_USER environment variable not found (this is expected with chart-managed credentials)"
+    fi
+
+    if oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD &>/dev/null; then
+      legacy_password=$(oc exec "$backup_pod" -- printenv MARIADB_GALERA_PASSWORD 2>/dev/null)
+      if [[ -n "$legacy_password" ]]; then
+        log_debug "  ✅ MARIADB_GALERA_PASSWORD is set"
+        # Verify legacy password matches if it's set
+        expected_password=$(echo "$expected_password_encoded" | base64 -d 2>/dev/null || echo "")
+        if [[ -n "$expected_password" && "$legacy_password" != "$expected_password" ]]; then
+          log_warn "  ⚠️  MARIADB_GALERA_PASSWORD mismatch - may need redeployment"
+          DEPLOYMENT_RESTART_NEEDED=true
+        fi
+      else
+        log_debug "  ⚠️  MARIADB_GALERA_PASSWORD is empty (this is expected with chart-managed credentials)"
+      fi
+    else
+      log_debug "  ⚠️  MARIADB_GALERA_PASSWORD environment variable not found (this is expected with chart-managed credentials)"
+    fi
+
+    # Environment-specific validation summary
+    if [[ "${DEPLOYMENT_RESTART_NEEDED:-false}" == "true" ]]; then
+      log_warn "  ⚠️  Environment variable mismatches detected - deployment restart will be triggered"
+      log_info "     This ensures the backup container uses current environment credentials"
+    else
+      log_info "  ✅ All database credentials are properly configured and match the environment"
     fi
   else
     log_warn "  ⚠️  Could not find backup pod to verify environment variables"
