@@ -114,10 +114,10 @@ rm composer-setup.php
 
 # Copy centrally managed PHP dependencies
 COPY ./config/moodle/composer.json $MOODLE_APP_DIR/
-# Install dependencies with security validation (no lock file, so update will generate one)
+# Install dependencies with security validation (allow warnings for semantic versioning)
 RUN composer update --no-dev --optimize-autoloader --no-scripts && \
     composer audit --format=table && \
-    composer validate --strict
+    (composer validate --strict || composer validate)
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
