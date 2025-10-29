@@ -41,5 +41,5 @@ docker-compose --env-file .env.generated up
 - **Generated**: All other environment and manifest files (automatic)
 - **Workflow**: GitHub Actions ensures consistency across all generated files
 
-Generated: 2025-10-29T17:42:26Z
-Commit: a033fe1044f058b4b68dd68a0dd173729789d270
+Generated: 2025-10-29T18:28:07Z
+Commit: 8d70e99ff8a645471d7eb3409831eb0cfc90d0ea
