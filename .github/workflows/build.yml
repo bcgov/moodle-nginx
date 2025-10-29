@@ -119,8 +119,20 @@ jobs:
           chmod +x openshift/scripts/populate-dependency-manifests.sh
           ./openshift/scripts/populate-dependency-manifests.sh
 
-          echo "📋 Generated manifests:"
-          ls -la openshift/dependencies/ .github/security-tools.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
+          echo "📋 Generated ephemeral manifests (not committed to repository):"
+          ls -la openshift/dependencies/ .github/security-tools.json config/moodle/composer.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
+          
+          echo "🔒 These files are generated fresh for each build and never stored in git"
+
+      # Validate PHP dependencies security (using ephemeral composer.json)
+      - name: 🔒 PHP Dependencies Security Validation
+        run: |
+          if [ -f "openshift/scripts/validate-php-security.sh" ]; then
+            chmod +x openshift/scripts/validate-php-security.sh
+            ./openshift/scripts/validate-php-security.sh
+          else
+            echo "⚠️ PHP security validation script not found, skipping..."
+          fi
 
       - name: Setup Env Vars
         id: dotenv

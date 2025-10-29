@@ -1,16 +1,34 @@
-# Moodle for OpenShift / Doocker
+# Moodle for OpenShift / Docker
 
 ## Explanation
 
-This directory contains the docker setup to run an instance of Moodle 3.11. A number of containers are created as follows
+This directory contains the docker setup to run an instance of Moodle 4.01. A number of containers are created as follows
 
-* PHP 8.0-fpm to run the web instance of Moodle
-* PHP 7.4-fpm (second instance) to run cron
+* PHP 8.1-fpm to run the web instance of Moodle
+* PHP 8.1-cli (second instance) to run cron
 * nginx as the web server
 * redis for cache
 * mariadb for database
 
-Most relevent variables for versions, pod names, etc. can be found in example.env file.
+Most relevant variables for versions, pod names, etc. can be found in `example.env` and `example.versions.env` files.
+
+## 🔄 Ephemeral Dependency Management
+
+This repository uses an **ephemeral approach** for dependency management:
+
+- **Source**: All versions are managed in `example.versions.env`
+- **Generated**: Dependency files are auto-generated during CI/CD builds
+- **Not Committed**: Generated files are excluded from git (see `.gitignore`)
+
+For local development, generate fresh dependency files:
+```bash
+./openshift/scripts/populate-dependency-manifests.sh
+docker-compose --env-file .env.generated up
+```
+
+📖 **See [docs/EPHEMERAL-DEPENDENCIES.md](docs/EPHEMERAL-DEPENDENCIES.md) for complete details**
+
+## Configuration
 
 The main configuration is setup in the file docker-compose.yml. Each service is a container and the compose file gives the various configuration details for that service. The volumes directives map paths inside the containers to local paths. Note that local paths are relative to the directory with the compose file. There are no absolute paths.
 

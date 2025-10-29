@@ -114,7 +114,7 @@ rm composer-setup.php
 
 # Copy centrally managed PHP dependencies
 COPY ./config/moodle/composer.json $MOODLE_APP_DIR/
-# Install with security validation and lock file generation
+# Install dependencies with security validation (no lock file, so update will generate one)
 RUN composer update --no-dev --optimize-autoloader --no-scripts && \
     composer audit --format=table && \
     composer validate --strict
