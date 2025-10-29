@@ -146,7 +146,14 @@ check_docker() {
         exit 1
     fi
 
+    # Test Docker daemon access
+    if ! docker info >/dev/null 2>&1; then
+        log_error "Docker daemon is not accessible"
+        exit 3
+    fi
+
     log_info "Docker and jq are available"
+    log_info "Docker daemon is accessible"
 }
 
 # Get image digest with retries
@@ -157,14 +164,31 @@ get_image_digest() {
 
     for ((i=1; i<=retry_count; i++)); do
         log_info "Attempt $i/$retry_count: Getting digest for $image"
-        
-        digest=$(timeout "$TIMEOUT" docker manifest inspect "$image" --verbose 2>/dev/null | jq -r '.Descriptor.digest' 2>/dev/null || echo "")
-        
-        if [ -n "$digest" ] && [ "$digest" != "null" ]; then
+
+        # Try multiple methods to get the digest
+        # Method 1: Try docker manifest inspect (preferred for remote registries)
+        if command -v docker >/dev/null 2>&1; then
+            digest=$(timeout "$TIMEOUT" docker manifest inspect "$image" 2>/dev/null | jq -r '.digest // .manifests[0].digest // empty' 2>/dev/null || echo "")
+        fi
+
+        # Method 2: If manifest inspect fails, try inspect with format (works for pulled images)
+        if [ -z "$digest" ] || [ "$digest" = "null" ]; then
+            digest=$(timeout "$TIMEOUT" docker inspect "$image" --format='{{index .RepoDigests 0}}' 2>/dev/null | cut -d'@' -f2 2>/dev/null || echo "")
+        fi
+
+        # Method 3: Try pulling first then getting digest (fallback)
+        if [ -z "$digest" ] || [ "$digest" = "null" ]; then
+            log_info "Attempting to pull image to get digest..."
+            if timeout "$TIMEOUT" docker pull "$image" >/dev/null 2>&1; then
+                digest=$(docker inspect "$image" --format='{{index .RepoDigests 0}}' 2>/dev/null | cut -d'@' -f2 2>/dev/null || echo "")
+            fi
+        fi
+
+        if [ -n "$digest" ] && [ "$digest" != "null" ] && [ "$digest" != "" ]; then
             echo "$digest"
             return 0
         fi
-        
+
         if [ $i -lt $retry_count ]; then
             log_warn "Failed to get digest, retrying in 5 seconds..."
             sleep 5
@@ -179,7 +203,7 @@ optimize_image_push() {
     local start_time=$(date +%s)
     local source_image="$SOURCE_IMAGE"
     local artifactory_image="$ARTIFACTORY_URL/$source_image"
-    
+
     log_info "🚀 Optimizing image push: $source_image -> $artifactory_image"
 
     # Skip optimization if force push is enabled
@@ -193,7 +217,9 @@ optimize_image_push() {
     log_info "🔍 Checking source image digest..."
     local source_digest
     if ! source_digest=$(get_image_digest "$source_image" "$RETRY_COUNT"); then
-        log_warn "Could not get source image digest, proceeding with standard push"
+        log_warn "Could not get source image digest for $source_image"
+        log_warn "This might be due to registry access issues or image not found"
+        log_warn "Proceeding with standard push to ensure image availability"
         perform_standard_push "$source_image" "$artifactory_image" "$start_time"
         return $?
     fi
@@ -208,18 +234,18 @@ optimize_image_push() {
     if [ "$source_digest" = "$artifactory_digest" ] && [ -n "$artifactory_digest" ]; then
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
-        
+
         log_success "Image already exists in Artifactory with same digest"
         log_success "⚡ Skipping pull/push operation - significant time saved!"
         log_time "$duration" "Optimization check (typical pull/push takes 60-300s)"
-        
+
         # Set environment variables for GitHub Actions
         if [ -n "${GITHUB_ENV:-}" ]; then
             echo "IMAGE_CACHE_HIT=true" >> "$GITHUB_ENV"
             echo "IMAGE_BUILD_TIME=$duration" >> "$GITHUB_ENV"
             echo "IMAGE_OPERATION=cached" >> "$GITHUB_ENV"
         fi
-        
+
         return 0
     else
         log_info "🔄 Image needs to be updated in Artifactory"
@@ -293,7 +319,7 @@ EOF
 main() {
     parse_args "$@"
     check_docker
-    
+
     # Export variables for sub-functions
     export SOURCE_IMAGE ARTIFACTORY_URL TIMEOUT RETRY_COUNT FORCE_PUSH QUIET
 

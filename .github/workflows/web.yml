@@ -24,6 +24,7 @@ jobs:
             config/nginx
             example.env
             example.versions.env
+            openshift/scripts/optimize-image-push.sh
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
