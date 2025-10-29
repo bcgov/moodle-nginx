@@ -1,0 +1,31 @@
+# docker-compose.local.yml
+# Local development override using generated environment variables
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.local.yml up
+# Generated: 2025-10-29T16:42:57Z
+
+version: '3.8'
+
+services:
+  # Override build-0 to use environment variables
+  build-0:
+    environment:
+      - PHP_IMAGE=php:8.1-fpm
+      - REDIS_IMAGE=bitnamilegacy/redis:8.0.2-debian-12-r2
+    build:
+      args:
+        DOCKER_FROM_IMAGE: php:8.1-fpm
+
+  # Override Redis services to use environment variables  
+  redis:
+    image: bitnamilegacy/redis:8.0.2-debian-12-r2
+    
+  redis-sentinel:
+    image: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1
+
+# Local development configuration
+x-local-dev:
+  environment:
+    - ENVIRONMENT=local
+    - DEBUG=true
+    - GENERATED_AT=2025-10-29T16:42:57Z
+    - SOURCE_COMMIT=eb293b8105f001fe870befdc0d79f7be1e0f0686
