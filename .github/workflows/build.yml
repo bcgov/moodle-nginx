@@ -111,10 +111,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
-          sparse-checkout: |
-            config/mariadb
-            example.env
-            example.versions.env
 
       # Auto-populate dependency manifests from centralized versions
       - name: 🔄 Auto-populate dependency manifests

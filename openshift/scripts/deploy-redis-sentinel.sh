@@ -28,7 +28,7 @@ REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 # Pin to chart version that works in dev/test environments
 REDIS_CHART_VERSION="${REDIS_CHART_VERSION:-23.1.3}"
 
-# Configure Redis deployment arguments in one place using centralized versions
+# Configure Redis deployment arguments
 REDIS_ARGS=(
   "--set" "image.repository=$(echo "$REDIS_IMAGE" | cut -d':' -f1)"
   "--set" "image.tag=$(echo "$REDIS_IMAGE" | cut -d':' -f2)"
@@ -50,7 +50,7 @@ global:
   security:
     allowInsecureImages: true
 
-# Use proven working image tags from test environment (centrally managed)
+# Use proven working image tags from test environment
 image:
   repository: $(echo "$REDIS_IMAGE" | cut -d':' -f1)
   tag: $(echo "$REDIS_IMAGE" | cut -d':' -f2)
