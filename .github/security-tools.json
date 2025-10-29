@@ -1,8 +1,8 @@
 {
-  "generated_at": "2025-10-29T16:42:57Z",
+  "generated_at": "2025-10-29T17:05:03Z",
   "generator": "GitHub Actions",
   "workflow": "Generate Environment and Manifest Files",
-  "commit": "eb293b8105f001fe870befdc0d79f7be1e0f0686",
+  "commit": "c279d3d5ebd7cb78a382a501b20ef6f1255c5a33",
   "source_file": "example.versions.env",
   "tools": {
     "trivy": {

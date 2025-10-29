@@ -1,7 +1,7 @@
 # docker-compose.local.yml
 # Local development override using generated environment variables
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.local.yml up
-# Generated: 2025-10-29T16:42:57Z
+# Generated: 2025-10-29T17:05:03Z
 
 version: '3.8'
 
@@ -27,5 +27,5 @@ x-local-dev:
   environment:
     - ENVIRONMENT=local
     - DEBUG=true
-    - GENERATED_AT=2025-10-29T16:42:57Z
-    - SOURCE_COMMIT=eb293b8105f001fe870befdc0d79f7be1e0f0686
+    - GENERATED_AT=2025-10-29T17:05:03Z
+    - SOURCE_COMMIT=c279d3d5ebd7cb78a382a501b20ef6f1255c5a33
