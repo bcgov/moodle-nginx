@@ -112,9 +112,12 @@ RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &&
 php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
 rm composer-setup.php
 
-# Copy and install PHP dependencies from composer.json
+# Copy centrally managed PHP dependencies
 COPY ./config/moodle/composer.json $MOODLE_APP_DIR/
-RUN composer install --no-dev --optimize-autoloader
+# Install with security validation and lock file generation
+RUN composer update --no-dev --optimize-autoloader --no-scripts && \
+    composer audit --format=table && \
+    composer validate --strict
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh
