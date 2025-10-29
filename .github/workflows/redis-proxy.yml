@@ -51,15 +51,84 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: 🛠️ Pull Base Images
+      - name: 🛠️ Optimized Base Images Push to Artifactory
         run: |
-          docker pull ${{ env.GOLANG_IMAGE }}
-          docker pull ${{ env.UBUNTU_IMAGE }}
+          # Use the utility script for consistency across all workflows
+          if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then
+            echo "🚀 Using optimize-image-push.sh utility script for multiple images"
+            chmod +x ./openshift/scripts/optimize-image-push.sh
 
-      - name: 🐸 Build and Push to JFrog
+            # Optimize Golang base image
+            echo "📦 Processing Golang base image..."
+            ./openshift/scripts/optimize-image-push.sh \
+              --source-image "${{ env.GOLANG_IMAGE }}" \
+              --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+              --timeout 300 \
+              --retry-count 3
+
+            # Store results for Golang image
+            GOLANG_CACHE_HIT="${IMAGE_CACHE_HIT:-false}"
+            GOLANG_BUILD_TIME="${IMAGE_BUILD_TIME:-0}"
+
+            # Optimize Ubuntu base image
+            echo "� Processing Ubuntu base image..."
+            ./openshift/scripts/optimize-image-push.sh \
+              --source-image "${{ env.UBUNTU_IMAGE }}" \
+              --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+              --timeout 300 \
+              --retry-count 3
+
+            # Store results for Ubuntu image
+            UBUNTU_CACHE_HIT="${IMAGE_CACHE_HIT:-false}"
+            UBUNTU_BUILD_TIME="${IMAGE_BUILD_TIME:-0}"
+
+            # Set summary environment variables
+            echo "GOLANG_CACHE_HIT=$GOLANG_CACHE_HIT" >> $GITHUB_ENV
+            echo "GOLANG_BUILD_TIME=$GOLANG_BUILD_TIME" >> $GITHUB_ENV
+            echo "UBUNTU_CACHE_HIT=$UBUNTU_CACHE_HIT" >> $GITHUB_ENV
+            echo "UBUNTU_BUILD_TIME=$UBUNTU_BUILD_TIME" >> $GITHUB_ENV
+
+          else
+            echo "❌ optimize-image-push.sh utility script not found"
+            echo "💡 This script is required for optimized image handling"
+            echo "📋 Expected location: ./openshift/scripts/optimize-image-push.sh"
+            echo "🔧 Please ensure the utility script is included in the repository"
+            exit 1
+          fi
+
+      # Report optimization results
+      - name: 📊 Redis Proxy Images Optimization Report
+        if: always()
         run: |
-          docker tag ${{ env.GOLANG_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
-          docker tag ${{ env.UBUNTU_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}
+          echo "=============================================="
+          echo "📊 REDIS PROXY BASE IMAGES OPTIMIZATION REPORT"
+          echo "=============================================="
+          echo "Golang Image: ${{ env.GOLANG_IMAGE }}"
+          echo "  Cache Hit: ${GOLANG_CACHE_HIT:-unknown}"
+          echo "  Build Time: ${GOLANG_BUILD_TIME:-unknown}s"
+          echo ""
+          echo "Ubuntu Image: ${{ env.UBUNTU_IMAGE }}"
+          echo "  Cache Hit: ${UBUNTU_CACHE_HIT:-unknown}"
+          echo "  Build Time: ${UBUNTU_BUILD_TIME:-unknown}s"
+          echo ""
+
+          # Calculate total optimization
+          TOTAL_OPTIMIZED=0
+          if [ "${GOLANG_CACHE_HIT:-false}" = "true" ]; then
+            TOTAL_OPTIMIZED=$((TOTAL_OPTIMIZED + 1))
+          fi
+          if [ "${UBUNTU_CACHE_HIT:-false}" = "true" ]; then
+            TOTAL_OPTIMIZED=$((TOTAL_OPTIMIZED + 1))
+          fi
+
+          echo "Optimization Summary:"
+          echo "  Images Cached: $TOTAL_OPTIMIZED/2"
+          echo "  Estimated Time Saved: ~$((TOTAL_OPTIMIZED * 60))-$((TOTAL_OPTIMIZED * 300))s"
+
+          if [ $TOTAL_OPTIMIZED -gt 0 ]; then
+            echo "🎉 Optimization: SUCCESSFUL"
+          else
+            echo "🔄 Optimization: All images were updated"
+          fi
+          echo "=============================================="
           docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ./Redis.Proxy.Dockerfile .

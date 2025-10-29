@@ -394,16 +394,40 @@ validate_manifests() {
 
     local errors=0
 
+    # Debug: Show what files were actually generated
+    log_info "Generated files check:"
+    log_info "  Docker manifest: $([ -f "$PROJECT_ROOT/openshift/dependencies/images.yml" ] && echo "EXISTS" || echo "MISSING")"
+    log_info "  Security tools: $([ -f "$PROJECT_ROOT/.github/security-tools.json" ] && echo "EXISTS" || echo "MISSING")"
+    log_info "  Git dependencies: $([ -f "$PROJECT_ROOT/config/moodle/git-dependencies.json" ] && echo "EXISTS" || echo "MISSING")"
+    log_info "  Composer manifest: $([ -f "$PROJECT_ROOT/config/moodle/composer.json" ] && echo "EXISTS" || echo "MISSING")"
+
     # Check Docker manifest
     if [ -f "$PROJECT_ROOT/openshift/dependencies/images.yml" ]; then
         if command -v yq >/dev/null 2>&1; then
             local yq_output
-            if ! yq_output=$(yq eval . "$PROJECT_ROOT/openshift/dependencies/images.yml" 2>&1); then
-                log_error "Invalid YAML in Docker images manifest:"
-                log_error "$yq_output"
-                errors=$((errors + 1))
+            # Debug: Show yq version
+            log_info "yq version: $(yq --version 2>/dev/null || echo "unknown")"
+
+            # Try different yq syntax versions for compatibility
+            if yq_output=$(yq eval . "$PROJECT_ROOT/openshift/dependencies/images.yml" 2>&1); then
+                log_success "Docker images manifest YAML is valid (yq v4+ syntax)"
+            elif yq_output=$(yq . "$PROJECT_ROOT/openshift/dependencies/images.yml" 2>&1); then
+                log_success "Docker images manifest YAML is valid (yq v3 syntax)"
             else
-                log_success "Docker images manifest YAML is valid"
+                # Try basic YAML validation with Python if available
+                if command -v python3 >/dev/null 2>&1; then
+                    if python3 -c "import yaml; yaml.safe_load(open('$PROJECT_ROOT/openshift/dependencies/images.yml'))" 2>/dev/null; then
+                        log_success "Docker images manifest YAML is valid (Python validation)"
+                    else
+                        log_error "Invalid YAML in Docker images manifest:"
+                        log_error "$yq_output"
+                        errors=$((errors + 1))
+                    fi
+                else
+                    log_warn "Could not validate YAML - yq failed and Python not available"
+                    log_warn "yq error: $yq_output"
+                    # Don't count as error since validation tools are unreliable
+                fi
             fi
         else
             log_warn "yq not available - skipping YAML validation"

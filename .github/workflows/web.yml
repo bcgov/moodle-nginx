@@ -49,9 +49,42 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      # Pull latest WEB image and push to Artifactory
-      - name: 🛠️ Pull WEB base image and push to Artifactory
+      # Pull latest WEB image and push to Artifactory (optimized)
+      - name: 🛠️ Optimized WEB base image push to Artifactory
         run: |
-          docker pull ${{ env.WEB_IMAGE }}
-          docker tag ${{ env.WEB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.WEB_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.WEB_IMAGE }}
+          # Use the utility script for consistency across all workflows
+          if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then
+            echo "🚀 Using optimize-image-push.sh utility script"
+            chmod +x ./openshift/scripts/optimize-image-push.sh
+            ./openshift/scripts/optimize-image-push.sh \
+              --source-image "${{ env.WEB_IMAGE }}" \
+              --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+              --timeout 300 \
+              --retry-count 3
+          else
+            echo "❌ optimize-image-push.sh utility script not found"
+            echo "💡 This script is required for optimized image handling"
+            echo "📋 Expected location: ./openshift/scripts/optimize-image-push.sh"
+            echo "🔧 Please ensure the utility script is included in the repository"
+            exit 1
+          fi
+
+      # Report optimization results
+      - name: 📊 WEB Image Optimization Report
+        if: always()
+        run: |
+          echo "======================================"
+          echo "📊 WEB BASE IMAGE OPTIMIZATION REPORT"
+          echo "======================================"
+          echo "Image: ${{ env.WEB_IMAGE }}"
+          echo "Cache Hit: ${IMAGE_CACHE_HIT:-unknown}"
+          echo "Build Time: ${IMAGE_BUILD_TIME:-unknown}s"
+          echo "Operation: ${IMAGE_OPERATION:-standard}"
+
+          if [ "${IMAGE_CACHE_HIT:-false}" = "true" ]; then
+            echo "💡 Time Saved: ~60-300s (typical pull/push duration)"
+            echo "🎉 Optimization: SUCCESSFUL"
+          else
+            echo "🔄 Optimization: Image was updated or unavailable"
+          fi
+          echo "======================================"

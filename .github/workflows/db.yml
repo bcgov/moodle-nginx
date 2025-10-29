@@ -14,10 +14,6 @@ jobs:
   build-images:
     name: '🐸 Build to JFrog'
     runs-on: ubuntu-22.04
-    #env:
-      # Proxy settings for local development / testing
-      #https_proxy: http://198.161.14.25:8080
-      # no_proxy: ${{ env.OPENSHIFT_SERVER }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -56,53 +52,42 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_USER }}
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
-      # - name: Check Image in Artifactory
-      #   id: check-artifactory
-      #   run: |
-      #     # Define variables
-      #     # IMAGE_NAME="${{ inputs.IMAGE_NAME }}"
-      #     IMAGE_REBUILD_TIME_LIMIT=86400
-      #     # ARTIFACTORY_URL="${{ secrets.ARTIFACTORY_URL }}"
-      #     ARTIFACTORY_URL="https://artifacts.developer.gov.bc.ca/ui/native/m950-learning/mariadb/10/"
-
-      #     # Query the Artifactory page for the image metadata
-      #     echo "Querying Artifactory for image metadata..."
-      #     RESPONSE=$(curl -s "$ARTIFACTORY_URL")
-
-      #     # Log the response for debugging
-      #     echo "Artifactory HTML Response: $RESPONSE"
-
-      #     # Extract the last modified date for the manifest.json file
-      #     LAST_MODIFIED=$(echo "$RESPONSE" | grep -A 1 "manifest.json" | grep -oP '\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}' | head -n 1)
-
-      #     # Check if LAST_MODIFIED is empty
-      #     if [ -z "$LAST_MODIFIED" ]; then
-      #       echo "Error: Unable to retrieve 'Last Modified' date from Artifactory page."
-      #       echo "Proceeding with build as a fallback."
-      #       echo "SKIP_BUILD=NO" >> $GITHUB_ENV
-      #     else
-      #       echo "Image metadata found. Last modified: $LAST_MODIFIED"
-
-      #       # Convert the last modified timestamp to seconds since epoch
-      #       LAST_MODIFIED_EPOCH=$(date -d "$LAST_MODIFIED" +%s)
-      #       CURRENT_TIMESTAMP=$(date +%s)
-
-      #       # Calculate the time difference
-      #       TIME_DIFF=$((CURRENT_TIMESTAMP - LAST_MODIFIED_EPOCH))
-
-      #       # Determine whether to skip the build
-      #       if [ "$TIME_DIFF" -lt "$IMAGE_REBUILD_TIME_LIMIT" ]; then
-      #         echo "Image was recently built. Skipping build."
-      #         echo "SKIP_BUILD=YES" >> $GITHUB_ENV
-      #       else
-      #         echo "Image is outdated. Proceeding with build."
-      #         echo "SKIP_BUILD=NO" >> $GITHUB_ENV
-      #       fi
-      #     fi
-
-      - name: 🛠️ Pull latest DB base image then push to Artifactory
+      - name: 🛠️ Optimized DB base image push to Artifactory
         if: env.SKIP_BUILD == 'NO'
         run: |
-          docker pull ${{ env.IMAGE_NAME }}
-          docker tag ${{ env.IMAGE_NAME }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.IMAGE_NAME }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.IMAGE_NAME }}
+          # Use the utility script for consistency across all workflows
+          if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then
+            echo "🚀 Using optimize-image-push.sh utility script"
+            chmod +x ./openshift/scripts/optimize-image-push.sh
+            ./openshift/scripts/optimize-image-push.sh \
+              --source-image "${{ env.IMAGE_NAME }}" \
+              --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+              --timeout 600 \
+              --retry-count 3
+          else
+            echo "❌ optimize-image-push.sh utility script not found"
+            echo "💡 This script is required for optimized image handling"
+            echo "📋 Expected location: ./openshift/scripts/optimize-image-push.sh"
+            echo "🔧 Please ensure the utility script is included in the repository"
+            exit 1
+          fi
+
+      # Report optimization results
+      - name: 📊 DB Image Optimization Report
+        if: always() && env.SKIP_BUILD == 'NO'
+        run: |
+          echo "======================================"
+          echo "📊 DB BASE IMAGE OPTIMIZATION REPORT"
+          echo "======================================"
+          echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "Cache Hit: ${IMAGE_CACHE_HIT:-unknown}"
+          echo "Build Time: ${IMAGE_BUILD_TIME:-unknown}s"
+          echo "Operation: ${IMAGE_OPERATION:-standard}"
+
+          if [ "${IMAGE_CACHE_HIT:-false}" = "true" ]; then
+            echo "💡 Time Saved: ~60-300s (typical pull/push duration)"
+            echo "🎉 Optimization: SUCCESSFUL"
+          else
+            echo "🔄 Optimization: Image was updated or unavailable"
+          fi
+          echo "======================================"
