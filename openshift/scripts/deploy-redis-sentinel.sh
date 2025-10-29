@@ -26,14 +26,14 @@ REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
 REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
 # Pin to chart version that works in dev/test environments
-REDIS_CHART_VERSION="23.1.3"
+REDIS_CHART_VERSION="${REDIS_CHART_VERSION:-23.1.3}"
 
-# Configure Redis deployment arguments in one place
+# Configure Redis deployment arguments in one place using centralized versions
 REDIS_ARGS=(
-  "--set" "image.repository=bitnamilegacy/redis"
-  "--set" "image.tag=8.0.2-debian-12-r2"
-  "--set" "sentinel.image.repository=bitnamilegacy/redis-sentinel"
-  "--set" "sentinel.image.tag=8.0.2-debian-12-r1"
+  "--set" "image.repository=$(echo "$REDIS_IMAGE" | cut -d':' -f1)"
+  "--set" "image.tag=$(echo "$REDIS_IMAGE" | cut -d':' -f2)"
+  "--set" "sentinel.image.repository=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)"
+  "--set" "sentinel.image.tag=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)"
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
   "--set" "redis.resources.requests.ephemeral-storage=50Mi"
@@ -50,10 +50,10 @@ global:
   security:
     allowInsecureImages: true
 
-# Use proven working image tags from test environment
+# Use proven working image tags from test environment (centrally managed)
 image:
-  repository: bitnamilegacy/redis
-  tag: 8.0.2-debian-12-r2
+  repository: $(echo "$REDIS_IMAGE" | cut -d':' -f1)
+  tag: $(echo "$REDIS_IMAGE" | cut -d':' -f2)
   debug: false
 
 auth:
@@ -89,8 +89,8 @@ replicas:
 sentinel:
   enabled: true
   image:
-    repository: bitnamilegacy/redis-sentinel
-    tag: 8.0.2-debian-12-r1
+    repository: $(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)
+    tag: $(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)
   persistence:
     enabled: false
   resources:
@@ -117,8 +117,8 @@ else
   log_debug "  Redis: $current_redis_image"
   log_debug "  Sentinel: $current_sentinel_image"
 
-  target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
-  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+  target_redis_image="$REDIS_IMAGE"
+  target_sentinel_image="$REDIS_SENTINEL_IMAGE"
 
   log_debug "Target images:"
   log_debug "  Redis: $target_redis_image"
@@ -220,13 +220,6 @@ else
         log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
         exit 1
       fi
-    fi
-  else
-    log_info "Image tags unchanged and no persistence detected. Performing standard scaling..."
-    scale_deployment "statefulset" "$redis_node_name" "0" "0"
-    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-      log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-      exit 1
     fi
   fi
 fi

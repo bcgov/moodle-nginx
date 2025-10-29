@@ -1,0 +1,22 @@
+﻿{
+    "generated_at":  "2025-10-28T02:00:24Z",
+    "scan_frequency":  "daily",
+    "source_file":  "example.versions.env",
+    "tools":  {
+                  "trivy":  {
+                                "description":  "Container vulnerability scanner",
+                                "usage":  "Security scanning in CI/CD",
+                                "version":  "latest"
+                            },
+                  "docker_scout":  {
+                                       "description":  "Docker security analysis",
+                                       "usage":  "Image vulnerability assessment",
+                                       "version":  "latest"
+                                   }
+              },
+    "alert_channels":  [
+                           "rocket-chat",
+                           "github-issues"
+                       ],
+    "generator":  "Setup-LocalDev.ps1"
+}

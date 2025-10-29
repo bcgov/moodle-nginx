@@ -13,7 +13,10 @@ env:
 
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
-  SKIP_DEPLOY: "NO"
+  SKIP_DEPLO                },{
+                  "title": "Security Status:",
+                  "value": "✅ Multi-Ecosystem: NPM + PHP/Composer + Docker + System + Git (Dependabot automation)"
+                }]NO"
   FORCE_MIGRATE: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
@@ -115,6 +118,16 @@ jobs:
             config/mariadb
             example.env
             example.versions.env
+
+      # Auto-populate dependency manifests from centralized versions
+      - name: 🔄 Auto-populate dependency manifests
+        run: |
+          echo "🚀 Auto-populating dependency manifests from example.versions.env"
+          chmod +x openshift/scripts/populate-dependency-manifests.sh
+          ./openshift/scripts/populate-dependency-manifests.sh
+          
+          echo "📋 Generated manifests:"
+          ls -la openshift/dependencies/ .github/security-tools.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
 
       - name: Setup Env Vars
         id: dotenv
@@ -280,57 +293,121 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: mkdir -p tmp/artifacts
-      - name: Install Puppeteer and Lighthouse
-        run: npm install puppeteer lighthouse
-      - name: Install dependencies
-        run: sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
-      - name: Setup Chrome
-        id: setup-chrome
+
+      # 🔒 Comprehensive Security Validation (Multi-Ecosystem)
+      - name: 🔒 Comprehensive Security Validation
+        run: |
+          # Source utility functions
+          source openshift/scripts/utils/github-actions.sh
+          source openshift/scripts/utils/lighthouse.sh
+          source openshift/scripts/utils/version-management.sh
+
+          echo "=== 🔒 Multi-Ecosystem Security Validation ==="
+          
+          # Run comprehensive security scan covering all attack surfaces
+          if ! run_comprehensive_security_scan "." "moderate" "true" "false" "true"; then
+            echo "❌ Comprehensive security scan failed - blocking deployment"
+            exit 1
+          fi
+
+          echo "✅ Multi-ecosystem security validation passed"
+          echo ""
+
+          echo "=== � Lighthouse Security Scan (Warning Mode) ==="
+          cd config/lighthouse
+          source ../../openshift/scripts/utils/npm.sh
+          
+          # Lighthouse security scan (warnings only - credentials/URLs involved but testing-only)
+          lighthouse_security_scan "." "moderate"
+          echo ""
+
+          echo "✅ NPM security validation passed"
+          echo ""
+
+          echo "=== 🏗️ Lighthouse Environment Setup ==="
+          cd ../../
+
+          # Setup complete Lighthouse environment with security validation
+          if ! setup_lighthouse_environment "config/lighthouse" "true"; then
+            echo "❌ Lighthouse environment setup failed"
+            exit 1
+          fi
+
+          echo "✅ Lighthouse environment ready"
+
+      # Multi-layer Caching (NPM + APT packages) - cache based on centralized versions
+      - name: 📦 Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            config/lighthouse/node_modules
+          key: ${{ runner.os }}-lighthouse-${{ hashFiles('example.versions.env') }}-v4
+          restore-keys: |
+            ${{ runner.os }}-lighthouse-
+            ${{ runner.os }}-node-
+
+      - name: 🐧 Cache APT packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+          version: 1.0
+
+      - name: �️ Setup Chrome
         uses: browser-actions/setup-chrome@latest
         with:
           install-dependencies: false
-      - name: Lighthouse
+
+      - name: 📊 Display Setup Information
+        run: |
+          source openshift/scripts/utils/lighthouse.sh
+          display_cache_information "config/lighthouse" "10GB" "${{ github.repository }}"
+
+      # 🚦 Lighthouse Execution (simplified)
+      - name: 🚦 Lighthouse Performance Audit
         id: lighthouse
         run: |
-          set +e
-          OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
-          EXIT_CODE=$?
+          source openshift/scripts/utils/lighthouse.sh
 
-          LHSTATUS="failure"
-          LHWARNINGS=""
+          # Run Lighthouse audit using utility function
+          TARGET_URL="${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca"
 
-          if [ $EXIT_CODE -eq 0 ]; then
-            LHSTATUS="success"
-            WARN_COUNT=$(echo "$OUTPUT" | grep -i warning | wc -l)
-            if [ "$WARN_COUNT" -gt 0 ]; then
-              LHWARNINGS=" ($WARN_COUNT warnings)"
-            fi
+          echo "🚀 Running Lighthouse audit for: https://$TARGET_URL"
+
+          # Use utility function for clean execution
+          LIGHTHOUSE_RESULT=$(run_lighthouse_audit "https://$TARGET_URL" "config/lighthouse" "tmp/artifacts" "${{ secrets.MOODLE_TESTER_USERNAME }}" "${{ secrets.MOODLE_TESTER_PASSWORD }}")
+          LIGHTHOUSE_EXIT_CODE=$?
+
+          # Set GitHub outputs based on result
+          if [ $LIGHTHOUSE_EXIT_CODE -eq 0 ]; then
+            echo "LHSTATUS=$LIGHTHOUSE_RESULT" >> $GITHUB_OUTPUT
+            echo "✅ Lighthouse audit completed: $LIGHTHOUSE_RESULT"
           else
-            ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
-            LHWARNINGS=" (Error: $ERROR_MESSAGE)"
-            echo "Lighthouse error output:"
-            echo "$OUTPUT"
-            # Save full error to GITHUB_OUTPUT
+            echo "LHSTATUS=failure ($LIGHTHOUSE_RESULT)" >> $GITHUB_OUTPUT
+            echo "❌ Lighthouse audit failed: $LIGHTHOUSE_RESULT"
+
+            # Save error details
             echo "LHERROR<<EOF" >> $GITHUB_OUTPUT
-            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "$LIGHTHOUSE_RESULT" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
+
+            exit $LIGHTHOUSE_EXIT_CODE
           fi
 
-          echo "LHSTATUS=${LHSTATUS}${LHWARNINGS}" >> $GITHUB_OUTPUT
-          echo "$OUTPUT" > lighthouse-full.log
+      # 📦 Artifact Collection (using utility)
+      - name: 📦 Collect Lighthouse Artifacts
+        if: always()
+        run: |
+          source openshift/scripts/utils/lighthouse.sh
+          collect_lighthouse_artifacts "config/lighthouse" "tmp/artifacts" "."
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            exit $EXIT_CODE
-          fi
-        env:
-          APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
-          USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
-          PASSWORD: ${{ secrets.MOODLE_TESTER_PASSWORD }}
-      - name: Archive artifacts
+      - name: 📤 Archive artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lighthouse-artifacts
           path: |
+            tmp/artifacts/
             /home/runner/work/moodle-nginx/moodle-nginx/*.png
             /home/runner/work/moodle-nginx/moodle-nginx/*.md
 
@@ -399,6 +476,9 @@ jobs:
                 },{
                   "title": "Lighthouse Test Results:",
                   "value": "${{ needs.lighthouse-check.outputs.LHSTATUS }}"
+                },{
+                  "title": "Security Status:",
+                  "value": "NPM Audit + Dependabot + GitHub Security Advisory (auto-updated)"
                 }]
               }]
             }

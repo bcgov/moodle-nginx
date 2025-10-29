@@ -1,0 +1,228 @@
+# Dependabot configuration for comprehensive dependency management
+# Auto-populated manifests enable security scanning across all ecosystems
+# Note: Manifests are generated from example.versions.env during builds
+version: 2
+updates:
+  # NPM dependencies (Lighthouse testing)
+  - package-ecosystem: "npm"
+    directory: "/config/lighthouse"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "npm"
+      - "lighthouse"
+      - "testing"
+      - "security"
+    commit-message:
+      prefix: "npm"
+      include: "scope"
+
+  # PHP Composer dependencies (Moodle additional packages)
+  - package-ecosystem: "composer"
+    directory: "/config/moodle"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "10:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "php"
+      - "composer"
+      - "moodle"
+      - "security"
+    commit-message:
+      prefix: "composer"
+      include: "scope"
+
+  # Docker images (auto-generated manifest)
+  - package-ecosystem: "docker"
+    directory: "/openshift/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "11:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "docker"
+      - "security"
+      - "infrastructure"
+      - "auto-generated"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+  # Helm charts (auto-generated manifest)
+  - package-ecosystem: "github-actions"
+    directory: "/openshift/dependencies"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "devops-team"
+    labels:
+      - "helm"
+      - "infrastructure"
+      - "auto-generated"
+    commit-message:
+      prefix: "helm"
+      include: "scope"
+
+  # Container Images (comprehensive coverage)
+  - package-ecosystem: "docker"
+    directory: "/openshift/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "docker"
+      - "containers"
+      - "security"
+      - "infrastructure"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    groups:
+      core-images:
+        patterns:
+          - "php*"
+          - "mariadb*"
+          - "nginx*"
+      redis-stack:
+        patterns:
+          - "*redis*"
+      utility-images:
+        patterns:
+          - "golang*"
+          - "ubuntu*"
+          - "*backup*"
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "security"
+
+  # Helm Charts (platform dependencies)
+  - package-ecosystem: "github-actions"
+    directory: "/openshift/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "10:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "helm"
+      - "kubernetes"
+      - "infrastructure"
+
+  # Docker base images (legacy - for Dockerfiles)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "docker"
+      - "security"
+      - "base-images"
+      - "versions-env"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    groups:
+      php-stack:
+        patterns:
+          - "php:*"
+          - "mariadb:*"
+      nginx-stack:
+        patterns:
+          - "nginx*:*"
+      redis-stack:
+        patterns:
+          - "redis:*"
+          - "redis-sentinel:*"
+      infrastructure:
+        patterns:
+          - "golang:*"
+          - "ubuntu:*"
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "security"
+
+  # Docker images (comprehensive dependency tracking)
+  - package-ecosystem: "docker"
+    directory: "/config/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "docker"
+      - "dependencies"
+      - "security"
+      - "comprehensive-scan"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Helm chart dependencies
+  - package-ecosystem: "helm"
+    directory: "/config/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "10:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "infrastructure-team"
+    labels:
+      - "helm"
+      - "charts"
+      - "infrastructure"
+      - "security"
+    commit-message:
+      prefix: "helm"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "devops-team"
+    labels:
+      - "github-actions"
+      - "security"
+
+# Note: NPM dependencies are managed via example.versions.env
+# Lighthouse package.json is generated during CI/CD, not stored in repository
+# To update NPM versions, modify LIGHTHOUSE_VERSION and PUPPETEER_VERSION in example.versions.env

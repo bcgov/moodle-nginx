@@ -112,8 +112,8 @@ RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &&
 php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
 rm composer-setup.php
 
-# Install ZipStream library for Moodle plugins
-RUN composer require maennchen/zipstream-php:"^2.1" --with-all-dependencies
+# Copy and install PHP dependencies from composer.json
+COPY ./config/moodle/composer.json $MOODLE_APP_DIR/
 RUN composer install --no-dev --optimize-autoloader
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh

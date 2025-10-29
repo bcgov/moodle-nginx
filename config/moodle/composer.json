@@ -1,0 +1,27 @@
+{
+  "name": "bcgov/moodle-php-dependencies",
+  "description": "Additional PHP dependencies for Moodle deployment",
+  "type": "project",
+  "require": {
+    "maennchen/zipstream-php": "^2.1"
+  },
+  "require-dev": {},
+  "config": {
+    "optimize-autoloader": true,
+    "prefer-stable": true,
+    "sort-packages": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "scripts": {
+    "security-audit": "composer audit",
+    "update-deps": "composer update --with-all-dependencies"
+  },
+  "authors": [
+    {
+      "name": "Infrastructure Team",
+      "email": "infrastructure@gov.bc.ca"
+    }
+  ],
+  "license": "Apache-2.0"
+}
