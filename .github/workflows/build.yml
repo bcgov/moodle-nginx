@@ -13,10 +13,7 @@ env:
 
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
-  SKIP_DEPLO                },{
-                  "title": "Security Status:",
-                  "value": "✅ Multi-Ecosystem: NPM + PHP/Composer + Docker + System + Git (Dependabot automation)"
-                }]NO"
+  SKIP_DEPLOY: "NO"
   FORCE_MIGRATE: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
@@ -125,7 +122,7 @@ jobs:
           echo "🚀 Auto-populating dependency manifests from example.versions.env"
           chmod +x openshift/scripts/populate-dependency-manifests.sh
           ./openshift/scripts/populate-dependency-manifests.sh
-          
+
           echo "📋 Generated manifests:"
           ls -la openshift/dependencies/ .github/security-tools.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
 
@@ -294,7 +291,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: mkdir -p tmp/artifacts
 
-      # 🔒 Comprehensive Security Validation (Multi-Ecosystem)
+      # 🔒 Security Validation
       - name: 🔒 Comprehensive Security Validation
         run: |
           # Source utility functions
@@ -302,21 +299,21 @@ jobs:
           source openshift/scripts/utils/lighthouse.sh
           source openshift/scripts/utils/version-management.sh
 
-          echo "=== 🔒 Multi-Ecosystem Security Validation ==="
-          
+          echo "=== 🔒 Security Validation ==="
+
           # Run comprehensive security scan covering all attack surfaces
           if ! run_comprehensive_security_scan "." "moderate" "true" "false" "true"; then
             echo "❌ Comprehensive security scan failed - blocking deployment"
             exit 1
           fi
 
-          echo "✅ Multi-ecosystem security validation passed"
+          echo "✅ Security validation passed"
           echo ""
 
           echo "=== � Lighthouse Security Scan (Warning Mode) ==="
           cd config/lighthouse
           source ../../openshift/scripts/utils/npm.sh
-          
+
           # Lighthouse security scan (warnings only - credentials/URLs involved but testing-only)
           lighthouse_security_scan "." "moderate"
           echo ""
@@ -335,7 +332,7 @@ jobs:
 
           echo "✅ Lighthouse environment ready"
 
-      # Multi-layer Caching (NPM + APT packages) - cache based on centralized versions
+      # Multi-layer Caching (NPM + APT packages)
       - name: 📦 Cache Dependencies
         uses: actions/cache@v4
         with:
