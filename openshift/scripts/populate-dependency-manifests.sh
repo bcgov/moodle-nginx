@@ -64,30 +64,19 @@ load_versions() {
     log_success "Loaded environment variables"
 }
 
-# Generate Docker images manifest for Dependabot
-generate_docker_manifest() {
-    local output_file="$PROJECT_ROOT/openshift/dependencies/images.yml"
-    log_info "Generating Docker images manifest: $output_file"
-
-    # Create directory if it doesn't exist
-    mkdir -p "$(dirname "$output_file")"
-
-    # Generate YAML file
-    cat > "$output_file" << EOF
-
-# Generate PHP Composer dependencies manifest for security scanning
+# Generate PHP Composer dependencies for both production and security scanning
 generate_composer_manifest() {
-    local output_file="$PROJECT_ROOT/config/moodle/composer.generated.json"
-    log_info "Generating Composer dependencies from centralized versions: $output_file"
+    local output_file="$PROJECT_ROOT/config/moodle/composer.json"
+    log_info "Generating production Composer dependencies from centralized versions: $output_file"
 
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$output_file")"
 
-    # Generate composer.json with centralized versions
+    # Generate composer.json with centralized versions for both production and Dependabot
     cat > "$output_file" << EOF
 {
-  "name": "bcgov/moodle-php-dependencies-generated",
-  "description": "Generated PHP dependencies from centralized version management",
+  "name": "bcgov/moodle-php-dependencies",
+  "description": "PHP dependencies for Moodle deployment - Security-controlled versions from centralized management",
   "type": "project",
   "require": {
     "maennchen/zipstream-php": "${ZIPSTREAM_PHP_VERSION}"
@@ -106,18 +95,26 @@ generate_composer_manifest() {
   "scripts": {
     "security-audit": "composer audit --format=json",
     "security-check": "composer audit --format=table",
-    "validate-lock": "composer validate --strict --check-lock"
+    "validate-lock": "composer validate --strict --check-lock",
+    "update-deps": "composer update --with-all-dependencies --dry-run"
   },
+  "authors": [
+    {
+      "name": "Infrastructure Team",
+      "email": "infrastructure@gov.bc.ca"
+    }
+  ],
+  "license": "Apache-2.0",
   "extra": {
     "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
     "source_file": "example.versions.env",
     "generator": "populate-dependency-manifests.sh",
-    "purpose": "Centralized PHP dependency version management"
+    "purpose": "Centralized PHP dependency management for production and security scanning"
   }
 }
 EOF
 
-    log_success "Generated Composer dependencies manifest"
+    log_success "Generated production Composer dependencies (used for both Docker builds and Dependabot scanning)"
 }
 
 # Generate Docker images manifest for Dependabot
@@ -389,7 +386,8 @@ validate_manifests() {
     # Check JSON manifests
     for json_file in \
         "$PROJECT_ROOT/.github/security-tools.json" \
-        "$PROJECT_ROOT/config/moodle/git-dependencies.json"; do
+        "$PROJECT_ROOT/config/moodle/git-dependencies.json" \
+        "$PROJECT_ROOT/config/moodle/composer.json"; do
 
         if [ -f "$json_file" ]; then
             if ! jq . "$json_file" >/dev/null 2>&1; then

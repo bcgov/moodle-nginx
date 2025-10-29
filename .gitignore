@@ -11,3 +11,10 @@ var/*
 !example.secrets
 node_modules
 package*.json
+
+# Generated dependency manifests (auto-generated from example.versions.env)
+config/moodle/composer.json
+config/moodle/composer.lock
+openshift/dependencies/
+.github/security-tools.json
+config/moodle/git-dependencies.json
