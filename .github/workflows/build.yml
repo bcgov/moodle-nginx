@@ -106,6 +106,9 @@ jobs:
       CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
       SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
       SKIP_DEPLOY: ${{ env.SKIP_DEPLOY }}
+      PHP_SECURITY_STATUS: ${{ steps.php-security.outputs.PHP_SECURITY_STATUS }}
+      PHP_SECURITY_RESULT: ${{ steps.php-security.outputs.PHP_SECURITY_RESULT }}
+      PHP_SECURITY_SUMMARY: ${{ steps.php-security.outputs.PHP_SECURITY_SUMMARY }}
     steps:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
@@ -121,18 +124,45 @@ jobs:
 
           echo "📋 Generated ephemeral manifests (not committed to repository):"
           ls -la openshift/dependencies/ .github/security-tools.json config/moodle/composer.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
-          
+
           echo "🔒 These files are generated fresh for each build and never stored in git"
 
       # Validate PHP dependencies security (using ephemeral composer.json)
       - name: 🔒 PHP Dependencies Security Validation
+        id: php-security
         run: |
           if [ -f "openshift/scripts/validate-php-security.sh" ]; then
             chmod +x openshift/scripts/validate-php-security.sh
-            ./openshift/scripts/validate-php-security.sh
+            if ./openshift/scripts/validate-php-security.sh; then
+              echo "PHP_SECURITY_STATUS=✅ PASSED" >> $GITHUB_OUTPUT
+              echo "PHP_SECURITY_RESULT=success" >> $GITHUB_OUTPUT
+              echo "PHP_SECURITY_SUMMARY=No vulnerabilities detected" >> $GITHUB_OUTPUT
+            else
+              echo "PHP_SECURITY_STATUS=❌ FAILED" >> $GITHUB_OUTPUT
+              echo "PHP_SECURITY_RESULT=failure" >> $GITHUB_OUTPUT
+              echo "PHP_SECURITY_SUMMARY=Security issues detected - check artifacts" >> $GITHUB_OUTPUT
+              exit 1
+            fi
           else
             echo "⚠️ PHP security validation script not found, skipping..."
+            echo "PHP_SECURITY_STATUS=⚠️ SKIPPED" >> $GITHUB_OUTPUT
+            echo "PHP_SECURITY_RESULT=skipped" >> $GITHUB_OUTPUT
+            echo "PHP_SECURITY_SUMMARY=Security validation script not found" >> $GITHUB_OUTPUT
           fi
+
+      # Upload security reports as artifacts
+      - name: 📤 Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-security-reports
+          path: |
+            tmp/php-security-summary.json
+            tmp/php-security-summary.md
+            tmp/php-license-report.txt
+            tmp/php-outdated-report.json
+            tmp/php-security-report.json
+          retention-days: 30
 
       - name: Setup Env Vars
         id: dotenv
@@ -482,8 +512,14 @@ jobs:
                   "title": "Lighthouse Test Results:",
                   "value": "${{ needs.lighthouse-check.outputs.LHSTATUS }}"
                 },{
+                  "title": "PHP Security Scan:",
+                  "value": "${{ needs.checkEnv.outputs.PHP_SECURITY_STATUS }} - ${{ needs.checkEnv.outputs.PHP_SECURITY_SUMMARY }}"
+                },{
+                  "title": "Security Reports:",
+                  "value": "[GitHub Actions Summary](${{ env.INSPECT_JOB_URL }}) | [📁 Security Artifacts](${{ env.INSPECT_JOB_URL }}#artifacts)"
+                },{
                   "title": "Security Status:",
-                  "value": "NPM Audit + Dependabot + GitHub Security Advisory (auto-updated)"
+                  "value": "NPM Audit + PHP Dependencies + Dependabot + GitHub Security Advisory (auto-updated)"
                 }]
               }]
             }

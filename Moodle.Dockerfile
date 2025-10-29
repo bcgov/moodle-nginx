@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     rsync \
+    jq \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -112,9 +113,17 @@ RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &&
 php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
 rm composer-setup.php
 
-# Copy centrally managed PHP dependencies
-COPY ./config/moodle/composer.json $MOODLE_APP_DIR/
-# Install dependencies with security validation (allow warnings for semantic versioning)
+# Copy dependency management files and generate ephemeral composer.json using existing utility
+COPY ./example.versions.env ./
+COPY ./config/dependencies/dependency-config.json ./config/dependencies/
+COPY ./openshift/scripts/populate-dependency-manifests.sh ./openshift/scripts/
+
+# Generate ephemeral composer.json using the existing utility function
+RUN chmod +x ./openshift/scripts/populate-dependency-manifests.sh && \
+    ./openshift/scripts/populate-dependency-manifests.sh && \
+    cp ./config/moodle/composer.json $MOODLE_APP_DIR/composer.json
+
+# Install dependencies with security validation (using ephemeral composer.json)
 RUN composer update --no-dev --optimize-autoloader --no-scripts && \
     composer audit --format=table && \
     (composer validate --strict || composer validate)
