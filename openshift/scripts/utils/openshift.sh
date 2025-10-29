@@ -631,7 +631,7 @@ debug_deployment_pods() {
         oc get pods -l "$selector_string" -n "$namespace" -o name 2>/dev/null || echo "    No pods found with actual selector"
       fi
     else
-      log_warning "    Could not parse selector"
+      log_warn "    Could not parse selector"
     fi
   fi
 }
@@ -795,7 +795,7 @@ wait_for() {
 
   # Check if the resource exists before attempting to scale
   if ! oc get $resource_type $resource_name &> /dev/null; then
-    log_warning "$resource_type/$resource_name does not exist. Skipping..."
+    log_warn "$resource_type/$resource_name does not exist. Skipping..."
     return 0
   fi
 
@@ -867,7 +867,7 @@ check_timestamp() {
 
   # Check if the environment variable is set and valid
   if ! [[ "$rerun_block_seconds" =~ ^[0-9]+$ ]]; then
-    log_warning "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
+    log_warn "Invalid IMAGE_REBUILD_TIME_LIMIT value ($IMAGE_REBUILD_TIME_LIMIT). Using default value."
     rerun_block_seconds=$default_rerun_block_seconds
   fi
 
@@ -898,7 +898,7 @@ check_timestamp() {
       return 0
     fi
   else
-    log_warning "No file found to test last run time ($file_to_test)."
+    log_warn "No file found to test last run time ($file_to_test)."
     return 0
   fi
 }
@@ -964,7 +964,7 @@ check_pod_logs() {
           log_info "Connection was lost but reestablished. No need to restart the pod."
           continue
         else
-          log_warning "Error found in pod logs: $error_search_string"
+          log_warn "Error found in pod logs: $error_search_string"
           $error_handler $pod
           return 1  # Return failure if an error was found and handled
         fi
@@ -1007,7 +1007,7 @@ check_deployment_logs() {
 
       # Check if PODS is empty
       if [ -z "$PODS" ]; then
-        log_warning "No pods found for deployment: $deployment"
+        log_warn "No pods found for deployment: $deployment"
         break
       fi
 
@@ -1152,7 +1152,7 @@ check_and_restart_pod() {
   local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
 
   if [[ -z "$pods" ]]; then
-    log_warning "No running pods found for selector: $selector"
+    log_warn "No running pods found for selector: $selector"
     return
   fi
 
@@ -1168,7 +1168,7 @@ check_and_restart_pod() {
     local logs=$(oc logs "$pod" --tail=50 2>/dev/null)
 
     if [[ -z "$logs" ]]; then
-      log_warning "No logs available for pod: $pod"
+      log_warn "No logs available for pod: $pod"
       continue
     fi
 
@@ -1187,7 +1187,7 @@ check_and_restart_pod() {
     done
 
     if [[ "$errors_found" == "true" ]]; then
-      log_warning "🔄 Restarting pod $pod due to error pattern: $found_pattern"
+      log_warn "🔄 Restarting pod $pod due to error pattern: $found_pattern"
       oc delete pod "$pod" --grace-period=0 --force 2>/dev/null || true
       pods_restarted=$((pods_restarted + 1))
 
@@ -1281,7 +1281,7 @@ verify_application_response() {
   # Get the route URL
   local route_url=$(oc get route -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
   if [[ -z "$route_url" ]]; then
-    log_warning "Could not determine route URL, skipping response verification"
+    log_warn "Could not determine route URL, skipping response verification"
     return 0
   fi
 
@@ -1329,7 +1329,7 @@ apply_resource_patch() {
 
   # Check if the resource exists
   if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
-    log_warning "$resource_type $resource_name does not exist. Skipping patch."
+    log_warn "$resource_type $resource_name does not exist. Skipping patch."
     return 1
   fi
 
@@ -1346,7 +1346,7 @@ apply_resource_patch() {
     rm -f "$patch_file"
     return 0
   else
-    log_warning "Warning: Failed to apply patch to $resource_type/$resource_name"
+    log_warn "Warning: Failed to apply patch to $resource_type/$resource_name"
     rm -f "$patch_file"
     return 1
   fi
@@ -1376,7 +1376,7 @@ verify_patch_result() {
     if [[ "$actual" == "$expected" ]]; then
       log_success "Verified: $jsonpath = $expected"
     else
-      log_warning "Failed verification: $jsonpath = '$actual' (expected '$expected')"
+      log_warn "Failed verification: $jsonpath = '$actual' (expected '$expected')"
       all_verified=false
     fi
   done
@@ -1581,7 +1581,7 @@ disable_maintenance_mode() {
   fi
 
   log_success "Route redirection completed - traffic now directed to $target_service_name"
-  log_warning "Note: Maintenance service scaling should be handled by caller after verification"
+  log_warn "Note: Maintenance service scaling should be handled by caller after verification"
 }
 
 # =============================================================================
@@ -1823,7 +1823,7 @@ handle_deployment_status() {
     local status=$?
 
     if [[ $status -ne 0 ]]; then
-      log_warning "Failed to retrieve pods for resource: $resource_name. Retrying..."
+      log_warn "Failed to retrieve pods for resource: $resource_name. Retrying..."
       retry_count=$((retry_count + 1))
       if [[ $retry_count -ge $max_retries ]]; then
         log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
@@ -1835,7 +1835,7 @@ handle_deployment_status() {
 
     if [[ $scale_direction == "up" ]]; then
       if [[ -z "$pods" ]]; then
-        log_warning "No pods found for $resource_name. Retrying..."
+        log_warn "No pods found for $resource_name. Retrying..."
 
         # Add debug info on first failure and every 10 retries
         if [[ $retry_count -eq 0 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
@@ -1901,7 +1901,7 @@ handle_pods_in_resource() {
       for pod in $pods; do
         if ! $check_function "$pod" "$namespace" "$error_search_string" "$error_handler"; then
           all_pods_healthy=false
-          log_warning "Pod $pod has errors. Waiting for restart..."
+          log_warn "Pod $pod has errors. Waiting for restart..."
           break
         fi
       done
@@ -1950,7 +1950,7 @@ create_or_update_helm_deployment() {
     if [[ $? -eq 0 ]]; then
       log_success "Helm upgrade completed successfully"
     else
-      log_warning "Helm upgrade may have issues, checking status..."
+      log_warn "Helm upgrade may have issues, checking status..."
       helm status $helm_name
     fi
   else

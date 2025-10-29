@@ -268,7 +268,7 @@ log_info "🔧 Apply Redis probe fixes..."
 if apply_redis_probe_fixes "$redis_node_name" "$OC_PROJECT" "remove"; then
   log_info "✅ All Redis probes removed successfully (matching test environment)"
 else
-  log_warning "⚠️ Redis probe fixes failed, but continuing..."
+  log_warn "⚠️ Redis probe fixes failed, but continuing..."
 fi
 
 # Scale to desired replicas
