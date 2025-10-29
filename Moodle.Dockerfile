@@ -118,53 +118,13 @@ COPY ./example.versions.env ./
 COPY ./config/dependencies/dependency-config.json ./config/dependencies/
 COPY ./openshift/scripts/populate-dependency-manifests.sh ./openshift/scripts/
 
-# Generate ephemeral composer.json - temporary direct approach for debugging
-RUN echo "=== DEBUG: Environment check ===" && \
-    source ./example.versions.env && \
-    echo "ZIPSTREAM_PHP_VERSION=${ZIPSTREAM_PHP_VERSION}" && \
-    mkdir -p ./config/moodle && \
-    cat > ./config/moodle/composer.json << EOF
-{
-  "name": "bcgov/moodle-php-dependencies",
-  "description": "PHP dependencies for Moodle deployment - Security-controlled versions from centralized management",
-  "type": "project",
-  "require": {
-    "maennchen/zipstream-php": "${ZIPSTREAM_PHP_VERSION}"
-  },
-  "require-dev": {},
-  "config": {
-    "optimize-autoloader": true,
-    "prefer-stable": true,
-    "sort-packages": true,
-    "audit": {
-      "abandoned": "report"
-    }
-  },
-  "minimum-stability": "stable",
-  "prefer-stable": true,
-  "scripts": {
-    "security-audit": "composer audit --format=json",
-    "security-check": "composer audit --format=table",
-    "validate-lock": "composer validate --strict --check-lock",
-    "update-deps": "composer update --with-all-dependencies --dry-run"
-  },
-  "authors": [
-    {
-      "name": "Infrastructure Team",
-      "email": "infrastructure@gov.bc.ca"
-    }
-  ],
-  "license": "Apache-2.0",
-  "extra": {
-    "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "source_file": "example.versions.env",
-    "generator": "Dockerfile (temporary debug)",
-    "purpose": "Centralized PHP dependency management for production and security scanning"
-  }
-}
-EOF && \
+# Generate ephemeral composer.json using the populate-dependency-manifests.sh script
+RUN chmod +x ./openshift/scripts/populate-dependency-manifests.sh && \
+    echo "=== DEBUG: Running dependency manifest generation ===" && \
+    ./openshift/scripts/populate-dependency-manifests.sh && \
     echo "=== DEBUG: Generated composer.json content ===" && \
     cat ./config/moodle/composer.json && \
+    echo "=== DEBUG: Copying to Moodle directory ===" && \
     cp ./config/moodle/composer.json $MOODLE_APP_DIR/composer.json
 
 # Install dependencies with security validation (using ephemeral composer.json)
