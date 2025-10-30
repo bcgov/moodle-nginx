@@ -41,6 +41,7 @@ REDIS_ARGS=(
   "--set" "image.tag=$(echo "$REDIS_IMAGE" | cut -d':' -f2)"
   "--set" "sentinel.image.repository=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)"
   "--set" "sentinel.image.tag=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)"
+  "--set" "global.imagePullSecrets[0].name=$(echo "$ARTIFACTORY_PULL_SECRET" | cut -d':' -f1)"
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
   "--set" "redis.resources.requests.ephemeral-storage=50Mi"
@@ -51,13 +52,13 @@ REDIS_ARGS=(
   "--version" "$REDIS_CHART_VERSION"
 )
 
-# Create a minimal values file matching test environment
+# Create a minimal values file
 cat <<EOF > redis-values.yaml
 global:
   security:
     allowInsecureImages: true
   imagePullSecrets:
-    - name: "${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
+    - name: "$ARTIFACTORY_PULL_SECRET"
 
 # Use proven working image tags from test environment
 image:

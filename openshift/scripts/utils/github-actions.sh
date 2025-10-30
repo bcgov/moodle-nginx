@@ -551,4 +551,3 @@ display_security_best_practices() {
   log_info "   ✅ CodeQL for static code analysis"
   log_info "   ✅ Custom npm.sh utilities for supply chain protection"
 }
-EOF

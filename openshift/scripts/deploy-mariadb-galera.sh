@@ -91,7 +91,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
     --set image.tag=$RESOLVED_IMAGE_TAG \
     --set global.security.allowInsecureImages=true \
-    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" \
+    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
     --set replicaCount=$DB_REPLICAS \
