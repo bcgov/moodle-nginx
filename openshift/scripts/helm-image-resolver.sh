@@ -13,6 +13,9 @@ resolve_helm_image() {
 
     if [ -z "$image_name_tag" ]; then
         echo "❌ Error: ${image_var} not defined in environment" >&2
+        echo "   Available environment variables starting with image-related names:" >&2
+        env | grep -i "IMAGE\|REGISTRY\|REPO" | head -10 >&2 || echo "   (no matching environment variables found)" >&2
+        echo "   💡 Make sure to source example.versions.env before calling this function" >&2
         return 1
     fi
 
@@ -21,12 +24,14 @@ resolve_helm_image() {
     if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
         if [ -z "$ARTIFACTORY_REGISTRY" ]; then
             echo "❌ Error: USE_ARTIFACTORY=true but ARTIFACTORY_REGISTRY not defined" >&2
+            echo "   💡 Set ARTIFACTORY_REGISTRY or set USE_ARTIFACTORY=false" >&2
             return 1
         fi
         registry="$ARTIFACTORY_REGISTRY"
     else
         if [ -z "$HELM_REPO" ]; then
             echo "❌ Error: HELM_REPO not defined in environment" >&2
+            echo "   💡 Make sure to source example.versions.env before calling this function" >&2
             return 1
         fi
         registry="$HELM_REPO"
@@ -68,21 +73,37 @@ validate_helm_environment() {
     local all_valid=true
 
     echo "🔍 Validating Helm image environment variables..."
+    echo "📋 Environment Status:"
+    echo "   USE_ARTIFACTORY: ${USE_ARTIFACTORY:-NOT_SET}"
+    echo "   HELM_REPO: ${HELM_REPO:-NOT_SET}"
+    echo "   ARTIFACTORY_REGISTRY: ${ARTIFACTORY_REGISTRY:-NOT_SET}"
+    echo ""
 
     for image in "${images[@]}"; do
-        if resolve_helm_image "$image" >/dev/null 2>&1; then
-            echo "✅ $image: ${RESOLVED_FULL_IMAGE}"
+        local image_value="${!image}"
+        if [ -n "$image_value" ]; then
+            if resolve_helm_image "$image" >/dev/null 2>&1; then
+                echo "✅ $image: ${RESOLVED_FULL_IMAGE}"
+            else
+                echo "❌ $image: Resolution failed (${image_value})"
+                all_valid=false
+            fi
         else
-            echo "❌ $image: Configuration missing or invalid"
+            echo "❌ $image: NOT_SET"
             all_valid=false
         fi
     done
 
+    echo ""
     if [ "$all_valid" = "true" ]; then
         echo "✅ All Helm image configurations are valid"
         return 0
     else
         echo "❌ Some Helm image configurations are invalid"
+        echo "💡 Troubleshooting steps:"
+        echo "   1. Make sure you've sourced example.versions.env"
+        echo "   2. Check that all required variables are set in example.versions.env"
+        echo "   3. Verify HELM_REPO and ARTIFACTORY_REGISTRY are properly configured"
         return 1
     fi
 }

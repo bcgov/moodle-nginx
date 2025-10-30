@@ -3,6 +3,13 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Load environment variables from versions file
+if [[ -f "./example.versions.env" ]]; then
+    source ./example.versions.env
+else
+    log_warn "example.versions.env not found - using environment variables from deployment"
+fi
+
 # Source Helm image resolver for DRY image management
 source ./openshift/scripts/helm-image-resolver.sh
 

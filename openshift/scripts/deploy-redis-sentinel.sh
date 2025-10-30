@@ -4,6 +4,13 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Load environment variables from versions file
+if [[ -f "./example.versions.env" ]]; then
+    source ./example.versions.env
+else
+    log_warn "example.versions.env not found - using environment variables from deployment"
+fi
+
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
 
