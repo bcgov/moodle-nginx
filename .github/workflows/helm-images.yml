@@ -77,14 +77,17 @@ jobs:
           driver-opts: |
             image=moby/buildkit:v0.12.5
 
-      # Cache Docker layers in GitHub Actions
+      # Cache Docker layers in GitHub Actions for cross-deployment reuse
       - name: 🗂️ Setup Docker Layer Cache
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: helm-images-${{ runner.os }}-buildx-${{ github.sha }}
+          # Use content-based cache key for maximum reuse across deployments
+          # Cache will persist until image versions change in example.versions.env
+          key: helm-images-${{ runner.os }}-${{ hashFiles('example.versions.env') }}-v2
           restore-keys: |
-            helm-images-${{ runner.os }}-buildx-
+            helm-images-${{ runner.os }}-${{ hashFiles('example.versions.env') }}-
+            helm-images-${{ runner.os }}-
 
       # Pre-pull and cache common base layers to speed up subsequent operations
       - name: 🚀 Pre-cache Common Base Layers
@@ -111,6 +114,21 @@ jobs:
           done
 
           echo "🎉 Base layer caching complete!"
+
+      # Show cache information for debugging
+      - name: 📊 Cache Information
+        run: |
+          echo "📋 Docker Layer Cache Information:"
+          echo "Cache Key: helm-images-${{ runner.os }}-${{ hashFiles('example.versions.env') }}-v2"
+          echo "Cache Path: /tmp/.buildx-cache"
+          if [ -d "/tmp/.buildx-cache" ]; then
+            echo "Cache Size: $(du -sh /tmp/.buildx-cache 2>/dev/null | cut -f1 || echo 'unknown')"
+            echo "Cache Contents: $(ls -la /tmp/.buildx-cache 2>/dev/null | wc -l || echo '0') files"
+          else
+            echo "Cache Status: Not found (first run or cache miss)"
+          fi
+          echo ""
+          echo "💡 Cache will be reused across deployments until image versions change in example.versions.env"
 
       - name: 🛠️ Optimized Helm Images Push to Artifactory
         run: |
