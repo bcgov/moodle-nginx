@@ -41,8 +41,10 @@ resolve_helm_image() {
     local full_image="${registry}/${image_name_tag}"
 
     # Extract repository and tag for Helm --set commands
-    local repository="${registry}/${image_name_tag%:*}"  # Everything before the last ':'
-    local tag="${image_name_tag#*:}"                     # Everything after the first ':'
+    # For image "artifacts.../m950-learning/bitnamilegacy/mariadb-galera:10.6"
+    # We want repository="artifacts.../m950-learning/bitnamilegacy/mariadb-galera" and tag="10.6"
+    local repository="${full_image%:*}"  # Everything before the last ':'
+    local tag="${full_image##*:}"        # Everything after the last ':'
 
     # Export variables for the calling script
     export RESOLVED_IMAGE_REPOSITORY="$repository"
@@ -50,6 +52,8 @@ resolve_helm_image() {
     export RESOLVED_FULL_IMAGE="$full_image"
 
     echo "🔧 Resolved ${image_var}: ${full_image}"
+    echo "   Repository: $repository"
+    echo "   Tag: $tag"
     return 0
 }
 
@@ -79,13 +83,27 @@ validate_helm_environment() {
     echo "   ARTIFACTORY_REGISTRY: ${ARTIFACTORY_REGISTRY:-NOT_SET}"
     echo ""
 
+    # Show debug info for the specific images we're using
+    echo "📋 Raw Image Variables:"
+    for image in "${images[@]}"; do
+        local image_value="${!image}"
+        echo "   $image: ${image_value:-NOT_SET}"
+    done
+    echo ""
+
+    echo "📋 Resolved Image Configurations:"
     for image in "${images[@]}"; do
         local image_value="${!image}"
         if [ -n "$image_value" ]; then
-            if resolve_helm_image "$image" >/dev/null 2>&1; then
+            # Capture resolution output for debugging
+            if resolve_helm_image "$image" 2>/dev/null; then
                 echo "✅ $image: ${RESOLVED_FULL_IMAGE}"
+                echo "   → Repository: ${RESOLVED_IMAGE_REPOSITORY}"
+                echo "   → Tag: ${RESOLVED_IMAGE_TAG}"
             else
                 echo "❌ $image: Resolution failed (${image_value})"
+                echo "   → Debugging resolution..."
+                resolve_helm_image "$image"  # Show errors
                 all_valid=false
             fi
         else
