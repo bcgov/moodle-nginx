@@ -65,7 +65,7 @@ load_versions() {
     log_info "Key Docker image variables loaded:"
     log_info "  PHP_IMAGE: ${PHP_IMAGE:-UNDEFINED}"
     log_info "  CRON_IMAGE: ${CRON_IMAGE:-UNDEFINED}"
-    log_info "  DB_IMAGE: ${DB_IMAGE:-UNDEFINED}"
+    log_info "  MARIADB_IMAGE: ${MARIADB_IMAGE:-UNDEFINED}"
     log_info "  WEB_IMAGE: ${WEB_IMAGE:-UNDEFINED}"
     log_info "  BACKUP_IMAGE: ${BACKUP_IMAGE:-UNDEFINED}"
     log_info "  REDIS_IMAGE: ${REDIS_IMAGE:-UNDEFINED}"
@@ -139,7 +139,7 @@ generate_docker_manifest() {
 
     # Validate required variables are set
     local required_vars=(
-        "PHP_IMAGE" "CRON_IMAGE" "DB_IMAGE" "WEB_IMAGE"
+        "PHP_IMAGE" "CRON_IMAGE" "MARIADB_IMAGE" "WEB_IMAGE"
         "BACKUP_IMAGE" "REDIS_IMAGE" "REDIS_SENTINEL_IMAGE"
         "GOLANG_IMAGE" "UBUNTU_IMAGE"
     )
@@ -170,7 +170,7 @@ services:
     image: "${CRON_IMAGE}"
 
   database:
-    image: "${DB_IMAGE}"
+    image: "${MARIADB_IMAGE}"
 
   web:
     image: "${WEB_IMAGE}"
@@ -366,7 +366,7 @@ generate_local_env() {
 # Core Images
 PHP_IMAGE=${PHP_IMAGE}
 CRON_IMAGE=${CRON_IMAGE}
-DB_IMAGE=${DB_IMAGE}
+MARIADB_IMAGE=${MARIADB_IMAGE}
 WEB_IMAGE=${WEB_IMAGE}
 REDIS_IMAGE=${REDIS_IMAGE}
 REDIS_SENTINEL_IMAGE=${REDIS_SENTINEL_IMAGE}

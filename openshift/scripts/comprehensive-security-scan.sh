@@ -47,7 +47,7 @@ scan_container_images() {
     local images=(
         "$PHP_IMAGE"
         "$CRON_IMAGE" 
-        "$DB_IMAGE"
+        "$MARIADB_IMAGE"
         "$WEB_IMAGE"
         "$BACKUP_IMAGE"
         "$REDIS_IMAGE"
@@ -319,7 +319,7 @@ fi)
 | Component | Image | Version | Purpose |
 |-----------|--------|---------|---------|
 | PHP | $PHP_IMAGE | Latest | Main application runtime |
-| Database | $DB_IMAGE | Latest | Data persistence |
+| Database | $MARIADB_IMAGE | Latest | Data persistence |
 | Web Server | $WEB_IMAGE | Latest | HTTP proxy and static files |
 | Cache | $REDIS_IMAGE | Latest | Session and data caching |
 | Backup | $BACKUP_IMAGE | Latest | Database backup utility |
@@ -373,7 +373,7 @@ EOF
   ],
   "base_images": {
     "php": "$PHP_IMAGE",
-    "database": "$DB_IMAGE", 
+    "database": "$MARIADB_IMAGE", 
     "web": "$WEB_IMAGE",
     "redis": "$REDIS_IMAGE",
     "backup": "$BACKUP_IMAGE"

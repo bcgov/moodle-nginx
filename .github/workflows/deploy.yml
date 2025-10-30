@@ -47,7 +47,7 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
-      DB_IMAGE:
+      MARIADB_IMAGE:
         required: true
         type: string
       DB_HOST:
@@ -205,7 +205,7 @@ jobs:
           CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
-          DB_IMAGE: ${{ inputs.DB_IMAGE }}
+          MARIADB_IMAGE: ${{ inputs.MARIADB_IMAGE }}
           DB_REPLICAS: ${{ inputs.DB_REPLICAS }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}

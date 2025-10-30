@@ -213,10 +213,18 @@ optimize_image_push() {
     # Use ARTIFACTORY_REGISTRY environment variable if available for dynamic configuration
     local artifactory_image
     if [ -n "${ARTIFACTORY_REGISTRY:-}" ]; then
-        # Extract image name without registry prefix (e.g., mariadb-galera:tag from bitnamilegacy/mariadb-galera:tag)
-        local image_name=$(echo "$source_image" | sed 's|^[^/]*/||')
-        artifactory_image="$ARTIFACTORY_REGISTRY/$image_name"
-        log_info "📝 Using ARTIFACTORY_REGISTRY configuration: $ARTIFACTORY_REGISTRY"
+        # Check if source image already includes ARTIFACTORY_REGISTRY path structure
+        if [[ "$source_image" == *"$ARTIFACTORY_REGISTRY"* ]]; then
+            # Image is already in Artifactory format - use as-is
+            artifactory_image="$source_image"
+            log_info "📝 Source image already in Artifactory format: $ARTIFACTORY_REGISTRY"
+        else
+            # Transform source image to Artifactory format
+            # For images like "bcgovimages/backup-container:tag" -> "artifacts.../m950-learning/bcgovimages/backup-container:tag"
+            # For images like "bitnamilegacy/redis:tag" -> "artifacts.../m950-learning/bitnamilegacy/redis:tag"
+            artifactory_image="$ARTIFACTORY_REGISTRY/$source_image"
+            log_info "📝 Using ARTIFACTORY_REGISTRY configuration: $ARTIFACTORY_REGISTRY"
+        fi
     else
         # Fallback: Direct concatenation with ARTIFACTORY_URL
         artifactory_image="$ARTIFACTORY_URL/$source_image"

@@ -1,5 +1,6 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
+source ./openshift/scripts/helm-image-resolver.sh
 
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
@@ -8,6 +9,15 @@ helm repo add bcgov http://bcgov.github.io/helm-charts
 helm repo update
 
 log_info "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
+
+# Resolve backup image configuration with Artifactory support
+if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
+    RESOLVED_BACKUP_IMAGE="$ARTIFACTORY_REGISTRY/$BCGOV_REGISTRY/$BACKUP_IMAGE"
+    log_info "🏭 Using Artifactory backup image: $RESOLVED_BACKUP_IMAGE"
+else
+    RESOLVED_BACKUP_IMAGE="$BCGOV_REGISTRY/$BACKUP_IMAGE"
+    log_info "🐳 Using upstream backup image: $RESOLVED_BACKUP_IMAGE"
+fi
 
 # Ensure backup storage secrets are managed properly before Helm deployment
 log_info "🔍 Pre-deployment secret management..."
@@ -228,7 +238,7 @@ if [[ `oc describe deployment $DB_BACKUP_DEPLOYMENT_FULL_NAME 2>&1` =~ "NotFound
   exit 1
 else
   log_info "Backup deployment FOUND. Updating image..."
-  oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME backup-storage=$DB_BACKUP_IMAGE
+  oc set image deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME backup-storage=$RESOLVED_BACKUP_IMAGE
 
   if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
     log_debug "🔍 Checking deployment configuration for environment variables..."
