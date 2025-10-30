@@ -2,6 +2,14 @@
 source ./openshift/scripts/_utils.sh
 source ./openshift/scripts/helm-image-resolver.sh
 
+# Source environment variables from centralized configuration
+if [[ -f "./example.versions.env" ]]; then
+    source ./example.versions.env
+    log_info "📋 Loaded centralized environment variables"
+else
+    log_warn "example.versions.env not found - using environment variables from deployment"
+fi
+
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
 
@@ -10,12 +18,26 @@ helm repo update
 
 log_info "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 
+# Debug: Show key environment variables
+log_debug "🔍 Key environment variables:"
+log_debug "  BACKUP_IMAGE: ${BACKUP_IMAGE:-'NOT SET'}"
+log_debug "  ARTIFACTORY_REGISTRY: ${ARTIFACTORY_REGISTRY:-'NOT SET'}"
+log_debug "  USE_ARTIFACTORY: ${USE_ARTIFACTORY:-'NOT SET'}"
+
+# Validate required environment variables
+if [[ -z "$BACKUP_IMAGE" ]]; then
+    log_error "BACKUP_IMAGE environment variable is required but not set"
+    exit 1
+fi
+
 # Resolve backup image configuration with Artifactory support
 if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
-    RESOLVED_BACKUP_IMAGE="$ARTIFACTORY_REGISTRY/$BCGOV_REGISTRY/$BACKUP_IMAGE"
+    # Use Artifactory cached image - prepend Artifactory registry to the working image
+    RESOLVED_BACKUP_IMAGE="${ARTIFACTORY_REGISTRY:-artifacts.developer.gov.bc.ca/m950-learning}/$BACKUP_IMAGE"
     log_info "🏭 Using Artifactory backup image: $RESOLVED_BACKUP_IMAGE"
 else
-    RESOLVED_BACKUP_IMAGE="$BCGOV_REGISTRY/$BACKUP_IMAGE"
+    # Use direct pull - this is the known working image reference
+    RESOLVED_BACKUP_IMAGE="$BACKUP_IMAGE"
     log_info "🐳 Using upstream backup image: $RESOLVED_BACKUP_IMAGE"
 fi
 
@@ -69,12 +91,26 @@ if oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
   fi
 fi
 
+# Extract repository and tag from resolved backup image
+# RESOLVED_BACKUP_IMAGE format: registry/namespace/image:tag
+if [[ "$RESOLVED_BACKUP_IMAGE" =~ ^(.+):([^:]+)$ ]]; then
+    BACKUP_IMAGE_REPOSITORY="${BASH_REMATCH[1]}"
+    BACKUP_IMAGE_TAG="${BASH_REMATCH[2]}"
+else
+    # If no tag specified, assume 'latest'
+    BACKUP_IMAGE_REPOSITORY="$RESOLVED_BACKUP_IMAGE"
+    BACKUP_IMAGE_TAG="latest"
+fi
+
+log_info "🎯 Using backup image repository: $BACKUP_IMAGE_REPOSITORY"
+log_info "🎯 Using backup image tag: $BACKUP_IMAGE_TAG"
+
 # Generate comprehensive values file for both install and upgrade
 cat <<EOF > backup-values.yaml
 image:
-  repository: "$BACKUP_HELM_CHART"
+  repository: "$BACKUP_IMAGE_REPOSITORY"
   pullPolicy: Always
-  tag: dev
+  tag: "$BACKUP_IMAGE_TAG"
 
 persistence:
   backup:
