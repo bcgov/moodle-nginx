@@ -3,6 +3,21 @@
 # Version Management Utilities
 # Generates dependency files from centralized version definitions
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source the core OpenShift utilities for logging functions
+if [[ -f "$SCRIPT_DIR/openshift.sh" ]]; then
+  source "$SCRIPT_DIR/openshift.sh"
+else
+  # Fallback: Define minimal logging functions if openshift.sh not found
+  log_info() { echo "ℹ️  $*"; }
+  log_warn() { echo "⚠️  $*"; }
+  log_error() { echo "❌ $*"; }
+  log_debug() { echo "🔍 Debug: $*"; }
+  log_success() { echo "✅ $*"; }
+fi
+
 # =============================================================================
 # VERSION MANAGEMENT UTILITIES MODULE
 # =============================================================================
