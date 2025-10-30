@@ -496,4 +496,12 @@ if [[ "${DEPLOYMENT_RESTART_NEEDED:-false}" == "true" ]]; then
   fi
 fi
 
+# Ensure Artifactory image pull secrets are configured
+log_info "🔐 Ensuring Artifactory access for backup deployment..."
+if ensure_image_pull_secrets "deployment" "$DB_BACKUP_DEPLOYMENT_FULL_NAME" "$DEPLOY_NAMESPACE"; then
+  log_info "✅ Backup deployment now has Artifactory access"
+else
+  log_warn "⚠️ Failed to configure Artifactory access for backup deployment"
+fi
+
 log_info "Backup container deployment completed."

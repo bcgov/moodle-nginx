@@ -70,6 +70,60 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_USER }}
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
+      # Setup Docker Buildx for advanced features including cache
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.5
+
+      # Cache Docker layers in GitHub Actions
+      - name: 🗂️ Setup Docker Layer Cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: helm-images-${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            helm-images-${{ runner.os }}-buildx-
+
+      # Pre-pull and cache common base layers to speed up subsequent operations
+      - name: 🚀 Pre-cache Common Base Layers
+        run: |
+          echo "🔥 Pre-pulling common base layers for caching..."
+          
+          # Pre-pull the Helm images to populate local Docker cache
+          # This speeds up the optimize-image-push.sh script operations
+          IMAGES_TO_CACHE=(
+            "${{ env.HELM_REPO }}/${{ env.MARIADB_IMAGE }}"
+            "${{ env.HELM_REPO }}/${{ env.REDIS_IMAGE }}"
+            "${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
+            "${{ env.HELM_REPO }}/${{ env.BACKUP_IMAGE }}"
+          )
+          
+          for image in "${IMAGES_TO_CACHE[@]}"; do
+            echo "📥 Pre-caching: $image"
+            # Use buildx with cache mount for efficient layer reuse
+            docker buildx build \
+              --cache-from type=local,src=/tmp/.buildx-cache \
+              --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+              --load \
+              -t temp-cache-check \
+              --build-arg SOURCE_IMAGE="$image" \
+              - <<'EOF'
+          ARG SOURCE_IMAGE
+          FROM ${SOURCE_IMAGE}
+          EOF
+            echo "✅ Cached: $image"
+          done
+          
+          # Move cache to the correct location for next use
+          if [ -d "/tmp/.buildx-cache-new" ]; then
+            rm -rf /tmp/.buildx-cache
+            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          fi
+          
+          echo "🎉 Base layer caching complete!"
+
       - name: 🛠️ Optimized Helm Images Push to Artifactory
         run: |
           # Use the utility script for consistency across all workflows

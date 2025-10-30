@@ -2463,3 +2463,141 @@ create_or_update_helm_deployment() {
 
   log_success "Helm updates completed for $helm_name."
 }
+
+# =============================================================================
+# IMAGE PULL SECRETS MANAGEMENT
+# =============================================================================
+
+# Function to ensure imagePullSecrets are configured for a deployment or statefulset
+# This provides centralized management of Artifactory access across all deployments
+ensure_image_pull_secrets() {
+  local resource_type=$1     # "deployment" or "statefulset"
+  local resource_name=$2     # Name of the deployment/statefulset
+  local namespace=${3:-$OC_PROJECT}  # Optional namespace (defaults to current project)
+
+  # Get the secret name from environment variable with fallback
+  local secret_name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
+
+  log_info "🔐 Ensuring imagePullSecrets for $resource_type/$resource_name"
+
+  # Check if the resource exists
+  if ! oc get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; then
+    log_warn "Resource $resource_type/$resource_name not found in namespace $namespace"
+    return 1
+  fi
+
+  # Check if imagePullSecrets already exist
+  local existing_secrets
+  existing_secrets=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}' 2>/dev/null)
+
+  if [[ "$existing_secrets" == *"$secret_name"* ]]; then
+    log_debug "✅ imagePullSecrets already configured with $secret_name"
+    return 0
+  fi
+
+  log_info "🔧 Adding imagePullSecrets: $secret_name"
+
+  # Check if imagePullSecrets field exists at all
+  local has_image_pull_secrets
+  has_image_pull_secrets=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.template.spec.imagePullSecrets}' 2>/dev/null)
+
+  if [[ -z "$has_image_pull_secrets" || "$has_image_pull_secrets" == "null" ]]; then
+    # No imagePullSecrets field exists, create it
+    log_debug "Creating new imagePullSecrets field"
+    oc patch "$resource_type" "$resource_name" -n "$namespace" --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/imagePullSecrets",
+        "value": [{"name": "'"$secret_name"'"}]
+      }
+    ]'
+  else
+    # imagePullSecrets field exists, append to it
+    log_debug "Appending to existing imagePullSecrets"
+    oc patch "$resource_type" "$resource_name" -n "$namespace" --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/imagePullSecrets/-",
+        "value": {"name": "'"$secret_name"'"}
+      }
+    ]'
+  fi
+
+  local patch_result=$?
+  if [[ $patch_result -eq 0 ]]; then
+    log_info "✅ Successfully added imagePullSecrets: $secret_name"
+    return 0
+  else
+    log_error "❌ Failed to add imagePullSecrets to $resource_type/$resource_name"
+    return 1
+  fi
+}
+
+# Function to ensure imagePullSecrets for multiple resources
+ensure_image_pull_secrets_batch() {
+  local namespace=${1:-$OC_PROJECT}
+  shift
+  local resources=("$@")  # Array of "type/name" pairs
+
+  log_info "🔐 Batch ensuring imagePullSecrets for ${#resources[@]} resources"
+
+  local failed_count=0
+  local success_count=0
+
+  for resource in "${resources[@]}"; do
+    local resource_type="${resource%/*}"
+    local resource_name="${resource#*/}"
+
+    if ensure_image_pull_secrets "$resource_type" "$resource_name" "$namespace"; then
+      ((success_count++))
+    else
+      ((failed_count++))
+    fi
+  done
+
+  log_info "📊 imagePullSecrets batch operation completed:"
+  log_info "  ✅ Successful: $success_count"
+  if [[ $failed_count -gt 0 ]]; then
+    log_warn "  ❌ Failed: $failed_count"
+  fi
+
+  return $failed_count
+}
+
+# Function to automatically ensure imagePullSecrets for common deployment types
+ensure_artifactory_access() {
+  local namespace=${1:-$OC_PROJECT}
+
+  log_info "🏭 Ensuring Artifactory access for common deployments in namespace: $namespace"
+
+  # Define common resources that need Artifactory access
+  local common_resources=(
+    "deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME"
+    "statefulset/$DB_DEPLOYMENT_NAME"
+    "statefulset/$REDIS_NAME-node"
+    "deployment/$REDIS_PROXY_NAME"
+    "deployment/maintenance-message"
+  )
+
+  # Filter out resources that actually exist
+  local existing_resources=()
+  for resource in "${common_resources[@]}"; do
+    local resource_type="${resource%/*}"
+    local resource_name="${resource#*/}"
+
+    if [[ -n "$resource_name" ]] && oc get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; then
+      existing_resources+=("$resource")
+      log_debug "Found existing resource: $resource"
+    else
+      log_debug "Resource not found (skipping): $resource"
+    fi
+  done
+
+  if [[ ${#existing_resources[@]} -eq 0 ]]; then
+    log_warn "No common deployments found that need Artifactory access"
+    return 0
+  fi
+
+  log_info "📋 Processing ${#existing_resources[@]} existing resources..."
+  ensure_image_pull_secrets_batch "$namespace" "${existing_resources[@]}"
+}

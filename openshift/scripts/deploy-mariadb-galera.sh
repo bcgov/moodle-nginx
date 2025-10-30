@@ -279,4 +279,12 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
+# Ensure Artifactory image pull secrets are configured
+echo "🔐 Ensuring Artifactory access for MariaDB deployment..."
+if ensure_image_pull_secrets "statefulset" "$DB_DEPLOYMENT_NAME"; then
+  echo "✅ MariaDB StatefulSet now has Artifactory access"
+else
+  echo "⚠️ Failed to configure Artifactory access for MariaDB StatefulSet"
+fi
+
 echo "$DB_NAME Database deployment is complete."

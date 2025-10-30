@@ -184,7 +184,7 @@
           "spec": {
             "imagePullSecrets": [
               {
-                "name": "artifactory-m950-learning"
+                "name": "${ARTIFACTORY_PULL_SECRET}"
               }
             ],
             "terminationGracePeriodSeconds": 120,
@@ -455,7 +455,7 @@
           "spec": {
             "imagePullSecrets": [
               {
-                "name": "artifactory-m950-learning"
+                "name": "${ARTIFACTORY_PULL_SECRET}"
               }
             ],
             "containers": [
@@ -699,7 +699,7 @@
           "spec": {
             "imagePullSecrets": [
               {
-                "name": "artifactory-m950-learning"
+                "name": "${ARTIFACTORY_PULL_SECRET}"
               }
             ],
             "terminationGracePeriodSeconds": 120,
@@ -995,6 +995,12 @@
       "displayName": "Redis Password",
       "name": "SECRET_REDIS_PASSWORD",
       "value": ""
+    },
+    {
+      "description": "Artifactory image pull secret name for private registry access",
+      "displayName": "Artifactory Pull Secret",
+      "name": "ARTIFACTORY_PULL_SECRET",
+      "value": "artifactory-m950-learning"
     }
   ]
 }

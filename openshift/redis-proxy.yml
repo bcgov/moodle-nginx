@@ -33,7 +33,7 @@ objects:
             deployment: ${REDIS_PROXY_NAME}
         spec:
           imagePullSecrets:
-            - name: artifactory-m950-learning
+            - name: ${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}
           volumes:
             - name: ${REDIS_PROXY_NAME}-config
               configMap:

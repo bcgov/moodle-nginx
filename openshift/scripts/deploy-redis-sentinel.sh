@@ -383,4 +383,27 @@ if ! wait_for_redis_proxy_ready "$REDIS_PROXY_NAME" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 log_info "Redis Proxy is fully functional."
+
+# Ensure Artifactory image pull secrets are configured for Redis components
+log_info "🔐 Ensuring Artifactory access for Redis deployments..."
+failed_count=0
+
+if ensure_image_pull_secrets "statefulset" "$redis_node_name"; then
+  log_info "✅ Redis StatefulSet now has Artifactory access"
+else
+  log_warn "⚠️ Failed to configure Artifactory access for Redis StatefulSet"
+  ((failed_count++))
+fi
+
+if ensure_image_pull_secrets "deployment" "$REDIS_PROXY_NAME"; then
+  log_info "✅ Redis Proxy deployment now has Artifactory access"
+else
+  log_warn "⚠️ Failed to configure Artifactory access for Redis Proxy"
+  ((failed_count++))
+fi
+
+if [[ $failed_count -eq 0 ]]; then
+  log_info "🎉 All Redis components now have Artifactory access"
+fi
+
 log_success "Redis deployment completed successfully!"

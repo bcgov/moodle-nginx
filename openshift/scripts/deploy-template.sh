@@ -16,7 +16,7 @@ log_info "Current namespace is $DEPLOY_NAMESPACE"
 manage_maintenance_mode "enable" "maintenance-message"
 
 # Ensure secrets are linked for pulling from Artifactory
-oc secrets link default artifactory-m950-learning --for=pull
+oc secrets link default "${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" --for=pull
 
 # Scale [down] php to 0 replicas
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "0" "0"

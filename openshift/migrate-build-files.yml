@@ -32,7 +32,7 @@ objects:
                    path: ./.env
                defaultMode: 420
          imagePullSecrets:
-           - name: artifactory-m950-learning
+           - name: ${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}
          containers:
            - name: migrate-build-files-job
              image: ${IMAGE_REPO}${BUILD_NAME}:${BUILD_NAMESPACE}

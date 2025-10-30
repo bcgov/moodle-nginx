@@ -36,7 +36,7 @@ objects:
             deployment: ${BUILD_NAME}
         spec:
           imagePullSecrets:
-            - name: artifactory-m950-learning
+            - name: ${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}
           volumes:
             - name: maintenance-page
               configMap:
