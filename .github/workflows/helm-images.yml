@@ -19,7 +19,7 @@ on:
 
 jobs:
   build-images:
-    name: '🐸 Helm Images to JFrog'
+    name: '🐸 Pull and Push Images to JFrog'
     runs-on: ubuntu-22.04
     steps:
       - name: 📤 Checkout Target Branch
@@ -57,7 +57,6 @@ jobs:
           echo ""
           echo "Registry Configuration:"
           echo "HELM_REPO: ${{ env.HELM_REPO }}"
-          echo "BCGOV_REGISTRY: ${{ env.BCGOV_REGISTRY }}"
           echo "ARTIFACTORY_REGISTRY: ${{ env.ARTIFACTORY_REGISTRY }}"
           echo ""
           echo "📝 Note: These are cached for supply chain resilience"
@@ -88,7 +87,7 @@ jobs:
               "${{ env.HELM_REPO }}/${{ env.MARIADB_IMAGE }}"
               "${{ env.HELM_REPO }}/${{ env.REDIS_IMAGE }}"
               "${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
-              "${{ env.BCGOV_REGISTRY }}/${{ env.BACKUP_IMAGE }}"
+              "${{ env.HELM_REPO }}/${{ env.BACKUP_IMAGE }}"
             )
 
             # Process each Helm image
@@ -150,7 +149,7 @@ jobs:
           echo "  MariaDB Galera: ${{ env.HELM_REPO }}/${{ env.MARIADB_IMAGE }}"
           echo "  Redis: ${{ env.HELM_REPO }}/${{ env.REDIS_IMAGE }}"
           echo "  Redis Sentinel: ${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
-          echo "  Backup Container: ${{ env.BCGOV_REGISTRY }}/${{ env.BACKUP_IMAGE }}"
+          echo "  Backup Container: ${{ env.HELM_REPO }}/${{ env.BACKUP_IMAGE }}"
           echo ""
           echo "Results Summary:"
           echo "  Total Images: ${HELM_TOTAL_IMAGES:-0}"

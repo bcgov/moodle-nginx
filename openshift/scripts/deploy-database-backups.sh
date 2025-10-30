@@ -36,7 +36,7 @@ if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
     RESOLVED_BACKUP_IMAGE="${ARTIFACTORY_REGISTRY:-artifacts.developer.gov.bc.ca/m950-learning}/$BACKUP_IMAGE"
     log_info "🏭 Using Artifactory backup image: $RESOLVED_BACKUP_IMAGE"
 else
-    # Use direct pull - this is the known working image reference
+    # Use upstream image with registry prefix (docker.io is default registry for bcgovimages)
     RESOLVED_BACKUP_IMAGE="$BACKUP_IMAGE"
     log_info "🐳 Using upstream backup image: $RESOLVED_BACKUP_IMAGE"
 fi

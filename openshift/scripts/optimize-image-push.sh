@@ -386,9 +386,30 @@ optimize_image_push() {
             log_info "📝 Source image already in Artifactory format: $ARTIFACTORY_REGISTRY"
         else
             # Transform source image to Artifactory format
-            # For images like "bcgovimages/backup-container:tag" -> "artifacts.../m950-learning/bcgovimages/backup-container:tag"
-            # For images like "bitnamilegacy/redis:tag" -> "artifacts.../m950-learning/bitnamilegacy/redis:tag"
-            artifactory_image="$ARTIFACTORY_REGISTRY/$source_image"
+            # Handle different source image formats:
+            # 1. Full registry path: "registry-1.docker.io/bitnamilegacy/redis:tag" -> "artifacts.../m950-learning/bitnamilegacy/redis:tag"
+            # 2. Namespace/image: "bcgovimages/backup-container:tag" -> "artifacts.../m950-learning/bcgovimages/backup-container:tag"
+            # 3. Simple image: "redis:tag" -> "artifacts.../m950-learning/redis:tag"
+            
+            # Extract the meaningful part after removing the source registry
+            local target_path="$source_image"
+            
+            # Remove common source registries to get the namespace/image part
+            if [[ "$source_image" == registry-1.docker.io/* ]]; then
+                # Remove "registry-1.docker.io/" prefix
+                target_path="${source_image#registry-1.docker.io/}"
+                log_info "📝 Removed Docker Hub registry prefix, using: $target_path"
+            elif [[ "$source_image" == docker.io/* ]]; then
+                # Remove "docker.io/" prefix
+                target_path="${source_image#docker.io/}"
+                log_info "📝 Removed docker.io registry prefix, using: $target_path"
+            elif [[ "$source_image" == gcr.io/* ]] || [[ "$source_image" == quay.io/* ]]; then
+                # For other registries, extract everything after the first slash
+                target_path="${source_image#*/}"
+                log_info "📝 Removed external registry prefix, using: $target_path"
+            fi
+            
+            artifactory_image="$ARTIFACTORY_REGISTRY/$target_path"
             log_info "📝 Using ARTIFACTORY_REGISTRY configuration: $ARTIFACTORY_REGISTRY"
         fi
     else

@@ -5,7 +5,7 @@ services:
     tty: true
     restart: no
     environment:
-      PHP_IMAGE: php:8.1-fpm
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
       DEPLOY_ENVIRONMENT: local
       MOODLE_BRANCH_VERSION: MOODLE_405_STABLE
       HVP_URL: "https://github.com/h5p/moodle-mod_hvp"
@@ -58,7 +58,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-moodle}
       DB_USER: ${DB_USER:-moodle}
       DB_NAME: ${DB_NAME:-moodle}
-      PHP_IMAGE: php:8.1-fpm
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
     build:
       context: .
       dockerfile: PHP.Dockerfile
@@ -77,13 +77,13 @@ services:
 
   web:
     container_name: web
-    image: ${WEB_IMAGE:-nginxinc/nginx-unprivileged:1.25.4-alpine-slim}
+    image: ${WEB_IMAGE:-nginxinc/nginx-unprivileged:1-alpine-slim}
     restart: no
     deploy:
       replicas: 0
 
   db:
-    image: ${DB_IMAGE:-mariadb:10}
+    image: ${MARIADB_IMAGE:-bitnamilegacy/mariadb-galera:10.6}
     restart: no
     deploy:
       replicas: 0
@@ -107,7 +107,7 @@ services:
       context: .
       dockerfile: CRON.Dockerfile
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.0-cli}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.1-cli}
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
