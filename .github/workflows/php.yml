@@ -10,12 +10,6 @@ env:
 
 on:
   workflow_call:
-    inputs:
-      SKIP_BUILDS:
-        type: string
-        description: 'Skip builds if set to YES'
-        required: false
-        default: 'NO'
 jobs:
   build-images:
     name: '🐸 Build to JFrog'
@@ -53,6 +47,7 @@ jobs:
 
       # Pull latest PHP base image and push to Artifactory (optimized)
       - name: 🛠️ Optimized PHP base image push to Artifactory
+        if: always()
         run: |
           # Use the utility script for consistency across all workflows
           if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then

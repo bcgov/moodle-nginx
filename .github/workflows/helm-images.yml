@@ -1,0 +1,176 @@
+name: Helm Images
+
+concurrency:
+  group: helm-images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP: helm-images
+  USER: ${{ github.actor }}
+
+on:
+  workflow_call:
+    inputs:
+      SKIP_BUILDS:
+        type: string
+        description: 'Skip builds if set to YES'
+        required: false
+        default: 'NO'
+
+jobs:
+  build-images:
+    name: '🐸 Helm Images to JFrog'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 📤 Checkout Target Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          sparse-checkout: |
+            example.env
+            example.versions.env
+            openshift/scripts/optimize-image-push.sh
+
+      - name: Setup Env Vars
+        id: dotenv
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Setup Env Version Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Check Helm Image Vars
+        run: |
+          echo "🔍 Helm Chart Images to Cache in Artifactory:"
+          echo "MARIADB_IMAGE: ${{ env.MARIADB_IMAGE }}"
+          echo "REDIS_IMAGE: ${{ env.REDIS_IMAGE }}"
+          echo "REDIS_SENTINEL_IMAGE: ${{ env.REDIS_SENTINEL_IMAGE }}"
+          echo "BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}"
+          echo ""
+          echo "Registry Configuration:"
+          echo "HELM_REPO: ${{ env.HELM_REPO }}"
+          echo "ARTIFACTORY_REGISTRY: ${{ env.ARTIFACTORY_REGISTRY }}"
+          echo ""
+          echo "📝 Note: These are cached for supply chain resilience"
+          echo "📝 Deployment scripts can switch between upstream and Artifactory"
+
+      # Login to Artifactory
+      - name: 🔑 Login to Artifactory
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ARTIFACTORY_URL }}
+          username: ${{ secrets.ARTIFACTORY_USER }}
+          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+      - name: 🛠️ Optimized Helm Images Push to Artifactory
+        run: |
+          # Use the utility script for consistency across all workflows
+          if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then
+            echo "🚀 Using optimize-image-push.sh utility script for Helm chart images"
+            chmod +x ./openshift/scripts/optimize-image-push.sh
+
+            # Track optimization results
+            TOTAL_IMAGES=0
+            CACHED_IMAGES=0
+            FAILED_IMAGES=0
+
+            # Array of Helm images to process (construct full image paths)
+            declare -a HELM_IMAGES=(
+              "${{ env.HELM_REPO }}/${{ env.MARIADB_IMAGE }}"
+              "${{ env.HELM_REPO }}/${{ env.REDIS_IMAGE }}"
+              "${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
+              "${{ env.BACKUP_IMAGE }}"
+            )
+
+            # Process each Helm image
+            for image in "${HELM_IMAGES[@]}"; do
+              echo "📦 Processing Helm image: $image"
+              TOTAL_IMAGES=$((TOTAL_IMAGES + 1))
+
+              # The optimize-image-push.sh script will handle the naming transformation
+              # bitnamilegacy/mariadb-galera:tag -> artifacts.developer.gov.bc.ca/m950-learning/mariadb-galera:tag
+
+              if ./openshift/scripts/optimize-image-push.sh \
+                --source-image "$image" \
+                --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+                --timeout 600 \
+                --retry-count 3; then                # Check if it was cached
+                if [ "${IMAGE_CACHE_HIT:-false}" = "true" ]; then
+                  CACHED_IMAGES=$((CACHED_IMAGES + 1))
+                  echo "✅ $image: CACHED (time saved)"
+                else
+                  echo "✅ $image: PUSHED (updated in Artifactory)"
+                fi
+              else
+                FAILED_IMAGES=$((FAILED_IMAGES + 1))
+                echo "❌ $image: FAILED"
+              fi
+
+              echo "---"
+            done
+
+            # Set summary environment variables
+            echo "HELM_TOTAL_IMAGES=$TOTAL_IMAGES" >> $GITHUB_ENV
+            echo "HELM_CACHED_IMAGES=$CACHED_IMAGES" >> $GITHUB_ENV
+            echo "HELM_FAILED_IMAGES=$FAILED_IMAGES" >> $GITHUB_ENV
+
+            # Fail workflow if any images failed
+            if [ $FAILED_IMAGES -gt 0 ]; then
+              echo "❌ $FAILED_IMAGES Helm images failed to process"
+              exit 1
+            fi
+
+          else
+            echo "❌ optimize-image-push.sh utility script not found"
+            echo "💡 This script is required for optimized image handling"
+            echo "📋 Expected location: ./openshift/scripts/optimize-image-push.sh"
+            echo "🔧 Please ensure the utility script is included in the repository"
+            exit 1
+          fi
+
+      # Report optimization results for Helm images
+      - name: 📊 Helm Images Optimization Report
+        if: always()
+        run: |
+          echo "=============================================="
+          echo "📊 HELM CHART IMAGES OPTIMIZATION REPORT"
+          echo "=============================================="
+          echo "Supply Chain Resilience Strategy: Cache all Helm chart images"
+          echo ""
+          echo "Images Processed:"
+          echo "  MariaDB Galera: ${{ env.HELM_REPO }}/${{ env.MARIADB_IMAGE }}"
+          echo "  Redis: ${{ env.HELM_REPO }}/${{ env.REDIS_IMAGE }}"
+          echo "  Redis Sentinel: ${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
+          echo "  Backup Container: ${{ env.BACKUP_IMAGE }}"
+          echo ""
+          echo "Results Summary:"
+          echo "  Total Images: ${HELM_TOTAL_IMAGES:-0}"
+          echo "  Cached (no action needed): ${HELM_CACHED_IMAGES:-0}"
+          echo "  Updated in Artifactory: $((${HELM_TOTAL_IMAGES:-0} - ${HELM_CACHED_IMAGES:-0}))"
+          echo "  Failed: ${HELM_FAILED_IMAGES:-0}"
+          echo ""
+
+          # Calculate total optimization
+          if [ "${HELM_CACHED_IMAGES:-0}" -gt 0 ]; then
+            ESTIMATED_SAVINGS=$((${HELM_CACHED_IMAGES:-0} * 120))  # 120s average per Helm image
+            echo "⚡ Estimated Time Saved: ~${ESTIMATED_SAVINGS}s"
+            echo "🎉 Optimization: SUCCESSFUL"
+          else
+            echo "🔄 Optimization: All images were updated"
+          fi
+
+          echo ""
+          echo "🛡️ Supply Chain Benefits:"
+          echo "  • Helm chart images cached in private Artifactory"
+          echo "  • Protected against upstream repository changes"
+          echo "  • Reduced dependency on external registries"
+          echo "  • Consistent image availability for deployments"
+          echo "=============================================="

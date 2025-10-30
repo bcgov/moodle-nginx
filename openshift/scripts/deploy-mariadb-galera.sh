@@ -3,10 +3,29 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Source Helm image resolver for DRY image management
+source ./openshift/scripts/helm-image-resolver.sh
+
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
+
+# Validate Helm environment and show Artifactory status
+if ! validate_helm_environment; then
+    echo "❌ Helm environment validation failed. Please check your environment variables."
+    exit 1
+fi
+
+show_artifactory_status
+
+# Resolve MariaDB image configuration
+if ! resolve_helm_image "MARIADB_IMAGE"; then
+    echo "❌ Failed to resolve MARIADB_IMAGE configuration"
+    exit 1
+fi
+
+echo "🐳 Using MariaDB image: ${RESOLVED_FULL_IMAGE}"
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
 
@@ -62,7 +81,8 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set image.repository=bitnamilegacy/mariadb-galera \
+    --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
+    --set image.tag=$RESOLVED_IMAGE_TAG \
     --set global.security.allowInsecureImages=true \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
@@ -91,8 +111,8 @@ else
   # --atomic \
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set image.repository=bitnamilegacy/mariadb-galera \
-    --set image.tag=10.6 \
+    --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
+    --set image.tag=$RESOLVED_IMAGE_TAG \
     --set image.pullPolicy=Always \
     --set global.security.allowInsecureImages=true \
     --set podManagementPolicy=Parallel \

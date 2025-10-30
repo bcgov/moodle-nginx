@@ -54,7 +54,7 @@ jobs:
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
       - name: 🛠️ Optimized DB base image push to Artifactory
-        if: env.SKIP_BUILDS == 'NO'
+        if: always()
         run: |
           # Use the utility script for consistency across all workflows
           if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then

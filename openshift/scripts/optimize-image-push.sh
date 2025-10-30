@@ -29,10 +29,16 @@ Optional Arguments:
 Environment Variables:
   ARTIFACTORY_USER        Artifactory username (required if not logged in)
   ARTIFACTORY_PASSWORD    Artifactory password (required if not logged in)
+  ARTIFACTORY_REGISTRY    Full registry path including project (e.g., artifacts.developer.gov.bc.ca/m950-learning)
+                         If set, takes precedence over URL-based registry detection for image naming
 
 Examples:
   # Basic usage
   $0 --source-image php:8.1-fpm --artifactory-url \$ARTIFACTORY_URL
+
+  # With ARTIFACTORY_REGISTRY environment variable (recommended)
+  export ARTIFACTORY_REGISTRY="artifacts.developer.gov.bc.ca/m950-learning"
+  $0 --source-image bitnamilegacy/mariadb-galera:10.6 --artifactory-url \$ARTIFACTORY_URL
 
   # With custom timeout and retries
   $0 --source-image mariadb:10 --artifactory-url \$ARTIFACTORY_URL --timeout 600 --retry-count 5
@@ -202,7 +208,20 @@ get_image_digest() {
 optimize_image_push() {
     local start_time=$(date +%s)
     local source_image="$SOURCE_IMAGE"
-    local artifactory_image="$ARTIFACTORY_URL/$source_image"
+
+    # Handle Artifactory image naming transformation
+    # Use ARTIFACTORY_REGISTRY environment variable if available for dynamic configuration
+    local artifactory_image
+    if [ -n "${ARTIFACTORY_REGISTRY:-}" ]; then
+        # Extract image name without registry prefix (e.g., mariadb-galera:tag from bitnamilegacy/mariadb-galera:tag)
+        local image_name=$(echo "$source_image" | sed 's|^[^/]*/||')
+        artifactory_image="$ARTIFACTORY_REGISTRY/$image_name"
+        log_info "📝 Using ARTIFACTORY_REGISTRY configuration: $ARTIFACTORY_REGISTRY"
+    else
+        # Fallback: Direct concatenation with ARTIFACTORY_URL
+        artifactory_image="$ARTIFACTORY_URL/$source_image"
+        log_info "📝 Using direct ARTIFACTORY_URL concatenation (fallback)"
+    fi
 
     log_info "🚀 Optimizing image push: $source_image -> $artifactory_image"
 

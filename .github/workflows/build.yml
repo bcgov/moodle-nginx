@@ -229,14 +229,12 @@ jobs:
           echo URL: https://${{ env.APP }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
-  db:
-    name: 🔨 DB
+  helm-images:
+    name: 🔨 Helm Images
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/db.yml
+    uses: ./.github/workflows/helm-images.yml
     secrets: inherit
-    with:
-      IMAGE_NAME: "mariadb:10"
 
   php:
     name: 🔨 PHP
@@ -291,7 +289,7 @@ jobs:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web, redis-proxy]
+    needs: [checkEnv, helm-images, php, cron, moodle, web, redis-proxy]
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
@@ -308,7 +306,7 @@ jobs:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web, redis-proxy, call-cleanup-workflow]
+    needs: [checkEnv, helm-images, php, cron, moodle, web, redis-proxy, call-cleanup-workflow]
     if: |
       (always() && needs.checkEnv.outputs.SKIP_DEPLOY == 'NO') &&
       needs.checkEnv.result == 'success' &&
@@ -497,7 +495,7 @@ jobs:
         moodle,
         cron,
         php,
-        db,
+        helm-images,
         call-cleanup-workflow,
         call-deploy-workflow,
         lighthouse-check
@@ -537,7 +535,7 @@ jobs:
                   "title": "Verify Moodle",
                   "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](https://${{ env.APP_HOST_URL }}/admin/index.php)"
                 },{
-                  "title": "Build DB: ${{ needs.db.result }}"
+                  "title": "Build Helm Images: ${{ needs.helm-images.result }}"
                 },{
                   "title": "Build PHP: ${{ needs.php.result }}"
                 },{
