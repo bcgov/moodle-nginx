@@ -170,6 +170,7 @@ jobs:
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
           BUILD_NAME: "maintenance-message"
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
           APP: ${{ inputs.APP }}
