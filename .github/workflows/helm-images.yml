@@ -90,7 +90,7 @@ jobs:
       - name: 🚀 Pre-cache Common Base Layers
         run: |
           echo "🔥 Pre-pulling common base layers for caching..."
-          
+
           # Pre-pull the Helm images to populate local Docker cache
           # This speeds up the optimize-image-push.sh script operations
           IMAGES_TO_CACHE=(
@@ -99,29 +99,17 @@ jobs:
             "${{ env.HELM_REPO }}/${{ env.REDIS_SENTINEL_IMAGE }}"
             "${{ env.HELM_REPO }}/${{ env.BACKUP_IMAGE }}"
           )
-          
+
           for image in "${IMAGES_TO_CACHE[@]}"; do
             echo "📥 Pre-caching: $image"
-            # Use buildx with cache mount for efficient layer reuse
-            docker buildx build \
-              --cache-from type=local,src=/tmp/.buildx-cache \
-              --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
-              --load \
-              -t temp-cache-check \
-              --build-arg SOURCE_IMAGE="$image" \
-              - <<'EOF'
-          ARG SOURCE_IMAGE
-          FROM ${SOURCE_IMAGE}
-          EOF
-            echo "✅ Cached: $image"
+            # Use direct docker pull with cache benefits from buildx daemon
+            if docker pull "$image" 2>/dev/null; then
+              echo "✅ Cached: $image"
+            else
+              echo "⚠️ Could not pre-cache: $image (will be pulled on-demand)"
+            fi
           done
-          
-          # Move cache to the correct location for next use
-          if [ -d "/tmp/.buildx-cache-new" ]; then
-            rm -rf /tmp/.buildx-cache
-            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-          fi
-          
+
           echo "🎉 Base layer caching complete!"
 
       - name: 🛠️ Optimized Helm Images Push to Artifactory

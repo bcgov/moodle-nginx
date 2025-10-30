@@ -317,10 +317,17 @@ is_base_image() {
         php:*|golang:*|ubuntu:*|alpine:*|nginx:*|mariadb:*|redis:*|node:*|python:*)
             return 0
             ;;
-        # Images with standard namespaces that use semantic versioning
-        */php:*|*/golang:*|*/ubuntu:*|*/nginx:*|*/mariadb:*|*/redis:*)
+        # Bitnami and other trusted base images with version tags
+        bitnami/*:*|bitnamilegacy/*:*|*/php:*|*/golang:*|*/ubuntu:*|*/nginx:*|*/mariadb:*|*/redis:*)
             # Only if they have version tags (not 'latest' or custom tags)
-            if [[ "$image" =~ :[0-9]+\.[0-9]+ ]]; then
+            if [[ "$image" =~ :[0-9]+\.[0-9]+ ]] || [[ "$image" =~ :[0-9]+$ ]]; then
+                return 0
+            fi
+            ;;
+        # BCGov standard images with semantic versioning
+        bcgovimages/*:*)
+            # Check if it has a version tag or 'latest'
+            if [[ "$image" =~ :[0-9]+\.[0-9]+ ]] || [[ "$image" =~ :latest$ ]]; then
                 return 0
             fi
             ;;
@@ -338,7 +345,9 @@ get_image_content_hash() {
     local retry_count="$2"
 
     for ((i=1; i<=retry_count; i++)); do
-        log_info "Attempt $i/$retry_count: Getting content hash for $image"
+        if [ "${QUIET:-false}" != "true" ]; then
+            log_info "Attempt $i/$retry_count: Getting content hash for $image"
+        fi
 
         # Try to get the image configuration digest which is consistent across registries
         local config_digest=""
@@ -348,7 +357,7 @@ get_image_content_hash() {
 
             # Fallback: if manifest inspect doesn't work, try to get the Image ID after pulling
             if [ -z "$config_digest" ] || [ "$config_digest" = "null" ]; then
-                # Ensure image is pulled locally
+                # Ensure image is pulled locally (suppress output to avoid contamination)
                 if timeout "$TIMEOUT" docker pull "$image" >/dev/null 2>&1; then
                     # Get the Image ID which represents the content
                     config_digest=$(docker inspect "$image" --format='{{.Id}}' 2>/dev/null || echo "")
@@ -357,12 +366,15 @@ get_image_content_hash() {
         fi
 
         if [ -n "$config_digest" ] && [ "$config_digest" != "null" ] && [ "$config_digest" != "" ]; then
+            # Return only the hash, no log contamination
             echo "$config_digest"
             return 0
         fi
 
         if [ $i -lt $retry_count ]; then
-            log_warn "Failed to get content hash, retrying in 5 seconds..."
+            if [ "${QUIET:-false}" != "true" ]; then
+                log_warn "Failed to get content hash, retrying in 5 seconds..."
+            fi
             sleep 5
         fi
     done
@@ -390,10 +402,10 @@ optimize_image_push() {
             # 1. Full registry path: "registry-1.docker.io/bitnamilegacy/redis:tag" -> "artifacts.../m950-learning/bitnamilegacy/redis:tag"
             # 2. Namespace/image: "bcgovimages/backup-container:tag" -> "artifacts.../m950-learning/bcgovimages/backup-container:tag"
             # 3. Simple image: "redis:tag" -> "artifacts.../m950-learning/redis:tag"
-            
+
             # Extract the meaningful part after removing the source registry
             local target_path="$source_image"
-            
+
             # Remove common source registries to get the namespace/image part
             if [[ "$source_image" == registry-1.docker.io/* ]]; then
                 # Remove "registry-1.docker.io/" prefix
@@ -408,7 +420,7 @@ optimize_image_push() {
                 target_path="${source_image#*/}"
                 log_info "📝 Removed external registry prefix, using: $target_path"
             fi
-            
+
             artifactory_image="$ARTIFACTORY_REGISTRY/$target_path"
             log_info "📝 Using ARTIFACTORY_REGISTRY configuration: $ARTIFACTORY_REGISTRY"
         fi
@@ -468,14 +480,24 @@ optimize_image_push() {
             return $?
         fi
 
+        # Clean the hash output (remove any log contamination)
+        source_content_hash=$(echo "$source_content_hash" | tail -n1 | tr -d '\r\n')
         log_info "📋 Source content hash: $source_content_hash"
 
         # Check if same content exists in Artifactory
         log_info "🔍 Checking if image content exists in Artifactory..."
         local artifactory_content_hash
-        artifactory_content_hash=$(get_image_content_hash "$artifactory_image" 1 2>/dev/null || echo "")
+        # Use quiet mode to avoid log contamination and get only the hash
+        QUIET=true artifactory_content_hash=$(get_image_content_hash "$artifactory_image" 1 2>/dev/null || echo "")
 
-        if [ "$source_content_hash" = "$artifactory_content_hash" ] && [ -n "$artifactory_content_hash" ]; then
+        # Clean the Artifactory hash output
+        artifactory_content_hash=$(echo "$artifactory_content_hash" | tail -n1 | tr -d '\r\n')
+
+        # Debug output for comparison
+        log_info "📋 Artifactory content hash: ${artifactory_content_hash:-'(not found)'}"
+        log_info "🔍 Hash comparison: Source='$source_content_hash' vs Artifactory='$artifactory_content_hash'"
+
+        if [ "$source_content_hash" = "$artifactory_content_hash" ] && [ -n "$artifactory_content_hash" ] && [ -n "$source_content_hash" ]; then
             local end_time=$(date +%s)
             local duration=$((end_time - start_time))
 
@@ -493,12 +515,14 @@ optimize_image_push() {
 
             return 0
         else
-            if [ -n "$artifactory_content_hash" ]; then
+            if [ -n "$artifactory_content_hash" ] && [ -n "$source_content_hash" ]; then
                 log_info "🔄 Image content differs in Artifactory (content hash mismatch)"
                 log_info "   Source: $source_content_hash"
                 log_info "   Artifactory: $artifactory_content_hash"
-            else
+            elif [ -z "$artifactory_content_hash" ]; then
                 log_info "🔄 Image not found in Artifactory or content hash unavailable"
+            else
+                log_info "🔄 Could not compare content hashes - proceeding with push"
             fi
             perform_standard_push "$source_image" "$artifactory_image" "$start_time"
             return $?
@@ -512,10 +536,21 @@ perform_standard_push() {
     local artifactory_image="$2"
     local start_time="$3"
 
-    log_info "📥 Pulling from source registry..."
-    if ! timeout "$TIMEOUT" docker pull "$source_image"; then
-        log_error "Failed to pull source image: $source_image"
-        exit 3
+    # Check if image is already available locally (from cache/pre-pull)
+    local pull_needed=true
+    if docker image inspect "$source_image" >/dev/null 2>&1; then
+        log_info "📋 Image already available locally (cache hit or pre-pulled)"
+        pull_needed=false
+    fi
+
+    if [ "$pull_needed" = "true" ]; then
+        log_info "📥 Pulling from source registry..."
+        if ! timeout "$TIMEOUT" docker pull "$source_image"; then
+            log_error "Failed to pull source image: $source_image"
+            exit 3
+        fi
+    else
+        log_info "⚡ Using locally cached image (skipping pull)"
     fi
 
     log_info "🏷️ Tagging for Artifactory..."
@@ -525,7 +560,26 @@ perform_standard_push() {
     fi
 
     log_info "📤 Pushing to Artifactory..."
-    if ! timeout "$TIMEOUT" docker push "$artifactory_image"; then
+    # Capture push output to detect layer reuse
+    local push_output
+    if push_output=$(timeout "$TIMEOUT" docker push "$artifactory_image" 2>&1); then
+        echo "$push_output"
+
+        # Analyze push output for layer optimization info
+        local layers_existed=0
+        local layers_pushed=0
+        while IFS= read -r line; do
+            if [[ "$line" == *"Layer already exists"* ]]; then
+                ((layers_existed++))
+            elif [[ "$line" == *"Pushed"* ]] && [[ "$line" != *"digest:"* ]]; then
+                ((layers_pushed++))
+            fi
+        done <<< "$push_output"
+
+        if [ $layers_existed -gt 0 ]; then
+            log_info "📋 Layer optimization: $layers_existed existing, $layers_pushed new"
+        fi
+    else
         log_error "Failed to push to Artifactory"
         exit 4
     fi
@@ -534,13 +588,15 @@ perform_standard_push() {
     local duration=$((end_time - start_time))
 
     log_success "Image successfully pushed to Artifactory"
-    log_time "$duration" "Pull/tag/push operation"
+    log_time "$duration" "$([ "$pull_needed" = "false" ] && echo "Tag/push operation (pull cached)" || echo "Pull/tag/push operation")"
 
     # Set environment variables for GitHub Actions
     if [ -n "${GITHUB_ENV:-}" ]; then
-        echo "IMAGE_CACHE_HIT=false" >> "$GITHUB_ENV"
+        echo "IMAGE_CACHE_HIT=$([ "$pull_needed" = "false" ] && echo "partial" || echo "false")" >> "$GITHUB_ENV"
         echo "IMAGE_BUILD_TIME=$duration" >> "$GITHUB_ENV"
-        echo "IMAGE_OPERATION=pushed" >> "$GITHUB_ENV"
+        echo "IMAGE_OPERATION=$([ "$pull_needed" = "false" ] && echo "pushed_cached" || echo "pushed")" >> "$GITHUB_ENV"
+        echo "IMAGE_LAYERS_EXISTED=$layers_existed" >> "$GITHUB_ENV"
+        echo "IMAGE_LAYERS_PUSHED=$layers_pushed" >> "$GITHUB_ENV"
     fi
 
     return 0
@@ -551,18 +607,29 @@ generate_report() {
     local operation="${IMAGE_OPERATION:-unknown}"
     local duration="${IMAGE_BUILD_TIME:-0}"
     local cache_hit="${IMAGE_CACHE_HIT:-false}"
+    local layers_existed="${IMAGE_LAYERS_EXISTED:-0}"
+    local layers_pushed="${IMAGE_LAYERS_PUSHED:-0}"
 
     # Determine optimization method used
     local optimization_method="Unknown"
+    local performance_status="STANDARD PUSH"
+
     case "$operation" in
         cached_by_tag)
             optimization_method="Fast Tag Check"
+            performance_status="OPTIMIZED ⚡"
             ;;
         cached_by_content)
             optimization_method="Content Hash Comparison"
+            performance_status="OPTIMIZED ⚡"
+            ;;
+        pushed_cached)
+            optimization_method="Pre-cached Pull + Push"
+            performance_status="PARTIALLY OPTIMIZED 🟡"
             ;;
         pushed)
             optimization_method="Not Applicable (New/Different Content)"
+            performance_status="STANDARD PUSH"
             ;;
     esac
 
@@ -577,12 +644,20 @@ Optimization Method: $optimization_method
 Duration: ${duration}s
 Cache Hit: $cache_hit
 $([ "$cache_hit" = "true" ] && echo "Content Status: IDENTICAL (no push needed)" || echo "Content Status: DIFFERENT OR NEW")
-Performance: $([ "$cache_hit" = "true" ] && echo "OPTIMIZED ⚡" || echo "STANDARD PUSH")
+Performance: $performance_status
 
 $([ "$cache_hit" = "true" ] && echo "💡 Time saved: ~60-300s (typical pull/push duration)" || echo "")
 $([ "$cache_hit" = "false" ] && [ "$operation" = "pushed" ] && echo "📝 Note: 'Layer already exists' messages indicate Docker's layer deduplication is working" || echo "")
 $([ "$operation" = "cached_by_tag" ] && echo "🏃‍♂️ Used fast tag-based optimization for base image" || echo "")
 $([ "$operation" = "cached_by_content" ] && echo "🔍 Used content hash comparison for custom/complex image" || echo "")
+$([ "$operation" = "pushed_cached" ] && echo "⚡ Benefited from pre-cached pull (GitHub Actions layer cache working)" || echo "")
+$([ "$layers_existed" -gt 0 ] && echo "📋 Layer Reuse: $layers_existed existing layers, $layers_pushed new layers pushed" || echo "")
+
+🎯 OPTIMIZATION INSIGHTS:
+$([ "$cache_hit" = "true" ] && echo "✅ Perfect optimization - no network transfer needed" || echo "")
+$([ "$cache_hit" = "partial" ] && echo "🟡 Partial optimization - pull cached, push required" || echo "")
+$([ "$cache_hit" = "false" ] && [ "$layers_existed" -gt 0 ] && echo "🔵 Docker layer deduplication active - some layers reused" || echo "")
+$([ "$cache_hit" = "false" ] && [ "$layers_existed" = 0 ] && echo "🔴 Full transfer required - new content or first push" || echo "")
 EOF
 }
 

@@ -43,7 +43,8 @@ fi
 deploy_resource_from_template ./openshift/maintenance.yml \
   DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \
   WEB_IMAGE=$WEB_IMAGE \
-  BUILD_NAME=$BUILD_NAME
+  BUILD_NAME=$BUILD_NAME \
+  ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET
 
 # Wait for the deployment/to scale to 1
 if ! wait_for "$DEPLOYMENT_SELECTOR" "ready" "1500s"; then
