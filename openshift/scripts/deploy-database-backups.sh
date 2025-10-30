@@ -112,6 +112,10 @@ image:
   pullPolicy: Always
   tag: "$BACKUP_IMAGE_TAG"
 
+# Ensure Artifactory access for image pulling
+imagePullSecrets:
+  - name: "${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
+
 persistence:
   backup:
     accessModes: ["ReadWriteMany"]
@@ -496,12 +500,12 @@ if [[ "${DEPLOYMENT_RESTART_NEEDED:-false}" == "true" ]]; then
   fi
 fi
 
-# Ensure Artifactory image pull secrets are configured
-log_info "🔐 Ensuring Artifactory access for backup deployment..."
+# Ensure Artifactory image pull secrets are configured (verification)
+log_info "Verifying Artifactory access for backup deployment..."
 if ensure_image_pull_secrets "deployment" "$DB_BACKUP_DEPLOYMENT_FULL_NAME" "$DEPLOY_NAMESPACE"; then
-  log_info "✅ Backup deployment now has Artifactory access"
+  log_info "✅ Backup deployment has Artifactory access confirmed"
 else
-  log_warn "⚠️ Failed to configure Artifactory access for backup deployment"
+  log_warn "⚠️ Backup deployment may have imagePullSecrets issues (this should have been configured during Helm deployment)"
 fi
 
 log_info "Backup container deployment completed."

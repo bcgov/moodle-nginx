@@ -49,6 +49,8 @@ cat <<EOF > redis-values.yaml
 global:
   security:
     allowInsecureImages: true
+  imagePullSecrets:
+    - name: "${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
 
 # Use proven working image tags from test environment
 image:
@@ -384,26 +386,26 @@ if ! wait_for_redis_proxy_ready "$REDIS_PROXY_NAME" "$OC_PROJECT" 60 10; then
 fi
 log_info "Redis Proxy is fully functional."
 
-# Ensure Artifactory image pull secrets are configured for Redis components
-log_info "🔐 Ensuring Artifactory access for Redis deployments..."
+# Verify Artifactory image pull secrets are configured
+log_info "Verifying Artifactory access for Redis deployments..."
 failed_count=0
 
 if ensure_image_pull_secrets "statefulset" "$redis_node_name"; then
-  log_info "✅ Redis StatefulSet now has Artifactory access"
+  log_info "✅ Redis StatefulSet has Artifactory access confirmed"
 else
-  log_warn "⚠️ Failed to configure Artifactory access for Redis StatefulSet"
+  log_warn "⚠️ Redis StatefulSet may have imagePullSecrets issues (this should have been configured during Helm deployment)"
   ((failed_count++))
 fi
 
 if ensure_image_pull_secrets "deployment" "$REDIS_PROXY_NAME"; then
-  log_info "✅ Redis Proxy deployment now has Artifactory access"
+  log_info "✅ Redis Proxy deployment has Artifactory access confirmed"
 else
-  log_warn "⚠️ Failed to configure Artifactory access for Redis Proxy"
+  log_warn "⚠️ Redis Proxy may have imagePullSecrets issues (this should have been configured during Helm deployment)"
   ((failed_count++))
 fi
 
 if [[ $failed_count -eq 0 ]]; then
-  log_info "🎉 All Redis components now have Artifactory access"
+  log_info "🎉 All Redis components have Artifactory access confirmed"
 fi
 
 log_success "Redis deployment completed successfully!"

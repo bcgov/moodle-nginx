@@ -84,6 +84,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
     --set image.tag=$RESOLVED_IMAGE_TAG \
     --set global.security.allowInsecureImages=true \
+    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
     --set replicaCount=$DB_REPLICAS \
@@ -115,6 +116,7 @@ else
     --set image.tag=$RESOLVED_IMAGE_TAG \
     --set image.pullPolicy=Always \
     --set global.security.allowInsecureImages=true \
+    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" \
     --set podManagementPolicy=Parallel \
     --set galera.bootstrap.forceSafeToBootstrap=true \
     --set galera.bootstrap.forceBootstrap=true \
@@ -279,12 +281,12 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
-# Ensure Artifactory image pull secrets are configured
-echo "🔐 Ensuring Artifactory access for MariaDB deployment..."
+# Verify Artifactory image pull secrets are configured (verification)
+echo "Verifying Artifactory access for MariaDB deployment..."
 if ensure_image_pull_secrets "statefulset" "$DB_DEPLOYMENT_NAME"; then
-  echo "✅ MariaDB StatefulSet now has Artifactory access"
+  echo "✅ MariaDB StatefulSet has Artifactory access confirmed"
 else
-  echo "⚠️ Failed to configure Artifactory access for MariaDB StatefulSet"
+  echo "⚠️ MariaDB StatefulSet may have imagePullSecrets issues (this should have been configured during Helm deployment)"
 fi
 
 echo "$DB_NAME Database deployment is complete."
