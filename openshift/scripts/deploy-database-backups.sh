@@ -114,7 +114,7 @@ image:
 
 # Ensure Artifactory access for image pulling
 imagePullSecrets:
-  - name: "${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
+  - name: "$ARTIFACTORY_PULL_SECRET"
 
 persistence:
   backup:

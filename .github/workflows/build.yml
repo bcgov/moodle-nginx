@@ -315,7 +315,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     with:
       DEBUG_LEVEL: ${{ needs.checkEnv.outputs.DEBUG_LEVEL }}
-      ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
+      ARTIFACTORY_PULL_SECRET: ${{ needs.checkEnv.outputs.ARTIFACTORY_PULL_SECRET }}
       CLUSTER_HEALTH_MONITORING: ${{ needs.checkEnv.outputs.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ needs.checkEnv.outputs.FORCE_MIGRATE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
