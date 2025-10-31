@@ -47,6 +47,7 @@ scan_docker_image_vulnerabilities() {
   local image_name="$1"
   local scan_level="${2:-$DEFAULT_SCAN_LEVEL}"
   local output_var="${3:-DOCKER_SCAN_RESULT}"
+  local exit_on="${4:-none}" # Options: "critical", "high", "none"
 
   log_info "Scanning Docker image vulnerabilities: $image_name"
   log_debug "Scan level: $scan_level"
@@ -55,6 +56,8 @@ scan_docker_image_vulnerabilities() {
   if command -v docker >/dev/null 2>&1; then
     local scan_output
     local exit_code=0
+    local high_count=0
+    local critical_count=0
 
     # Enable Docker Scout if available
     if docker scout version >/dev/null 2>&1; then
@@ -70,10 +73,15 @@ scan_docker_image_vulnerabilities() {
         if [ "$critical_count" -gt 0 ]; then
           eval "$output_var='CRITICAL'"
           log_error "CRITICAL: $critical_count critical vulnerabilities in $image_name"
-          return 2
+          if [ "$exit_on" = "critical" ]; then
+            return 2
+          fi
         elif [ "$high_count" -gt 0 ]; then
           eval "$output_var='HIGH'"
           log_warn "HIGH: $high_count high-severity vulnerabilities in $image_name"
+          if [ "$exit_on" -ne "none"  ]; then
+            return 2
+          fi
           return 1
         else
           eval "$output_var='CLEAN'"

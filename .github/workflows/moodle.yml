@@ -84,8 +84,8 @@ jobs:
       - name: 🐸 Buld to JFrog
         run: |
           docker buildx build \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-from type=gha,scope=${{ github.ref_name }} \
+            --cache-to type=gha,scope=${{ github.ref_name }},mode=max \
             --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} \
             --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
             --build-arg THEME_URL=${{ inputs.THEME_URL }} \

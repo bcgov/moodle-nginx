@@ -41,7 +41,7 @@ REDIS_ARGS=(
   "--set" "image.tag=$(echo "$REDIS_IMAGE" | cut -d':' -f2)"
   "--set" "sentinel.image.repository=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)"
   "--set" "sentinel.image.tag=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)"
-  "--set" "global.imagePullSecrets[0].name=$(echo "$ARTIFACTORY_PULL_SECRET" | cut -d':' -f1)"
+  "--set" "global.imagePullSecrets[0].name=${ARTIFACTORY_PULL_SECRET}"
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
   "--set" "redis.resources.requests.ephemeral-storage=50Mi"
@@ -376,7 +376,8 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
   DEPLOY_IMAGE=${REDIS_PROXY_IMAGE} \
-  REDIS_PROXY_NAME=$REDIS_PROXY_NAME
+  REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
+  ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET
 if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   log_error "Failed to deploy Redis Proxy. Exiting..."
   exit 1

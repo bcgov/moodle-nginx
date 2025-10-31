@@ -653,11 +653,18 @@ $([ "$operation" = "cached_by_content" ] && echo "🔍 Used content hash compari
 $([ "$operation" = "pushed_cached" ] && echo "⚡ Benefited from pre-cached pull (GitHub Actions layer cache working)" || echo "")
 $([ "$layers_existed" -gt 0 ] && echo "📋 Layer Reuse: $layers_existed existing layers, $layers_pushed new layers pushed" || echo "")
 
-🎯 OPTIMIZATION INSIGHTS:
-$([ "$cache_hit" = "true" ] && echo "✅ Perfect optimization - no network transfer needed" || echo "")
-$([ "$cache_hit" = "partial" ] && echo "🟡 Partial optimization - pull cached, push required" || echo "")
-$([ "$cache_hit" = "false" ] && [ "$layers_existed" -gt 0 ] && echo "🔵 Docker layer deduplication active - some layers reused" || echo "")
-$([ "$cache_hit" = "false" ] && [ "$layers_existed" = 0 ] && echo "🔴 Full transfer required - new content or first push" || echo "")
+echo "🎯 OPTIMIZATION INSIGHTS:"
+if [ -n "$cache_hit" ] && [ "$cache_hit" != "false" ]; then
+    echo "✅ Perfect optimization - no network transfer needed"
+elif [ "$cache_hit" = "partial" ]; then
+    echo "🟡 Partial optimization - pull cached, push required"
+elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" -gt 0 ]; then
+    echo "🔵 Docker layer deduplication active - some layers reused"
+elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" = 0 ]; then
+    echo "🔴 Full transfer required - new content or first push"
+else
+    echo "ℹ️ No optimization information available (variables may be unset)"
+fi
 EOF
 }
 

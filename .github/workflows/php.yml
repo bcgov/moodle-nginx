@@ -98,8 +98,8 @@ jobs:
         # run: docker buildx build --cache-from type=local --cache-to type=local,dest=/tmp/.buildx-cache,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
         run: |
           docker buildx build \
-            --cache-from type=gha,scope=php \
-            --cache-to type=gha,scope=php,mode=max \
+            --cache-from type=gha,scope=${{ github.ref_name }} \
+            --cache-to type=gha,scope=${{ github.ref_name }},mode=max \
             --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
             --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --output=type=image,push=true \
