@@ -645,48 +645,38 @@ Duration: ${duration}s
 Cache Hit: $cache_hit
 $([ "$cache_hit" = "true" ] && echo "Content Status: IDENTICAL (no push needed)" || echo "Content Status: DIFFERENT OR NEW")
 Performance: $performance_status
-
-$([ "$cache_hit" = "true" ] && echo "💡 Time saved: ~60-300s (typical pull/push duration)" || echo "")
-$([ "$cache_hit" = "false" ] && [ "$operation" = "pushed" ] && echo "📝 Note: 'Layer already exists' messages indicate Docker's layer deduplication is working" || echo "")
-$([ "$operation" = "cached_by_tag" ] && echo "🏃‍♂️ Used fast tag-based optimization for base image" || echo "")
-$([ "$operation" = "cached_by_content" ] && echo "🔍 Used content hash comparison for custom/complex image" || echo "")
-$([ "$operation" = "pushed_cached" ] && echo "⚡ Benefited from pre-cached pull (GitHub Actions layer cache working)" || echo "")
-$([ "$layers_existed" -gt 0 ] && echo "📋 Layer Reuse: $layers_existed existing layers, $layers_pushed new layers pushed" || echo "")
-
-echo "🎯 OPTIMIZATION INSIGHTS:"
-if [ -n "$cache_hit" ] && [ "$cache_hit" != "false" ]; then
-    echo "✅ Perfect optimization - no network transfer needed"
-elif [ "$cache_hit" = "partial" ]; then
-    echo "🟡 Partial optimization - pull cached, push required"
-elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" -gt 0 ]; then
-    echo "🔵 Docker layer deduplication active - some layers reused"
-elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" = 0 ]; then
-    echo "🔴 Full transfer required - new content or first push"
-else
-    echo "ℹ️ No optimization information available (variables may be unset)"
-fi
 EOF
-}
 
-# Main execution
-main() {
-    parse_args "$@"
-    check_docker
-
-    # Export variables for sub-functions
-    export SOURCE_IMAGE ARTIFACTORY_URL TIMEOUT RETRY_COUNT FORCE_PUSH QUIET
-
-    if optimize_image_push; then
-        generate_report
-        log_success "🎉 Image optimization completed successfully"
-        exit 0
+    echo "🎯 OPTIMIZATION INSIGHTS:"
+    if [ -n "$cache_hit" ] && [ "$cache_hit" != "false" ]; then
+        echo "✅ Perfect optimization - no network transfer needed"
+    elif [ "$cache_hit" = "partial" ]; then
+        echo "🟡 Partial optimization - pull cached, push required"
+    elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" -gt 0 ]; then
+        echo "🔵 Docker layer deduplication active - some layers reused"
+    elif [ "$cache_hit" = "false" ] && [ "${layers_existed:-0}" = 0 ]; then
+        echo "🔴 Full transfer required - new content or first push"
     else
-        log_error "❌ Image optimization failed"
-        exit 1
+        echo "ℹ️ No optimization information available (variables may be unset)"
+    fi
+
+    if [ "$cache_hit" = "true" ]; then
+        log_info "🎉 Image was fully cached - no push needed!"
+    elif [ "$cache_hit" = "partial" ]; then
+        log_info "⚡ Image pull was cached - push required for new layers"
+    else
+        log_info "🔄 Image was pushed - no caching optimization applied"
+    fi
+    if [ "$operation" = "cached_by_tag" ] && [ "$cache_hit" = "true" ]; then
+        log_info "🏃‍♂️ Used fast tag-based optimization for base image"
+    fi
+    if [ "$operation" = "cached_by_content" ] && [ "$cache_hit" = "true" ]; then
+        log_info "🔍 Used content hash comparison for custom/complex image"
+    fi
+    if [ "$operation" = "pushed_cached" ] && [ "$cache_hit" = "true" ]; then
+        log_info "⚡ Benefited from pre-cached pull (GitHub Actions layer cache working)"
+    fi
+    if [ "$layers_existed" -gt 0 ]; then
+        log_info "📋 Layer Reuse: $layers_existed existing layers, $layers_pushed new layers pushed"
     fi
 }
-
-# Run if called directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
