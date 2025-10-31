@@ -19,6 +19,19 @@ resolve_helm_image() {
         return 1
     fi
 
+    # Strip any existing registry prefix from image_name_tag
+    local image_path="$image_name_tag"
+    if [[ "$image_path" == registry-1.docker.io/* ]]; then
+        image_path="${image_path#registry-1.docker.io/}"
+        echo "📝 Stripped registry-1.docker.io prefix: $image_path" >&2
+    elif [[ "$image_path" == docker.io/* ]]; then
+        image_path="${image_path#docker.io/}"
+        echo "📝 Stripped docker.io prefix: $image_path" >&2
+    elif [[ "$image_path" == gcr.io/* ]] || [[ "$image_path" == quay.io/* ]]; then
+        image_path="${image_path#*/}"
+        echo "📝 Stripped external registry prefix: $image_path" >&2
+    fi
+
     # Choose registry based on USE_ARTIFACTORY setting
     local registry
     if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
@@ -38,11 +51,9 @@ resolve_helm_image() {
     fi
 
     # Construct full image URL
-    local full_image="${registry}/${image_name_tag}"
+    local full_image="${registry}/${image_path}"
 
     # Extract repository and tag for Helm --set commands
-    # For image "artifacts.../m950-learning/bitnamilegacy/mariadb-galera:10.6"
-    # We want repository="artifacts.../m950-learning/bitnamilegacy/mariadb-galera" and tag="10.6"
     local repository="${full_image%:*}"  # Everything before the last ':'
     local tag="${full_image##*:}"        # Everything after the last ':'
 

@@ -18,6 +18,14 @@ initialize_utility_arrays
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
+log_debug("DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY")
+log_debug("DEBUG: HELM_REPO=$HELM_REPO")
+log_debug("DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY")
+log_debug("DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE")
+log_debug("DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE")
+log_debug("DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY")
+log_debug("DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG")
+
 # Validate Helm environment and show Artifactory status
 if ! validate_helm_environment; then
     echo "❌ Helm environment validation failed. Please check your environment variables."
@@ -155,6 +163,14 @@ else
     --timeout 20m0s
     #-f ./config/mariadb/galera-values.yaml
 fi
+
+log_debug("DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY")
+log_debug("DEBUG: HELM_REPO=$HELM_REPO")
+log_debug("DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY")
+log_debug("DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE")
+log_debug("DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE")
+log_debug("DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY")
+log_debug("DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG")
 
 # Function to check if a JSON path exists in the StatefulSet
 json_path_exists() {
