@@ -86,34 +86,6 @@ run_github_actions_npm_security_scan() {
   return $scan_exit
 }
 
-setup_github_actions_dependency_caching() {
-  local cache_key_prefix="${1:-lighthouse}"
-  local cache_paths="${2:-~/.npm|config/lighthouse/node_modules}"
-  local package_json_path="${3:-config/lighthouse/package.json}"
-
-  log_info "Setting up GitHub Actions dependency caching..."
-
-  # Generate cache information for GitHub Actions
-  local cache_key="$cache_key_prefix-${{ hashFiles('$package_json_path') }}-v3"
-  local restore_keys="$cache_key_prefix-"
-
-  cat << EOF
-# GitHub Actions Cache Configuration
-# Add this to your workflow step:
-
-- name: Cache Node modules
-  uses: actions/cache@v4
-  with:
-    path: |
-$(echo "$cache_paths" | tr '|' '\n' | sed 's/^/      /')
-    key: \${{ runner.os }}-$cache_key
-    restore-keys: |
-      \${{ runner.os }}-$restore_keys
-      \${{ runner.os }}-node-
-
-EOF
-}
-
 # =============================================================================
 # DEPENDABOT AND AUTOMATED SECURITY TOOLS INTEGRATION
 # =============================================================================
