@@ -86,7 +86,18 @@ COPY ./openshift/scripts/moodle-upgrade.sh /usr/local/bin/moodle-upgrade.sh
 RUN dos2unix /usr/local/bin/moodle-upgrade.sh
 COPY ./openshift/scripts/migrate-build-files.sh /usr/local/bin/migrate-build-files.sh
 RUN dos2unix /usr/local/bin/migrate-build-files.sh
+
+# Add utility functions
 COPY ./openshift/scripts/_utils.sh /usr/local/bin/_utils.sh
 RUN dos2unix /usr/local/bin/_utils.sh
+COPY ./openshift/scripts/utils/moodle.sh /usr/local/bin/utils/moodle.sh
+RUN dos2unix /usr/local/bin/utils/moodle.sh
+COPY ./openshift/scripts/utils/database.sh /usr/local/bin/utils/database.sh
+RUN dos2unix /usr/local/bin/utils/database.sh
+COPY ./openshift/scripts/utils/openshift.sh /usr/local/bin/utils/openshift.sh
+RUN dos2unix /usr/local/bin/utils/openshift.sh
+COPY ./openshift/scripts/utils/redis.sh /usr/local/bin/utils/redis.sh
+RUN dos2unix /usr/local/bin/utils/redis.sh
+
 COPY ./openshift/scripts/test-migration-complete.sh /usr/local/bin/test-migration-complete.sh
 RUN dos2unix /usr/local/bin/test-migration-complete.sh

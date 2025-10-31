@@ -22,7 +22,6 @@ source ./openshift/scripts/_utils.sh
 # Read the CSV file line by line to set deployment resources
 # based on those values
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue
-
 do
   echo "Right-sizing: $Type/$Deployment"
 

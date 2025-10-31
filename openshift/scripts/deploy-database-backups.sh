@@ -6,16 +6,22 @@ helm repo update
 
 echo "Deploying database backups to: $DB_BACKUP_DEPLOYMENT_NAME..."
 
-# Ensure backup storage secrets exist
-echo "🔍 Checking for backup storage secrets..."
-if ! oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
-  echo "⚠️  Secret 'moodle-db-backup-storage-secrets' not found. Will be created by Helm chart."
-else
-  echo "⚠️  Secret 'moodle-db-backup-storage-secrets' exists but may conflict with Helm management."
-  echo "🔧 Removing existing secret to allow Helm to manage it properly..."
+# Ensure backup storage secrets are managed properly before Helm deployment
+echo "🔍 Pre-deployment secret management..."
 
+# Use the webhook URL from environment variable (set by GitHub Actions)
+# This avoids exposing the webhook URL in the repository
+webhook_url="${ROCKETCHAT_WEBHOOK_URL:-}"
+
+if [[ -z "$webhook_url" ]]; then
+  echo "⚠️  ROCKETCHAT_WEBHOOK_URL environment variable not set"
+fi
+
+# Remove any existing secret that might conflict with Helm management
+if oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
+  echo "🔧 Removing existing secret to allow proper management..."
   if oc delete secret moodle-db-backup-storage-secrets; then
-    echo "✅ Removed existing secret - Helm will create a new one"
+    echo "✅ Removed existing secret (moodle-db-backup-storage-secrets)"
   else
     echo "❌ Failed to remove existing secret"
     exit 1
@@ -88,28 +94,32 @@ if [[ $upgrade_rc -ne 0 ]]; then
   exit 1
 fi
 
-# Ensure backup storage secrets exist after Helm deployment
-echo "🔍 Re-checking backup storage secrets after Helm deployment..."
-if ! oc get secret moodle-db-backup-storage-secrets &> /dev/null; then
-  echo "⚠️  Backup storage secrets not created by Helm. Creating manually..."
+# Ensure backup storage secrets are properly configured after Helm deployment
+echo "🔍 Managing backup storage secrets after Helm deployment..."
 
-  # Create the secret with empty values (can be updated later with actual credentials)
-  oc create secret generic moodle-db-backup-storage-secrets \
-    --from-literal=ftp-password='' \
-    --from-literal=ftp-url='' \
-    --from-literal=ftp-user='' \
-    --from-literal=mssql-sa-password='' \
-    --from-literal=webhook-url=''
+# Validate webhook URL parameter
+if [[ -z "$webhook_url" ]]; then
+  echo "⚠️  No webhook URL provided - secret will have empty webhook-url"
+  webhook_url=""
+fi
 
-  if [[ $? -eq 0 ]]; then
-    echo "✅ Created backup storage secrets with empty values"
-    echo "📝 Note: Update the secret values later if FTP or webhook functionality is needed"
-  else
-    echo "❌ Failed to create backup storage secrets"
-    exit 1
-  fi
+# Define the specific secret values for backup storage
+# These are the key/value pairs required for the backup storage secret
+backup_secret_values="ftp-password=,ftp-url=,ftp-user=,mssql-sa-password=,webhook-url=${webhook_url}"
+
+# Use the utility function to manage secrets with validation
+manage_backup_storage_secrets "$DEPLOY_NAMESPACE" "moodle-db-backup-storage-secrets" "$backup_secret_values" "webhook-url" "backup storage secrets"
+secret_result=$?
+
+if [[ $secret_result -eq 0 ]]; then
+  echo "✅ Backup storage secrets are properly configured (no changes made)"
+elif [[ $secret_result -eq 2 ]]; then
+  echo "✅ Backup storage secrets are properly configured (changes made)"
+  echo "🔄 Secret changes detected - deployment restart will be needed"
+  DEPLOYMENT_RESTART_NEEDED=true
 else
-  echo "✅ Backup storage secrets exist"
+  echo "❌ Failed to configure backup storage secrets"
+  exit 1
 fi
 
 # Debug: Check what values Helm is actually using
@@ -199,6 +209,21 @@ else
     fi
   else
     echo "  ⚠️  Could not find backup pod to verify environment variables"
+  fi
+fi
+
+# Handle deployment restart if secret changes were made
+if [[ "${DEPLOYMENT_RESTART_NEEDED:-false}" == "true" ]]; then
+  echo ""
+  restart_deployment "$DB_BACKUP_DEPLOYMENT_FULL_NAME" "$DEPLOY_NAMESPACE"
+  restart_result=$?
+
+  if [[ $restart_result -eq 0 ]]; then
+    echo "✅ Deployment successfully restarted to pick up secret changes"
+  elif [[ $restart_result -eq 2 ]]; then
+    echo "⚠️  Deployment restart timed out, but was initiated"
+  else
+    echo "⚠️  Deployment restart failed, but continuing..."
   fi
 fi
 

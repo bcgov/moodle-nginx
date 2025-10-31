@@ -8,6 +8,8 @@ env:
   APP: moodle
   USER: ${{ github.actor }}
 
+  DEBUG_LEVEL: "INFO" # Options: INFO, DEBUG
+
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
   SKIP_DEPLOY: "NO"
@@ -27,13 +29,6 @@ on:
     - cron: "0 3 * * 6"
   push:
     branches:
-      - e66ac2-dev
-      - 950003-dev
-      - 950003-test
-      - 950003-prod
-  pull_request:
-    branches:
-      - e66ac2-dev
       - 950003-dev
       - 950003-test
       - 950003-prod
@@ -56,6 +51,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
+      DEBUG_LEVEL: ${{ env.DEBUG_LEVEL }}
       FORCE_MIGRATE: ${{ env.FORCE_MIGRATE }}
       MOODLE_URL: ${{ env.MOODLE_URL }}
       MOODLE_BRANCH_VERSION: ${{ env.MOODLE_BRANCH_VERSION }}
@@ -219,6 +215,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     with:
+      DEBUG_LEVEL: ${{ needs.checkEnv.outputs.DEBUG_LEVEL }}
       FORCE_MIGRATE: ${{ needs.checkEnv.outputs.FORCE_MIGRATE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
