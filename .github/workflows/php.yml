@@ -45,16 +45,12 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      # Cache Docker layers in GitHub Actions for cross-deployment reuse
-      - name: 🗂️ Setup Docker Layer Cache
-        uses: actions/cache@v4
+      - name: Set up Docker Buildx (container driver)
+        uses: docker/setup-buildx-action@v3
         with:
-          path: /tmp/.buildx-cache
-          # Use content-based cache key for maximum reuse across deployments
-          # Cache will persist until image versions change in example.versions.env
-          key: php-images-${{ runner.os }}-${{ hashFiles('example.versions.env') }}-
-          restore-keys: |
-            php-images-${{ runner.os }}-${{ hashFiles('example.versions.env') }}-
+          install: true
+          driver-opts: network=host
+          buildkitd-flags: --debug
 
       # Pull latest PHP base image and push to Artifactory (optimized)
       - name: 🛠️ Optimized PHP base image push to Artifactory
@@ -99,4 +95,13 @@ jobs:
 
       # Build PHP Image and push to Artifactory
       - name: 🛠️ Build PHP Image and push to Artifactory
-        run: docker buildx build --cache-from type=local --cache-to type=local,dest=/tmp/.buildx-cache,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+        # run: docker buildx build --cache-from type=local --cache-to type=local,dest=/tmp/.buildx-cache,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+        run: |
+          docker buildx build \
+            --cache-from type=gha,scope=php \
+            --cache-to type=gha,scope=php,mode=max \
+            --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
+            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+            --output=type=image,push=true \
+            --push \
+            -f ${{ env.PHP_DOCKER_FILE_PATH }} .
