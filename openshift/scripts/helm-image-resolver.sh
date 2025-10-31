@@ -57,6 +57,18 @@ resolve_helm_image() {
     local repository="${full_image%:*}"  # Everything before the last ':'
     local tag="${full_image##*:}"        # Everything after the last ':'
 
+    # Strip any registry prefix from repository (if present)
+    if [[ "$repository" == */docker.io/* ]]; then
+        repository="${repository/docker.io\//}"
+        echo "📝 Stripped docker.io prefix from repository: $repository" >&2
+    elif [[ "$repository" == */registry-1.docker.io/* ]]; then
+        repository="${repository/registry-1.docker.io\//}"
+        echo "📝 Stripped registry-1.docker.io prefix from repository: $repository" >&2
+    elif [[ "$repository" == */gcr.io/* ]] || [[ "$repository" == */quay.io/* ]]; then
+        repository="${repository#*/}"
+        echo "📝 Stripped external registry prefix from repository: $repository" >&2
+    fi
+
     # Export variables for the calling script
     export RESOLVED_IMAGE_REPOSITORY="$repository"
     export RESOLVED_IMAGE_TAG="$tag"
