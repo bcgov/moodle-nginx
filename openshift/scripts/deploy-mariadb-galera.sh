@@ -182,8 +182,11 @@ json_path_exists() {
   return 0
 }
 
-# Define the patches to add preStop hook to the StatefulSet
+# Define the patches to add custom container images
+#  and a preStop hook to the StatefulSet
 patches=(
+  "{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"$RESOLVED_FULL_IMAGE\"}"
+  "{\"op\": \"replace\", \"path\": \"/spec/template/spec/initContainers/0/image\", \"value\": \"$RESOLVED_FULL_IMAGE\"}"
   '{"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "prestop-script", "configMap": {"name": "mariadb-galera-prestop-script"}}}'
   '{"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh", "readOnly": true}}'
   '{"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {}}'
