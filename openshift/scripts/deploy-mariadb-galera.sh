@@ -195,6 +195,8 @@ patches=(
 
 # Define the JSON paths to check if the patches have been applied
 paths=(
+  '.spec.template.spec.containers[0].image'
+  '.spec.template.spec.initContainers[0].image'
   '{.spec.template.spec.volumes[?(@.name=="prestop-script")]}'
   '{.spec.template.spec.containers[0].volumeMounts[?(@.name=="prestop-script")]}'
   '{.spec.template.spec.containers[0].lifecycle}'
