@@ -19,17 +19,19 @@ resolve_helm_image() {
         return 1
     fi
 
-    # Strip any existing registry prefix from image_name_tag
+    # Strip any existing registry prefix from image_name_tag ONLY if using Artifactory
     local image_path="$image_name_tag"
-    if [[ "$image_path" == registry-1.docker.io/* ]]; then
-        image_path="${image_path#registry-1.docker.io/}"
-        echo "📝 Stripped registry-1.docker.io prefix: $image_path" >&2
-    elif [[ "$image_path" == docker.io/* ]]; then
-        image_path="${image_path#docker.io/}"
-        echo "📝 Stripped docker.io prefix: $image_path" >&2
-    elif [[ "$image_path" == gcr.io/* ]] || [[ "$image_path" == quay.io/* ]]; then
-        image_path="${image_path#*/}"
-        echo "📝 Stripped external registry prefix: $image_path" >&2
+    if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
+        if [[ "$image_path" == registry-1.docker.io/* ]]; then
+            image_path="${image_path#registry-1.docker.io/}"
+            echo "📝 Stripped registry-1.docker.io prefix: $image_path" >&2
+        elif [[ "$image_path" == docker.io/* ]]; then
+            image_path="${image_path#docker.io/}"
+            echo "📝 Stripped docker.io prefix: $image_path" >&2
+        elif [[ "$image_path" == gcr.io/* ]] || [[ "$image_path" == quay.io/* ]]; then
+            image_path="${image_path#*/}"
+            echo "📝 Stripped external registry prefix: $image_path" >&2
+        fi
     fi
 
     # Choose registry based on USE_ARTIFACTORY setting
