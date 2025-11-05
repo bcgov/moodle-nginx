@@ -400,27 +400,27 @@ jobs:
           echo "✅ Security validation passed"
           echo ""
 
-          echo "=== � Lighthouse Security Scan (Warning Mode) ==="
-          cd config/lighthouse
-          source ../../openshift/scripts/utils/npm.sh
-
-          # Lighthouse security scan (warnings only - credentials/URLs involved but testing-only)
-          lighthouse_security_scan "." "moderate"
-          echo ""
-
-          echo "✅ NPM security validation passed"
-          echo ""
-
           echo "=== 🏗️ Lighthouse Environment Setup ==="
-          cd ../../
 
-          # Setup complete Lighthouse environment with security validation
+          # Setup Lighthouse environment FIRST (installs dependencies)
           if ! setup_lighthouse_environment "config/lighthouse" "true"; then
             echo "❌ Lighthouse environment setup failed"
             exit 1
           fi
 
           echo "✅ Lighthouse environment ready"
+          echo ""
+
+          echo "=== 🔒 Lighthouse Security Scan (Warning Mode) ==="
+          cd config/lighthouse
+          source ../../openshift/scripts/utils/npm.sh
+
+          # Lighthouse security scan (warnings only - dependencies now installed)
+          lighthouse_security_scan "." "moderate"
+
+          cd ../../
+          echo ""
+          echo "✅ NPM security validation passed"
 
       # Multi-layer Caching (NPM + APT packages)
       - name: 📦 Cache Dependencies
