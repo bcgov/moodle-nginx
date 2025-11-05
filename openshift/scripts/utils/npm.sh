@@ -44,11 +44,15 @@ lighthouse_security_scan() {
   elif [ "$audit_result" = "HIGH" ]; then
     overall_status="WARNING_HIGH"
     log_warn "🔒 LIGHTHOUSE SECURITY WARNING: High-severity vulnerabilities detected!"
-  elif [ "$audit_exit" -ne 0 ]; then
-    overall_status="WARNING_GENERAL"
-    log_warn "🔒 LIGHTHOUSE SECURITY WARNING: Security issues detected!"
+  elif [ "$audit_result" = "MODERATE" ] || [ "$audit_result" = "LOW" ]; then
+    overall_status="PASS_WITH_LOW_PRIORITY"
+    log_info "✅ Lighthouse NPM security scan: Only low/moderate vulnerabilities (below threshold)"
+  elif [ "$audit_result" = "CLEAN" ]; then
+    overall_status="PASS"
+    log_info "✅ Lighthouse NPM security scan: No vulnerabilities detected"
   else
-    log_info "✅ Lighthouse NPM security scan: No critical issues"
+    overall_status="UNKNOWN"
+    log_warn "⚠️ Lighthouse NPM security scan: Unable to determine status"
   fi
 
   # Generate summary
@@ -84,33 +88,53 @@ npm_audit_scan() {
   local audit_file="/tmp/npm-audit-$(date +%s).json"
   local exit_code=0
 
-  if npm audit --audit-level "$audit_level" --json > "$audit_file" 2>/dev/null; then
-    log_info "No $audit_level+ vulnerabilities found"
-    eval "$output_var='CLEAN'"
-  else
-    exit_code=$?
-    log_warn "Vulnerabilities detected!"
+  # Run npm audit and capture exit code (npm audit exits 1 if vulnerabilities found)
+  npm audit --audit-level "$audit_level" --json > "$audit_file" 2>/dev/null || exit_code=$?
 
-    if command -v jq >/dev/null 2>&1 && [ -f "$audit_file" ]; then
-      local critical=$(jq -r '.metadata.vulnerabilities.critical // 0' "$audit_file")
-      local high=$(jq -r '.metadata.vulnerabilities.high // 0' "$audit_file")
-      local moderate=$(jq -r '.metadata.vulnerabilities.moderate // 0' "$audit_file")
-      local low=$(jq -r '.metadata.vulnerabilities.low // 0' "$audit_file")
+  # Parse JSON output to determine actual vulnerability counts
+  if command -v jq >/dev/null 2>&1 && [ -f "$audit_file" ]; then
+    local critical=$(jq -r '.metadata.vulnerabilities.critical // 0' "$audit_file" 2>/dev/null || echo "0")
+    local high=$(jq -r '.metadata.vulnerabilities.high // 0' "$audit_file" 2>/dev/null || echo "0")
+    local moderate=$(jq -r '.metadata.vulnerabilities.moderate // 0' "$audit_file" 2>/dev/null || echo "0")
+    local low=$(jq -r '.metadata.vulnerabilities.low // 0' "$audit_file" 2>/dev/null || echo "0")
 
-      log_debug "Vulnerability breakdown: Critical=$critical, High=$high, Moderate=$moderate, Low=$low"
+    log_debug "Vulnerability breakdown: Critical=$critical, High=$high, Moderate=$moderate, Low=$low"
 
-      if [ "$critical" -gt 0 ]; then
-        eval "$output_var='CRITICAL'"
-        log_error "CRITICAL: $critical critical vulnerabilities found!"
-        return 2
-      elif [ "$high" -gt 0 ]; then
-        eval "$output_var='HIGH'"
-        log_warn "WARNING: $high high-severity vulnerabilities found!"
-        return 1
-      else
-        eval "$output_var='MODERATE'"
-      fi
+    # Check actual counts, not just npm exit code
+    if [ "$critical" -gt 0 ]; then
+      eval "$output_var='CRITICAL'"
+      log_error "CRITICAL: $critical critical vulnerabilities found!"
+      rm -f "$audit_file"
+      return 2
+    elif [ "$high" -gt 0 ]; then
+      eval "$output_var='HIGH'"
+      log_warn "WARNING: $high high-severity vulnerabilities found!"
+      rm -f "$audit_file"
+      return 1
+    elif [ "$moderate" -gt 0 ]; then
+      eval "$output_var='MODERATE'"
+      log_info "MODERATE: $moderate moderate vulnerabilities found (below $audit_level threshold)"
+      rm -f "$audit_file"
+      return 0
+    elif [ "$low" -gt 0 ]; then
+      eval "$output_var='LOW'"
+      log_info "LOW: $low low-severity vulnerabilities found (below $audit_level threshold)"
+      rm -f "$audit_file"
+      return 0
     else
+      # All counts are zero - truly clean
+      eval "$output_var='CLEAN'"
+      log_info "No vulnerabilities found"
+      rm -f "$audit_file"
+      return 0
+    fi
+  else
+    # Fallback if jq not available or file parsing failed
+    if [ $exit_code -eq 0 ]; then
+      log_info "No $audit_level+ vulnerabilities found"
+      eval "$output_var='CLEAN'"
+    else
+      log_warn "Vulnerabilities may exist but could not parse audit output"
       eval "$output_var='UNKNOWN'"
     fi
   fi

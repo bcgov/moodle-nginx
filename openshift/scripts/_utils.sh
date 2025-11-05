@@ -30,36 +30,57 @@ CLUSTER_HEALTH_MONITORING="${CLUSTER_HEALTH_MONITORING:-YES}"
 # =============================================================================
 
 # Load core OpenShift utilities (main include file)
+# NOTE: This MUST be loaded first as it defines the logging functions used below
 if [[ -f "$UTILS_DIR/openshift.sh" ]]; then
   source "$UTILS_DIR/openshift.sh"
-  log_debug "Loaded OpenShift utilities module"
+  log_debug "✅ Loaded OpenShift utilities module from $UTILS_DIR/openshift.sh"
+elif [[ -f "$SCRIPT_DIR/openshift.sh" ]]; then
+  # Fallback: Check if modules are in same directory (ConfigMap flat structure)
+  source "$SCRIPT_DIR/openshift.sh"
+  log_debug "✅ Loaded OpenShift utilities module from $SCRIPT_DIR/openshift.sh"
 else
-  log_error "Warning: OpenShift utilities module not found at $UTILS_DIR/openshift.sh"
+  echo "❌ ERROR: OpenShift utilities module not found"
+  echo "   Searched: $UTILS_DIR/openshift.sh and $SCRIPT_DIR/openshift.sh"
   echo "   Falling back to legacy mode..."
+  # Define minimal logging functions as fallback
+  log_error() { echo "❌ $*" >&2; }
+  log_warn() { echo "⚠️  $*"; }
+  log_info() { echo "ℹ️  $*"; }
+  log_debug() { [[ "${DEBUG_LEVEL}" == "DEBUG" ]] && echo "🔍 $*"; }
+  log_success() { echo "✅ $*"; }
 fi
 
 # Load Redis-specific utilities
 if [[ -f "$UTILS_DIR/redis.sh" ]]; then
   source "$UTILS_DIR/redis.sh"
-  log_debug "Loaded Redis utilities module"
+  log_debug "✅ Loaded Redis utilities module"
+elif [[ -f "$SCRIPT_DIR/redis.sh" ]]; then
+  source "$SCRIPT_DIR/redis.sh"
+  log_debug "✅ Loaded Redis utilities module (flat structure)"
 else
-  log_warn "Warning: Redis utilities module not found at $UTILS_DIR/redis.sh"
+  log_warn "⚠️  Redis utilities module not found - Redis operations unavailable"
 fi
 
 # Load Database utilities
 if [[ -f "$UTILS_DIR/database.sh" ]]; then
   source "$UTILS_DIR/database.sh"
-  log_debug "Loaded Database utilities module"
+  log_debug "✅ Loaded Database utilities module"
+elif [[ -f "$SCRIPT_DIR/database.sh" ]]; then
+  source "$SCRIPT_DIR/database.sh"
+  log_debug "✅ Loaded Database utilities module (flat structure)"
 else
-  log_warn "Warning: Database utilities module not found at $UTILS_DIR/database.sh"
+  log_warn "⚠️  Database utilities module not found - Galera operations unavailable"
 fi
 
 # Load Moodle utilities
 if [[ -f "$UTILS_DIR/moodle.sh" ]]; then
   source "$UTILS_DIR/moodle.sh"
-  log_debug "Loaded Moodle utilities module"
+  log_debug "✅ Loaded Moodle utilities module"
+elif [[ -f "$SCRIPT_DIR/moodle.sh" ]]; then
+  source "$SCRIPT_DIR/moodle.sh"
+  log_debug "✅ Loaded Moodle utilities module (flat structure)"
 else
-  log_warn "Warning: Moodle utilities module not found at $UTILS_DIR/moodle.sh"
+  log_warn "⚠️  Moodle utilities module not found - Moodle operations unavailable"
 fi
 
 # =============================================================================
