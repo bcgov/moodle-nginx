@@ -40,6 +40,201 @@ readonly DEFAULT_ABORT_ON_CRITICAL="true"
 readonly DEFAULT_CACHE_DIR="/tmp/security-cache"
 
 # =============================================================================
+# VULNERABILITY EXCEPTION HANDLING
+# =============================================================================
+
+load_vulnerability_exceptions() {
+  local exceptions_file="$PROJECT_ROOT/.security/vulnerability-exceptions.json"
+
+  if [ -f "$exceptions_file" ]; then
+    VULNERABILITY_EXCEPTIONS=$(cat "$exceptions_file")
+    log_debug "Loaded vulnerability exceptions from $exceptions_file"
+  else
+    VULNERABILITY_EXCEPTIONS="{\"exceptions\":[]}"
+    log_debug "No vulnerability exceptions file found"
+  fi
+}
+
+# Check if a vulnerability is excepted (in exception list)
+# Usage: is_vulnerability_excepted <cve_id> <package_name>
+# Returns: 0 if excepted, 1 if not
+is_vulnerability_excepted() {
+  local cve_id="$1"
+  local package="$2"
+
+  if [ -z "$VULNERABILITY_EXCEPTIONS" ]; then
+    load_vulnerability_exceptions
+  fi
+
+  # Check if CVE is in exceptions list
+  local is_excepted=$(echo "$VULNERABILITY_EXCEPTIONS" | jq -r \
+    --arg cve "$cve_id" \
+    --arg pkg "$package" \
+    '.exceptions[] | select(.cve == $cve and .package == $pkg) | .status' 2>/dev/null || echo "")
+
+  if [ -n "$is_excepted" ]; then
+    log_debug "CVE $cve_id in $package is excepted: $is_excepted"
+    return 0
+  fi
+
+  return 1
+}
+
+get_exception_reason() {
+  local cve_id="$1"
+  local package="$2"
+
+  if [ -z "$VULNERABILITY_EXCEPTIONS" ]; then
+    load_vulnerability_exceptions
+  fi
+
+  echo "$VULNERABILITY_EXCEPTIONS" | jq -r \
+    --arg cve "$cve_id" \
+    --arg pkg "$package" \
+    '.exceptions[] | select(.cve == $cve and .package == $pkg) | .reason' 2>/dev/null || echo ""
+}
+
+# =============================================================================
+# DETAILED VULNERABILITY REPORTING
+# =============================================================================
+
+generate_detailed_vulnerability_report() {
+  local scan_results_file="$1"
+  local report_type="$2"  # "docker", "composer", "system"
+  local output_file="$3"
+
+  log_info "Generating detailed vulnerability report: $output_file"
+
+  # Load exceptions
+  load_vulnerability_exceptions
+
+  # Initialize report
+  cat > "$output_file" << 'EOF'
+# 🔍 Detailed Vulnerability Report
+
+**Report Type:** %REPORT_TYPE%
+**Generated:** %TIMESTAMP%
+
+---
+
+## 📋 Vulnerability Details
+
+| CVE ID | Package | Version | Severity | CVSS | Status | Description |
+|--------|---------|---------|----------|------|--------|-------------|
+EOF
+
+  # Replace placeholders
+  sed -i "s/%REPORT_TYPE%/$report_type/g" "$output_file" 2>/dev/null || \
+    sed -i '' "s/%REPORT_TYPE%/$report_type/g" "$output_file" 2>/dev/null || true
+  sed -i "s/%TIMESTAMP%/$(date -u +"%Y-%m-%d %H:%M:%S UTC")/g" "$output_file" 2>/dev/null || \
+    sed -i '' "s/%TIMESTAMP%/$(date -u +"%Y-%m-%d %H:%M:%S UTC")/g" "$output_file" 2>/dev/null || true
+
+  # Parse vulnerabilities based on report type
+  case "$report_type" in
+    docker)
+      # Parse Trivy JSON results
+      if [ -f "$scan_results_file" ] && command -v jq >/dev/null 2>&1; then
+        jq -r '.Results[]?.Vulnerabilities[]? |
+          select(.Severity == "CRITICAL" or .Severity == "HIGH") |
+          "| \(.VulnerabilityID // "N/A") | \(.PkgName // "unknown") | \(.InstalledVersion // "unknown") | \(.Severity) | \(.CVSS.nvd.V3Score // .CVSS.redhat.V3Score // "N/A") | \(if .FixedVersion then "Fix: " + .FixedVersion else "No fix" end) | \(.Title // .Description // "No description")[:80] |"' \
+          "$scan_results_file" >> "$output_file" 2>/dev/null || true
+      fi
+      ;;
+    composer)
+      # Parse Composer audit JSON
+      if [ -f "$scan_results_file" ] && command -v jq >/dev/null 2>&1; then
+        jq -r '.advisories[]? |
+          "| \(.cve // .advisoryId) | \(.packageName) | \(.affectedVersions) | \(.severity // "UNKNOWN") | N/A | \(if .sources then "Advisory" else "Unknown" end) | \(.title // "No description")[:80] |"' \
+          "$scan_results_file" >> "$output_file" 2>/dev/null || true
+      fi
+      ;;
+  esac
+
+  # Add exceptions section
+  cat >> "$output_file" << 'EOF'
+
+---
+
+## ✅ Excepted Vulnerabilities
+
+These vulnerabilities have been reviewed and documented as exceptions:
+
+| CVE ID | Package | Status | Reason | Approved By |
+|--------|---------|--------|--------|-------------|
+EOF
+
+  # List all exceptions
+  if [ -n "$VULNERABILITY_EXCEPTIONS" ] && command -v jq >/dev/null 2>&1; then
+    echo "$VULNERABILITY_EXCEPTIONS" | jq -r '.exceptions[]? |
+      "| \(.cve) | \(.package) | \(.status) | \(.reason[:60]) | \(.approvedBy // .verifiedBy // "N/A") |"' \
+      >> "$output_file" 2>/dev/null || true
+  fi
+
+  # Add legend
+  cat >> "$output_file" << 'EOF'
+
+---
+
+## 📖 Status Legend
+
+- **PATCHED_EXTERNALLY**: Patched via TuxCare or similar service
+- **COMPATIBILITY_EXCEPTION**: Update breaks compatibility, risk accepted
+- **FALSE_POSITIVE**: Scanner error, not actually vulnerable
+- **PLANNED_UPGRADE**: Scheduled for next maintenance window
+- **NO_FIX_AVAILABLE**: Vendor has not released patch
+- **ACCEPTED_RISK**: Low severity, documented risk acceptance
+
+---
+
+## 🔧 Remediation Guide
+
+### For Non-Whitelisted Vulnerabilities
+
+1. **Update Dependencies**
+   ```bash
+   # Update specific package
+   composer update vendor/package
+
+   # Update container base image
+   # Edit example.versions.env and update image tag
+   ```
+
+2. **Apply External Patches** (TuxCare/CloudLinux)
+   - Document patch in `.security/vulnerability-exceptions.json`
+   - Include patch source, date, and verification
+
+3. **Request Exception**
+   - Create issue with risk assessment
+   - Get approval from Security Team
+   - Document in `.security/vulnerability-exceptions.json`
+
+### Exception Documentation Template
+
+```json
+{
+  "cve": "CVE-2024-XXXXX",
+  "package": "package-name",
+  "version": "1.2.3",
+  "severity": "HIGH",
+  "status": "PATCHED_EXTERNALLY",
+  "reason": "Patched via TuxCare - vulnerability mitigated without version update",
+  "patchSource": "TuxCare",
+  "patchDate": "2025-11-06",
+  "verifiedBy": "Security Team",
+  "expiryDate": "2026-11-06",
+  "references": ["https://tuxcare.com/...", "Internal: SEC-1234"]
+}
+```
+
+---
+
+*Generated by security scanning automation*
+EOF
+
+  log_success "Detailed vulnerability report generated: $output_file"
+}
+
+# =============================================================================
 # DOCKER IMAGE SECURITY
 # =============================================================================
 
@@ -886,6 +1081,69 @@ get_security_recommendations() {
   fi
 
   return 0
+}
+
+# Read Docker images from generated manifest (optimization)
+scan_docker_images_from_manifest() {
+  local manifest="$PROJECT_ROOT/openshift/dependencies/images.yml"
+
+  if [ ! -f "$manifest" ]; then
+    log_warn "Docker images manifest not found: $manifest"
+    log_warn "Run populate-dependency-manifests.sh first"
+    return 0
+  fi
+
+  log_info "Reading Docker images from generated manifest"
+
+  # Parse YAML and scan each image (requires yq or Python)
+  if command -v yq >/dev/null 2>&1; then
+    yq eval '.services[].image' "$manifest" 2>/dev/null | while IFS= read -r image; do
+      if [ -n "$image" ] && [ "$image" != "null" ]; then
+        scan_docker_image_vulnerabilities "$image"
+      fi
+    done
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import yaml
+with open('$manifest') as f:
+    data = yaml.safe_load(f)
+    for service in data.get('services', {}).values():
+        print(service.get('image', ''))
+" | while IFS= read -r image; do
+      if [ -n "$image" ]; then
+        scan_docker_image_vulnerabilities "$image"
+      fi
+    done
+  else
+    log_warn "yq or Python required to parse manifest, falling back to defaults"
+    return 1
+  fi
+}
+
+# Read Git repositories from generated manifest (optimization)
+scan_git_repos_from_manifest() {
+  local manifest="$PROJECT_ROOT/config/moodle/git-dependencies.json"
+
+  if [ ! -f "$manifest" ]; then
+    log_warn "Git dependencies manifest not found: $manifest"
+    log_warn "Run populate-dependency-manifests.sh first"
+    return 0
+  fi
+
+  log_info "Reading Git repositories from generated manifest"
+
+  # Parse JSON and check repos marked for security scanning
+  jq -r '.repositories[] | select(.security_scan == true) | "\(.url)|\(.branch)"' "$manifest" | \
+  while IFS='|' read -r url branch; do
+    if [ -n "$url" ]; then
+      # Extract owner/repo from URL
+      local repo_path=$(echo "$url" | sed -E 's|https?://github\.com/||' | sed 's|\.git$||')
+      local owner=$(echo "$repo_path" | cut -d'/' -f1)
+      local repo=$(echo "$repo_path" | cut -d'/' -f2)
+
+      check_github_security_advisories "$owner" "$repo" "$branch"
+    fi
+  done
 }
 
 # Display detailed repository inventory with security information

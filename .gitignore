@@ -18,3 +18,7 @@ config/moodle/composer.lock
 openshift/dependencies/
 .github/security-tools.json
 config/moodle/git-dependencies.json
+
+# Internal documentation (do not publish)
+.docs/internal/
+.docs/DOCUMENTATION-REVIEW.md

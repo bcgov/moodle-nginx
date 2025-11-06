@@ -11,6 +11,18 @@ env:
   DEBUG_LEVEL: "DEBUG" # Options: INFO, DEBUG
   CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
+  # Security Scanning Configuration (CI/CD only)
+  # Modify these values in each branch (950003-dev, 950003-test, 950003-prod)
+  SECURITY_SCAN_ENABLED: "YES"          # YES, NO - Enable/disable security scanning
+  SECURITY_SCAN_LEVEL: "BASIC"          # OFF, MINIMAL, BASIC, FULL - Scan thoroughness
+  SECURITY_SCAN_EXIT_ON: "WARN"         # WARN, CRITICAL, HIGH, MEDIUM, ANY - When to fail builds
+  SECURITY_SCAN_CONTAINERS: "NO"        # YES, NO - Enable expensive container image scanning
+  SECURITY_SCAN_CACHE: "YES"            # YES, NO - Cache Trivy vulnerability database
+  # Recommended per environment:
+  # Dev:  LEVEL=BASIC, EXIT_ON=WARN,     CONTAINERS=NO  (~2-3 min, never blocks)
+  # Test: LEVEL=FULL,  EXIT_ON=HIGH,     CONTAINERS=YES (~6-8 min, blocks High/Critical)
+  # Prod: LEVEL=FULL,  EXIT_ON=CRITICAL, CONTAINERS=YES (~6-8 min, blocks Critical only)
+
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "YES"
   SKIP_DEPLOY: "NO"
@@ -126,6 +138,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
           trivy --version
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
       # Auto-populate dependency manifests from centralized versions
       - name: 🔄 Auto-populate dependency manifests
@@ -380,6 +395,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: mkdir -p tmp/artifacts
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
       # 🔒 Security Validation
       - name: 🔒 Comprehensive Security Validation

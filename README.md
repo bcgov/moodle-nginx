@@ -12,9 +12,9 @@ This directory contains the docker setup to run an instance of Moodle 4.01. A nu
 
 Most relevant variables for versions, pod names, etc. can be found in `example.env` and `example.versions.env` files.
 
-## 🔄 Ephemeral Dependency Management
+## 🔄 Centralized Dependency Management
 
-This repository uses an **ephemeral approach** for dependency management:
+This repository uses centralized dependency management:
 
 - **Source**: All versions are managed in `example.versions.env`
 - **Generated**: Dependency files are auto-generated during CI/CD builds
@@ -26,7 +26,20 @@ For local development, generate fresh dependency files:
 docker-compose --env-file .env.generated up
 ```
 
-📖 **See [docs/EPHEMERAL-DEPENDENCIES.md](docs/EPHEMERAL-DEPENDENCIES.md) for complete details**
+📖 **See [.docs/centralized-dependency-management.md](.docs/centralized-dependency-management.md) for complete details**
+
+---
+
+## 🔒 Security
+
+This project implements comprehensive security scanning and vulnerability management:
+
+- **[Security Scanning Guide](.docs/security-scanning.md)** - Quick reference and configuration
+- **[Vulnerability Exception Management](.docs/vulnerability-exceptions.md)** - TuxCare integration and exception handling
+- **[Security Best Practices](.docs/security-scanning-best-practices.md)** - Strategic workflow design
+- **[Dependency Management](.docs/centralized-dependency-management.md)** - Centralized version control
+
+Security scanning runs automatically on every build with environment-specific settings (dev/test/prod).
 
 ## Configuration
 
@@ -59,9 +72,29 @@ Network host names are the same as the service names (e.g. just 'redis')
 docker-compose build --no-cache
 docker-compose -p moodle up -d --env-file ./example.env
 
-## Deployment
+## 🚀 Build & Deployment
 
-Deployment to OpenShift is handled using GitHub Actions. The workflow is defined in .github/workflows/deploy-branch.yml. Build / deploy notifications to Rocket.Chat are addressed in .github/workflows/notify-rocket-chat.yml.
+Deployment to OpenShift is handled via automated GitHub Actions workflows with comprehensive security scanning and health monitoring.
+
+**📊 [View Complete Build & Deployment Flow Diagram](.docs/diagrams/build-deployment-flow.md)** - Interactive workflow visualization
+
+### Key Workflows
+
+| Workflow | Purpose | Trigger |
+|----------|---------|---------|
+| **build.yml** | Main CI/CD pipeline | Push to branch / Schedule |
+| **security-comprehensive.yml** | Security validation | Pre-build phase |
+| **deploy.yml** | OpenShift deployment | After successful build |
+| **lighthouse-check** | Post-deploy audit | After deployment |
+| **notify.yml** | Rocket.Chat notifications | Build/deploy events |
+
+### Branch-Specific Behavior
+
+* **950003-dev**: Fast iteration (~5-10 min) - Basic security, skip builds, warnings only
+* **950003-test**: Full validation (~25-35 min) - Comprehensive security, full builds, blocks on High/Critical
+* **950003-prod**: Production deploy (~30-40 min) - Maximum security, controlled deployment, blocks on Critical
+
+See [Build & Deployment Flow](.docs/diagrams/build-deployment-flow.md) for complete architecture details.
 
 ## Test GitHub Actions deployment locally using Act
 

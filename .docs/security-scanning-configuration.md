@@ -1,0 +1,100 @@
+# 🔒 Security Scanning Configuration Guide
+
+## Overview
+
+Flexible, environment-aware security scanning that balances thoroughness with performance. Configuration is managed in `.github/workflows/build.yml` for each branch.
+
+> 💡 **Quick Reference**: For a quick developer guide, see [Security Scanning Quick Reference](./security-scanning.md)
+
+**Related Documentation**:
+- [Security Scanning Quick Reference](./security-scanning.md) - Fast troubleshooting guide
+- [Security Best Practices](./security-scanning-best-practices.md) - Strategic workflow design
+- [Vulnerability Exceptions](./vulnerability-exceptions.md) - Exception management
+- [Security Flow Diagrams](./diagrams/security-scanning-flow.md) - Visual architecture
+
+---
+
+## Configuration Variables
+
+Set these in `.github/workflows/build.yml` env section (CI/CD-specific, not for local development):
+
+```yaml
+# In .github/workflows/build.yml env section
+SECURITY_SCAN_ENABLED: "YES"          # Enable/disable security scanning
+SECURITY_SCAN_LEVEL: "BASIC"          # Scan thoroughness: MINIMAL, BASIC, FULL, OFF
+SECURITY_SCAN_EXIT_ON: "HIGH"         # When to fail: WARN, CRITICAL, HIGH, MEDIUM, ANY
+SECURITY_SCAN_CONTAINERS: "NO"        # Include container scanning (expensive)
+SECURITY_SCAN_CACHE: "YES"            # Cache scan databases (faster)
+```
+
+---
+
+## Scan Levels
+
+| Level | What Gets Scanned | Duration | Use Case |
+|-------|-------------------|----------|----------|
+| **OFF** | Nothing (skip all) | 0 min | Emergency hotfixes |
+| **MINIMAL** | Critical CVE advisories only | ~1 min | Fast dev feedback |
+| **BASIC** | Composer audit, system packages, Git advisories | ~3 min | Standard dev/test |
+| **FULL** | Everything + container image scanning | ~8 min | Production deploys |
+
+---
+
+## Exit Strategies
+
+Controls when the build fails based on vulnerability severity:
+
+| Strategy | Build Fails On | Use Case |
+|----------|----------------|----------|
+| **WARN** | Never (warnings only) | Dev branches, rapid iteration |
+| **CRITICAL** | Critical vulnerabilities only | Production (managed risk) |
+| **HIGH** | High or Critical | Test environments, pre-prod |
+| **MEDIUM** | Medium, High, or Critical | Strict security requirements |
+| **ANY** | Any vulnerability | Maximum security (gov/healthcare) |
+
+---
+
+## Environment-Specific Settings
+
+### Development (950003-dev branch)
+```yaml
+SECURITY_SCAN_LEVEL: "BASIC"       # Fast, standard checks
+SECURITY_SCAN_EXIT_ON: "WARN"      # Never block builds
+SECURITY_SCAN_CONTAINERS: "NO"     # Skip expensive scans
+```
+**Result**: ~2-3 min, never fails, developers see warnings
+
+---
+
+### Test (950003-test branch)
+```yaml
+SECURITY_SCAN_LEVEL: "FULL"        # Comprehensive
+SECURITY_SCAN_EXIT_ON: "HIGH"      # Block High/Critical
+SECURITY_SCAN_CONTAINERS: "YES"    # Full container scanning
+```
+**Result**: ~6-8 min, blocks serious issues before prod
+
+---
+
+### Production (950003-prod branch)
+```yaml
+SECURITY_SCAN_LEVEL: "FULL"        # Comprehensive
+SECURITY_SCAN_EXIT_ON: "CRITICAL"  # Block Critical only
+SECURITY_SCAN_CONTAINERS: "YES"    # Full container scanning
+```
+**Result**: ~6-8 min, blocks only critical threats
+
+---
+
+## Summary
+
+✅ **Scan Levels**: Control what gets scanned (MINIMAL/BASIC/FULL)
+✅ **Exit Strategies**: Control when builds fail (WARN/CRITICAL/HIGH/MEDIUM/ANY)
+✅ **Environment-Aware**: Different settings per branch (dev/test/prod)
+✅ **Performance**: Skip expensive scans in dev, enable in prod
+
+**Quick Reference**:
+- Dev: Fast feedback, no blocking (BASIC + WARN)
+- Test: Comprehensive validation, block serious issues (FULL + HIGH)
+- Prod: Maximum security, block critical only (FULL + CRITICAL)
+
