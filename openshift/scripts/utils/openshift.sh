@@ -131,13 +131,13 @@ wait_with_cluster_monitoring() {
 
   # Show monitoring configuration
   if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
-    log_info "🔄 Starting deployment wait with centralized cluster health monitoring..."
+    log_info "  Starting deployment wait with centralized cluster health monitoring..."
     log_info "  Resource: $resource_type/$resource_name"
     log_info "  Max wait time: ${max_wait_time}s"
     log_info "  Health check interval: ${health_check_interval}s"
     log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
   else
-    log_info "🔄 Starting deployment wait (cluster monitoring disabled)..."
+    log_info "  Starting deployment wait (cluster monitoring disabled)..."
     log_info "  Resource: $resource_type/$resource_name"
     log_info "  Max wait time: ${max_wait_time}s"
     log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
@@ -146,14 +146,14 @@ wait_with_cluster_monitoring() {
   while [[ $elapsed_time -lt $max_wait_time ]]; do
     # Run the actual wait function (non-blocking check)
     if $wait_function; then
-      log_success "✅ Resource deployment completed successfully!"
+      log_success "Resource deployment completed successfully!"
       return 0
     fi
 
     # Perform cluster health check if enabled
     if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
       if [[ $((elapsed_time - last_health_check)) -ge $health_check_interval ]]; then
-        log_debug "🔍 Performing centralized cluster health check for $resource_type/$resource_name..."
+        log_debug "Performing centralized cluster health check for $resource_type/$resource_name..."
 
         local health_status
         health_status=$(check_cluster_health "$resource_type" "$resource_name" "$namespace")
@@ -162,23 +162,23 @@ wait_with_cluster_monitoring() {
         case "$health_status" in
           "STORAGE_CRITICAL")
             consecutive_storage_failures=$((consecutive_storage_failures + 1))
-            log_warn "⚠️ Storage issues detected while waiting for $resource_type/$resource_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+            log_warn "Storage issues detected while waiting for $resource_type/$resource_name (attempt $consecutive_storage_failures/$max_storage_failures)"
 
             if [[ $consecutive_storage_failures -ge $max_storage_failures ]]; then
-              log_warn "� Extending wait time due to persistent storage issues..."
+              log_warn "Extending wait time due to persistent storage issues..."
               # Extend max_wait_time for storage issues
               max_wait_time=$((max_wait_time + 900))  # Add 15 minutes
-              log_info "� Showing cluster events for troubleshooting..."
+              log_info "Showing cluster events for troubleshooting..."
               show_cluster_events "$resource_type" "$resource_name" "$namespace"
             fi
             ;;
           "NODE_CRITICAL"|"NETWORK_WARNING")
-            log_warn "⚠️ Cluster infrastructure issues detected while waiting for $resource_type/$resource_name"
+            log_warn "Cluster infrastructure issues detected while waiting for $resource_type/$resource_name"
             show_cluster_events "$resource_type" "$resource_name" "$namespace"
             ;;
           "HEALTHY")
             consecutive_storage_failures=0
-            log_debug "✅ Centralized cluster health check: Normal (waiting for $resource_type/$resource_name)"
+            log_debug "Centralized cluster health check: Normal (waiting for $resource_type/$resource_name)"
             ;;
         esac
 
@@ -1933,10 +1933,10 @@ enable_maintenance_mode() {
 
   # Redirect traffic to maintenance service
   if [[ "$route_mode" == "auto" ]]; then
-    log_info "🔄 Redirecting all relevant routes to maintenance service..."
+    log_info "Redirecting all relevant routes to maintenance service..."
     patch_all_routes "$service_name"
   else
-    log_info "🔄 Redirecting specific route $route_mode to $service_name..."
+    log_info "Redirecting specific route $route_mode to $service_name..."
     patch_route "$route_mode" "$service_name"
   fi
 }
@@ -1951,10 +1951,10 @@ disable_maintenance_mode() {
 
   # Redirect traffic back to application
   if [[ "$route_mode" == "auto" ]]; then
-    log_info "🔄 Redirecting all relevant routes back to application service: $target_service_name"
+    log_info "Redirecting all relevant routes back to application service: $target_service_name"
     patch_all_routes "$target_service_name"
   else
-    log_info "🔄 Redirecting specific route $route_mode to $target_service_name..."
+    log_info "Redirecting specific route $route_mode to $target_service_name..."
     patch_route "$route_mode" "$target_service_name"
   fi
 
@@ -2026,11 +2026,11 @@ create_or_update_secret() {
   local secret_data="$2"  # Format: "key1=value1,key2=value2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
-  log_info "🔐 Creating/updating secret '$secret_name'..."
+  log_info "Creating/updating secret '$secret_name'..."
 
   # Delete existing secret if it exists
   if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
-    log_info "  Deleting existing secret..."
+    log_info "Deleting existing secret..."
     oc delete secret "$secret_name" -n "$namespace"
   fi
 
@@ -2063,7 +2063,7 @@ manage_secret_with_validation() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
   local force_update="${4:-false}"
 
-  log_info "🔧 Managing secret '$secret_name' with validation..."
+  log_info "Managing secret '$secret_name' with validation..."
 
   # If force_update is false, check if secret already exists and matches
   if [[ "$force_update" != "true" ]]; then
@@ -2113,7 +2113,7 @@ restart_deployment() {
   local deployment_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  log_info "🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
+  log_info " 🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
 
   if oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
     if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
@@ -2178,7 +2178,7 @@ handle_job_status() {
     # Check if the job has succeeded
     local job_succeeded=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
     if [[ $job_succeeded -gt 0 ]]; then
-      log_success "✔️ Job $job_name has completed successfully."
+      log_success "Job $job_name has completed successfully."
       return 0
     fi
 
@@ -2186,7 +2186,7 @@ handle_job_status() {
     if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
       local current_time=$((retry_count * wait_time))
       if [[ $((current_time - last_health_check)) -ge $health_check_interval ]]; then
-        log_debug "🔍 Performing cluster health check for job $job_name..."
+        log_debug "Performing cluster health check for job $job_name..."
 
         # Get pod associated with the job for health checking
         local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
@@ -2202,7 +2202,7 @@ handle_job_status() {
         case "$health_status" in
           "STORAGE_CRITICAL")
             consecutive_storage_failures=$((consecutive_storage_failures + 1))
-            log_warn "⚠️ Storage issues detected for job $job_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+            log_warn "Storage issues detected for job $job_name (attempt $consecutive_storage_failures/$max_storage_failures)"
 
             if [[ $consecutive_storage_failures -ge $max_storage_failures && "$storage_extension_applied" == "false" ]]; then
               # Extend max_retries for persistent storage issues
@@ -2223,7 +2223,7 @@ handle_job_status() {
             fi
             ;;
           "NODE_CRITICAL"|"NETWORK_WARNING")
-            log_warn "⚠️ Cluster infrastructure issues detected for job $job_name"
+            log_warn "Cluster infrastructure issues detected for job $job_name"
             show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
             if [[ -n "$pod_name" ]]; then
               show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
@@ -2231,7 +2231,7 @@ handle_job_status() {
             ;;
           "HEALTHY")
             consecutive_storage_failures=0
-            log_debug "✅ Cluster health check: Normal for job $job_name"
+            log_success "Cluster health check: Normal for job $job_name"
             ;;
         esac
 
@@ -2243,14 +2243,14 @@ handle_job_status() {
     if [[ $retry_count -ge $max_retries ]]; then
       if [[ "$storage_extension_applied" == "true" ]]; then
         log_error "Timeout waiting for job $job_name to complete (extended timeout due to storage issues). Exiting..."
-        log_info "💡 Consider checking cluster storage health or increasing PVC attachment timeout settings."
+        log_info "Consider checking cluster storage health or increasing PVC attachment timeout settings."
       else
         log_error "Timeout waiting for job $job_name to complete. Exiting..."
       fi
 
       # Show final cluster status for troubleshooting
       if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
-        log_info "🔍 Final cluster health check for troubleshooting..."
+        log_info "Final cluster health check for troubleshooting..."
         local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         if [[ -n "$pod_name" ]]; then
           show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
@@ -2334,7 +2334,7 @@ handle_deployment_status() {
         else
           # Use debug for routine waiting, info only for first few attempts or periodic updates
           if [[ $retry_count -le 3 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
-            log_debug "⏳ Waiting for $resource_name pods to be $condition: $pods_status"
+            log_debug "Waiting for $resource_name pods to be $condition: $pods_status"
           fi
         fi
       fi
@@ -2495,7 +2495,7 @@ ensure_image_pull_secrets() {
     return 0
   fi
 
-  log_info "🔧 Adding imagePullSecrets: $secret_name"
+  log_info "Adding imagePullSecrets: $secret_name"
 
   # Check if imagePullSecrets field exists at all
   local has_image_pull_secrets
@@ -2525,10 +2525,10 @@ ensure_image_pull_secrets() {
 
   local patch_result=$?
   if [[ $patch_result -eq 0 ]]; then
-    log_info "✅ Successfully added imagePullSecrets: $secret_name"
+    log_success "Successfully added imagePullSecrets: $secret_name"
     return 0
   else
-    log_error "❌ Failed to add imagePullSecrets to $resource_type/$resource_name"
+    log_error "Failed to add imagePullSecrets to $resource_type/$resource_name"
     return 1
   fi
 }
@@ -2598,6 +2598,6 @@ ensure_artifactory_access() {
     return 0
   fi
 
-  log_info "📋 Processing ${#existing_resources[@]} existing resources..."
+  log_info "Processing ${#existing_resources[@]} existing resources..."
   ensure_image_pull_secrets_batch "$namespace" "${existing_resources[@]}"
 }

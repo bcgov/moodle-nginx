@@ -10,7 +10,7 @@ ENV ETC_DIR=/usr/local/etc
 ENV PHP_INI_DIR=$ETC_DIR/php
 ENV PHP_INI_FILE=$ETC_DIR/php/conf.d/moodle-php.ini
 ARG PHP_INI_ENVIRONMENT=production
-ENV GIT_SSL_NO_VERIFY=1
+ENV GIT_SSL_NO_VERIFY=0
 
 # Version control for Moodle and plugins
 ARG MOODLE_URL="https://github.com/moodle/moodle"

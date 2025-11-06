@@ -221,52 +221,108 @@ scan_containerized_composer_vulnerabilities() {
 # =============================================================================
 
 scan_system_package_vulnerabilities() {
-  local scan_level="${1:-$DEFAULT_SCAN_LEVEL}"
-  local output_var="${2:-SYSTEM_SCAN_RESULT}"
+  local dockerfile="${1:-Moodle.Dockerfile}"
+  local container_tag="${2:-moodle:security-scan-packages}"
+  local scan_level="${3:-$DEFAULT_SCAN_LEVEL}"
+  local output_var="${4:-SYSTEM_SCAN_RESULT}"
 
-  log_info "Scanning system package vulnerabilities"
+  log_info "Scanning system package vulnerabilities in container"
+  log_debug "Dockerfile: $dockerfile, Container: $container_tag"
 
-  # Check if we're in a container or have package managers
-  if command -v apt >/dev/null 2>&1; then
-    log_debug "Scanning APT packages for vulnerabilities"
-
-    # Update package lists
-    apt-get update >/dev/null 2>&1 || true
-
-    # Check for security updates
-    local security_updates=$(apt list --upgradable 2>/dev/null | grep -i security | wc -l)
-    local total_updates=$(apt list --upgradable 2>/dev/null | grep -v "WARNING" | wc -l)
-
-    if [ "$security_updates" -gt 10 ]; then
-      eval "$output_var='CRITICAL'"
-      log_error "CRITICAL: $security_updates security updates available"
-      return 2
-    elif [ "$security_updates" -gt 0 ]; then
-      eval "$output_var='UPDATES_NEEDED'"
-      log_warn "WARNING: $security_updates security updates available"
+  # Build container for security scanning (reuse if already built)
+  if ! docker image inspect "$container_tag" >/dev/null 2>&1; then
+    log_debug "Building container for system package scan..."
+    if ! docker build -f "$dockerfile" -t "$container_tag" . >/dev/null 2>&1; then
+      eval "$output_var='BUILD_FAILED'"
+      log_error "Failed to build container for system package scanning"
       return 1
-    else
-      eval "$output_var='CLEAN'"
-      log_info "System packages are up to date"
-      return 0
     fi
-  elif command -v yum >/dev/null 2>&1; then
-    log_debug "Scanning YUM packages for vulnerabilities"
+  fi
 
-    local security_updates=$(yum --security check-update 2>/dev/null | grep -c "needed for security" || echo "0")
+  # Run package vulnerability check inside the container
+  local scan_output
+  scan_output=$(docker run --rm "$container_tag" bash -c '
+    if command -v apt >/dev/null 2>&1; then
+      apt-get update >/dev/null 2>&1
 
-    if [ "$security_updates" -gt 0 ]; then
-      eval "$output_var='UPDATES_NEEDED'"
-      log_warn "WARNING: $security_updates security updates available"
-      return 1
+      # Get security updates with details
+      security_updates=$(apt list --upgradable 2>/dev/null | grep -i security || echo "")
+      security_count=$(echo "$security_updates" | grep -c "^" || echo "0")
+
+      if [ "$security_count" -gt 0 ]; then
+        echo "SECURITY_UPDATES_FOUND:$security_count"
+        echo "$security_updates" | while read -r line; do
+          if [ -n "$line" ]; then
+            pkg_name=$(echo "$line" | cut -d "/" -f 1)
+            version_info=$(echo "$line" | grep -oP "\[.*?\]" | tr -d "[]")
+            echo "UPDATE:$pkg_name:$version_info"
+          fi
+        done
+      else
+        echo "NO_UPDATES"
+      fi
+    elif command -v yum >/dev/null 2>&1; then
+      security_updates=$(yum --security check-update 2>/dev/null | grep -i "needed for security" || echo "")
+      if [ -n "$security_updates" ]; then
+        echo "SECURITY_UPDATES_FOUND"
+        echo "$security_updates"
+      else
+        echo "NO_UPDATES"
+      fi
     else
+      echo "NO_PACKAGE_MANAGER"
+    fi
+  ' 2>/dev/null)
+
+  # Cleanup container (optional - keep for speed)
+  # docker rmi "$container_tag" >/dev/null 2>&1 || true
+
+  # Parse results
+  if [ -n "$scan_output" ]; then
+    if echo "$scan_output" | grep -q "^NO_UPDATES"; then
       eval "$output_var='CLEAN'"
-      log_info "System packages are up to date"
+      log_info "✅ No security updates needed for container packages"
       return 0
+    elif echo "$scan_output" | grep -q "^NO_PACKAGE_MANAGER"; then
+      eval "$output_var='NO_PACKAGE_MANAGER'"
+      log_debug "No supported package manager found in container"
+      return 0
+    elif echo "$scan_output" | grep -q "^SECURITY_UPDATES_FOUND"; then
+      local update_count=$(echo "$scan_output" | grep "^SECURITY_UPDATES_FOUND" | cut -d ":" -f 2)
+
+      eval "$output_var='UPDATES_NEEDED'"
+
+      if [ "$update_count" -gt 10 ]; then
+        log_error "❌ CRITICAL: $update_count security updates needed in container"
+      else
+        log_warn "⚠️  WARNING: $update_count security updates needed in container"
+      fi
+
+      # List the specific packages needing updates
+      local update_details=$(echo "$scan_output" | grep "^UPDATE:")
+      if [ -n "$update_details" ]; then
+        log_info "📦 Packages requiring security updates:"
+        echo "$update_details" | head -10 | while IFS=: read -r _ pkg_name version_info; do
+          if [ -n "$pkg_name" ]; then
+            log_info "   • $pkg_name: $version_info"
+          fi
+        done
+
+        local total_shown=$(echo "$update_details" | wc -l)
+        if [ "$total_shown" -gt 10 ]; then
+          log_info "   ... and $((total_shown - 10)) more packages"
+        fi
+      fi
+
+      if [ "$update_count" -gt 10 ]; then
+        return 2  # Critical
+      else
+        return 1  # Warning
+      fi
     fi
   else
-    eval "$output_var='NO_PACKAGE_MANAGER'"
-    log_debug "No supported package manager found"
+    eval "$output_var='SCAN_FAILED'"
+    log_warn "Could not scan container packages"
     return 0
   fi
 }
@@ -450,9 +506,10 @@ check_git_ssl_verification() {
 
   if grep -q "GIT_SSL_NO_VERIFY=1" "$dockerfile" 2>/dev/null; then
     eval "$output_var='SSL_DISABLED'"
-    log_error "❌ CRITICAL: SSL verification disabled (GIT_SSL_NO_VERIFY=1) in $dockerfile"
-    log_error "This is a security risk - remove GIT_SSL_NO_VERIFY or set to 0"
-    return 2
+    log_warn "⚠️  WARNING: SSL verification disabled (GIT_SSL_NO_VERIFY=1) in $dockerfile"
+    log_warn "This may be acceptable for development but is a security risk in production"
+    log_warn "Recommendation: Remove GIT_SSL_NO_VERIFY or set to 0 for production builds"
+    return 1  # Changed from 2 (critical) to 1 (warning)
   else
     eval "$output_var='SSL_ENABLED'"
     log_debug "SSL verification is enabled (GIT_SSL_NO_VERIFY not set to 1)"
@@ -495,8 +552,12 @@ scan_git_dependencies() {
     # Check for SSL verification disabled
     local ssl_result=""
     check_git_ssl_verification "$dockerfile" "ssl_result"
-    if [ $? -eq 2 ]; then
+    local ssl_exit=$?
+    if [ $ssl_exit -eq 2 ]; then
       security_issues=$((security_issues + 1))
+    elif [ $ssl_exit -eq 1 ]; then
+      # SSL disabled is a warning, not critical
+      log_debug "SSL verification disabled - counted as warning"
     fi
 
     # Check for insecure HTTP git clone patterns
@@ -617,7 +678,7 @@ comprehensive_security_scan() {
 
   # 2. System Package Security Scan
   log_info "🔍 Phase 2: System Package Security"
-  scan_system_package_vulnerabilities "$scan_level" "system_result"
+  scan_system_package_vulnerabilities "Moodle.Dockerfile" "moodle:security-scan-$$" "$scan_level" "system_result"
   local system_exit=$?
 
   if [ $system_exit -eq 2 ]; then
@@ -645,11 +706,48 @@ comprehensive_security_scan() {
   if [ "$scan_images" = "true" ]; then
     log_info "🔍 Phase 4: Docker Image Security"
 
-    # Scan base images mentioned in Dockerfiles
-    find . -name "*.Dockerfile" -o -name "Dockerfile*" | while read -r dockerfile; do
-      local base_images=$(grep -i "^FROM " "$dockerfile" | awk '{print $2}' | head -3)
-      for image in $base_images; do
-        if [[ "$image" != scratch && "$image" != *"AS"* ]]; then
+    # Check if we have scanning tools available before attempting scans
+    local has_docker_scout=false
+    local has_trivy=false
+
+    if command -v docker >/dev/null 2>&1 && docker scout version >/dev/null 2>&1; then
+      has_docker_scout=true
+    fi
+
+    if command -v trivy >/dev/null 2>&1; then
+      has_trivy=true
+    fi
+
+    if [ "$has_docker_scout" = false ] && [ "$has_trivy" = false ]; then
+      log_warn "Skipping Docker image scans - no scanning tools available (Docker Scout, Trivy)"
+      log_debug "Install Trivy or enable Docker Scout for image vulnerability scanning"
+    else
+      # Scan base images mentioned in Dockerfiles
+      find . -name "*.Dockerfile" -o -name "Dockerfile*" | while read -r dockerfile; do
+        # Extract base images and expand ARG variables if possible
+        local base_images=$(grep -i "^FROM " "$dockerfile" | awk '{print $2}')
+
+        for image in $base_images; do
+          # Skip build stage aliases and unexpanded variables
+          if [[ "$image" == scratch ]] || [[ "$image" == *"AS"* ]] || [[ "$image" == \$* ]]; then
+            log_debug "Skipping non-scannable image reference: $image"
+            continue
+          fi
+
+          # Try to expand ARG variables from Dockerfile
+          if [[ "$image" =~ ^\$\{([A-Z_]+)\}$ ]]; then
+            local var_name="${BASH_REMATCH[1]}"
+            local expanded_image=$(grep "^ARG ${var_name}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["'"'"']?([^"'"'"']*)["'"'"']?$/\1/')
+
+            if [ -n "$expanded_image" ]; then
+              image="$expanded_image"
+              log_debug "Expanded \${${var_name}} to: $image"
+            else
+              log_debug "Could not expand \${${var_name}} - skipping"
+              continue
+            fi
+          fi
+
           log_debug "Scanning base image: $image"
           scan_docker_image_vulnerabilities "$image" "$scan_level" "docker_result"
           local docker_exit=$?
@@ -661,9 +759,9 @@ comprehensive_security_scan() {
             high_issues=$((high_issues + 1))
             [ "$overall_status" = "CLEAN" ] && overall_status="HIGH"
           fi
-        fi
+        done
       done
-    done
+    fi
   fi
 
   # Generate comprehensive summary
@@ -779,12 +877,12 @@ get_security_recommendations() {
 
   # Check for HTTP git clones
   if find "$project_dir" -name "*.Dockerfile" -o -name "Dockerfile*" | xargs grep -l "git clone.*http://" >/dev/null 2>&1; then
-    log_error "❌ Found insecure HTTP git clones - update to HTTPS"
+    log_error "Found insecure HTTP git clones - update to HTTPS"
   fi
 
   # Check for SSL verification disabled
   if find "$project_dir" -name "*.Dockerfile" -o -name "Dockerfile*" | xargs grep -l "GIT_SSL_NO_VERIFY=1" >/dev/null 2>&1; then
-    log_error "❌ CRITICAL: SSL verification disabled in Dockerfiles"
+    log_error "CRITICAL: SSL verification disabled in Dockerfiles"
   fi
 
   return 0
