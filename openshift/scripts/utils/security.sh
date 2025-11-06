@@ -299,19 +299,20 @@ extract_dockerfile_repos() {
           local owner="${BASH_REMATCH[1]}"
           local repo="${BASH_REMATCH[2]}"
 
-          # Add to JSON array
-          repos_json=$(echo "$repos_json" | jq --arg name "$repo_name" \
-                                                --arg url "$var_value" \
-                                                --arg owner "$owner" \
-                                                --arg repo "$repo" \
-                                                --arg version "$branch_version" \
-                                                '. += [{
-                                                  "name": $name,
-                                                  "url": $url,
-                                                  "owner": $owner,
-                                                  "repo": $repo,
-                                                  "version": $version
-                                                }]')
+          # Add to JSON array (use here-document for clarity)
+          repos_json=$(jq --argjson arr "$repos_json" \
+                          --arg name "$repo_name" \
+                          --arg url "$var_value" \
+                          --arg owner "$owner" \
+                          --arg repo "$repo" \
+                          --arg version "$branch_version" \
+                          '($arr + [{
+                            name: $name,
+                            url: $url,
+                            owner: $owner,
+                            repo: $repo,
+                            version: $version
+                          }])' <<< "{}")
         fi
       fi
     fi
