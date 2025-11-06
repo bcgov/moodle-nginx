@@ -275,17 +275,171 @@ scan_system_package_vulnerabilities() {
 # GIT DEPENDENCY SECURITY
 # =============================================================================
 
+# Extract repository details from Dockerfile ARG variables
+extract_dockerfile_repos() {
+  local dockerfile="$1"
+  local repos_json="[]"
+
+  # Extract ARG lines that define repository URLs and versions
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^ARG[[:space:]]+([A-Z_]+)=\"?([^\"]+)\"?$ ]]; then
+      local var_name="${BASH_REMATCH[1]}"
+      local var_value="${BASH_REMATCH[2]}"
+
+      # Check if this is a URL variable
+      if [[ "$var_name" =~ _URL$ ]]; then
+        local repo_name="${var_name%_URL}"
+        local branch_var="${repo_name}_BRANCH_VERSION"
+
+        # Extract the corresponding branch/version
+        local branch_version=$(grep "^ARG ${branch_var}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["']?([^"'\'']*)["']?$/\1/')
+
+        # Parse GitHub URL to extract owner/repo
+        if [[ "$var_value" =~ github\.com/([^/]+)/([^/]+)/?$ ]]; then
+          local owner="${BASH_REMATCH[1]}"
+          local repo="${BASH_REMATCH[2]}"
+
+          # Add to JSON array
+          repos_json=$(echo "$repos_json" | jq --arg name "$repo_name" \
+                                                --arg url "$var_value" \
+                                                --arg owner "$owner" \
+                                                --arg repo "$repo" \
+                                                --arg version "$branch_version" \
+                                                '. += [{
+                                                  "name": $name,
+                                                  "url": $url,
+                                                  "owner": $owner,
+                                                  "repo": $repo,
+                                                  "version": $version
+                                                }]')
+        fi
+      fi
+    fi
+  done < "$dockerfile"
+
+  echo "$repos_json"
+}
+
+# Check Moodle version for known security advisories
+check_moodle_security_advisories() {
+  local moodle_version="$1"  # e.g., "MOODLE_401_STABLE"
+  local output_var="${2:-MOODLE_SECURITY_RESULT}"
+
+  log_info "Checking Moodle security advisories for version: $moodle_version"
+
+  # Extract numeric version (e.g., MOODLE_401_STABLE -> 4.01 or 4.1)
+  local version_number=""
+  if [[ "$moodle_version" =~ MOODLE_([0-9])([0-9]{2})_STABLE ]]; then
+    local major="${BASH_REMATCH[1]}"
+    local minor="${BASH_REMATCH[2]}"
+    version_number="${major}.${minor#0}"  # Remove leading zero from minor
+  fi
+
+  if [ -z "$version_number" ]; then
+    eval "$output_var='UNKNOWN_VERSION'"
+    log_debug "Could not parse Moodle version: $moodle_version"
+    return 0
+  fi
+
+  log_debug "Parsed Moodle version: $version_number"
+
+  # Try to fetch Moodle security advisories from official source
+  local advisories_url="https://moodle.org/security/index.php?o=json"
+  local advisories_json=$(curl -s --max-time 10 "$advisories_url" 2>/dev/null)
+
+  if [ -n "$advisories_json" ] && command -v jq >/dev/null 2>&1; then
+    # Check if there are any advisories affecting this version
+    local affected_count=$(echo "$advisories_json" | jq --arg ver "$version_number" '
+      [.[] | select(.affects | contains($ver))] | length
+    ' 2>/dev/null || echo "0")
+
+    if [ "$affected_count" -gt 0 ]; then
+      eval "$output_var='ADVISORIES_FOUND'"
+      log_warn "⚠️  Found $affected_count security advisories affecting Moodle $version_number"
+      log_warn "Review: https://moodle.org/security/"
+      return 1
+    else
+      eval "$output_var='NO_ADVISORIES'"
+      log_info "✅ No known security advisories for Moodle $version_number"
+      return 0
+    fi
+  else
+    eval "$output_var='CHECK_FAILED'"
+    log_debug "Could not fetch Moodle security advisories (network or parsing issue)"
+    return 0
+  fi
+}
+
+# Check GitHub repository for security advisories
+check_github_security_advisories() {
+  local owner="$1"
+  local repo="$2"
+  local version="$3"
+  local output_var="${4:-GITHUB_ADVISORY_RESULT}"
+
+  log_debug "Checking GitHub security advisories: $owner/$repo @ $version"
+
+  # GitHub Security Advisories API (public, no auth required)
+  local advisories_url="https://api.github.com/repos/$owner/$repo/security-advisories"
+
+  # Try to fetch advisories
+  local advisories_json=$(curl -s --max-time 10 \
+    -H "Accept: application/vnd.github+json" \
+    "$advisories_url" 2>/dev/null)
+
+  if [ -n "$advisories_json" ] && command -v jq >/dev/null 2>&1; then
+    # Check if response is an array and has advisories
+    local advisory_count=$(echo "$advisories_json" | jq '. | length' 2>/dev/null || echo "0")
+
+    if [ "$advisory_count" -gt 0 ]; then
+      eval "$output_var='ADVISORIES_FOUND'"
+      log_warn "⚠️  Found $advisory_count security advisories for $owner/$repo"
+      log_warn "Review: https://github.com/$owner/$repo/security/advisories"
+      return 1
+    else
+      eval "$output_var='NO_ADVISORIES'"
+      log_debug "No security advisories found for $owner/$repo"
+      return 0
+    fi
+  else
+    eval "$output_var='CHECK_FAILED'"
+    log_debug "Could not fetch GitHub security advisories for $owner/$repo"
+    return 0
+  fi
+}
+
+# Check if SSL verification is disabled (security risk)
+check_git_ssl_verification() {
+  local dockerfile="$1"
+  local output_var="${2:-SSL_VERIFICATION_RESULT}"
+
+  if grep -q "GIT_SSL_NO_VERIFY=1" "$dockerfile" 2>/dev/null; then
+    eval "$output_var='SSL_DISABLED'"
+    log_error "❌ CRITICAL: SSL verification disabled (GIT_SSL_NO_VERIFY=1) in $dockerfile"
+    log_error "This is a security risk - remove GIT_SSL_NO_VERIFY or set to 0"
+    return 2
+  else
+    eval "$output_var='SSL_ENABLED'"
+    log_debug "SSL verification is enabled (GIT_SSL_NO_VERIFY not set to 1)"
+    return 0
+  fi
+}
+
 scan_git_dependencies() {
   local project_dir="${1:-.}"
   local output_var="${2:-GIT_SCAN_RESULT}"
 
   log_info "Scanning Git dependencies for security issues"
 
+  # Save original directory to return to it later
+  local original_dir="$(pwd)"
+
   cd "$project_dir" || return 1
 
   # Look for Git submodules and external repositories in Dockerfiles
   local security_issues=0
   local total_repos=0
+  local advisories_found=0
 
   # Check .gitmodules
   if [ -f ".gitmodules" ]; then
@@ -293,28 +447,84 @@ scan_git_dependencies() {
     total_repos=$((total_repos + $(grep -c "url = " .gitmodules 2>/dev/null || echo "0")))
   fi
 
-  # Check Dockerfiles for git clone commands
-  # Use process substitution to avoid subshell scope issues
+  # Check Dockerfiles for git clone commands and security issues
   while IFS= read -r dockerfile; do
-    local git_clones=$(grep -c "git clone" "$dockerfile" 2>/dev/null || echo "0")
+    log_debug "Analyzing Dockerfile: $dockerfile"
+
+    # Count git clones
+    local git_clones
+    git_clones=$(grep -c "git clone" "$dockerfile" 2>/dev/null || echo "0")
+    git_clones="${git_clones:-0}"
     total_repos=$((total_repos + git_clones))
 
-    # Check for insecure git clone patterns
-    if grep -q "git clone.*http://" "$dockerfile" 2>/dev/null; then
-      log_warn "Insecure HTTP git clone found in $dockerfile"
+    # Check for SSL verification disabled
+    local ssl_result=""
+    check_git_ssl_verification "$dockerfile" "ssl_result"
+    if [ $? -eq 2 ]; then
       security_issues=$((security_issues + 1))
     fi
 
-    # Check for git clone without depth (potential for large downloads)
+    # Check for insecure HTTP git clone patterns
+    if grep -q "git clone.*http://" "$dockerfile" 2>/dev/null; then
+      log_warn "⚠️  Insecure HTTP git clone found in $dockerfile"
+      security_issues=$((security_issues + 1))
+    fi
+
+    # Check for git clone without depth (performance concern, not security)
     if grep -q "git clone" "$dockerfile" 2>/dev/null && ! grep -q "depth=" "$dockerfile" 2>/dev/null; then
       log_debug "Git clone without --depth found in $dockerfile (performance concern)"
     fi
+
+    # Extract and check repository versions for security advisories
+    if command -v jq >/dev/null 2>&1; then
+      local repos_json=$(extract_dockerfile_repos "$dockerfile")
+      local repo_count=$(echo "$repos_json" | jq '. | length')
+
+      if [ "$repo_count" -gt 0 ]; then
+        log_info "📦 Found $repo_count repositories defined in $dockerfile"
+
+        # Check each repository for security advisories
+        echo "$repos_json" | jq -c '.[]' | while read -r repo; do
+          local name=$(echo "$repo" | jq -r '.name')
+          local owner=$(echo "$repo" | jq -r '.owner')
+          local repo_name=$(echo "$repo" | jq -r '.repo')
+          local version=$(echo "$repo" | jq -r '.version')
+          local url=$(echo "$repo" | jq -r '.url')
+
+          log_debug "Checking: $name ($owner/$repo_name @ $version)"
+
+          # Special handling for Moodle core
+          if [[ "$name" == "MOODLE" ]]; then
+            local moodle_result=""
+            check_moodle_security_advisories "$version" "moodle_result"
+            if [[ "$moodle_result" == "ADVISORIES_FOUND" ]]; then
+              advisories_found=$((advisories_found + 1))
+            fi
+          fi
+
+          # Check GitHub security advisories for all repos
+          local github_result=""
+          check_github_security_advisories "$owner" "$repo_name" "$version" "github_result"
+          if [[ "$github_result" == "ADVISORIES_FOUND" ]]; then
+            advisories_found=$((advisories_found + 1))
+          fi
+        done
+      fi
+    fi
   done < <(find . -name "*.Dockerfile" -o -name "Dockerfile*")
 
+  # Return to original directory before exit
+  cd "$original_dir" || log_warn "Failed to return to original directory: $original_dir"
+
+  # Determine overall result
   if [ "$security_issues" -gt 0 ]; then
     eval "$output_var='SECURITY_ISSUES'"
-    log_error "Git dependency security issues found: $security_issues"
+    log_error "Git dependency security issues found: $security_issues critical issues"
     return 2
+  elif [ "$advisories_found" -gt 0 ]; then
+    eval "$output_var='ADVISORIES_FOUND'"
+    log_warn "Security advisories found for $advisories_found repositories - review recommended"
+    return 1
   elif [ "$total_repos" -gt 0 ]; then
     eval "$output_var='DEPENDENCIES_FOUND'"
     log_info "Git dependencies found: $total_repos (no security issues detected)"
@@ -339,6 +549,9 @@ comprehensive_security_scan() {
   log_info "Running comprehensive security scan..."
   log_info "Automated tools: Composer Audit + Docker Scout/Trivy + System Updates + Git Analysis"
   log_debug "Project: $project_dir, Level: $scan_level, Abort on critical: $abort_on_critical"
+
+  # Save original directory to return to it later
+  local original_dir="$(pwd)"
 
   cd "$project_dir" || return 1
 
@@ -429,6 +642,9 @@ comprehensive_security_scan() {
   log_info "  High/Warning Issues: $((high_issues + warnings))"
   log_info "  Automation: Dependabot handles updates automatically"
 
+  # Return to original directory before exit
+  cd "$original_dir" || log_warn "Failed to return to original directory: $original_dir"
+
   # Determine exit strategy
   if [ "$overall_status" = "CRITICAL" ] && [ "$abort_on_critical" = "true" ]; then
     log_error "Build aborted due to critical security issues!"
@@ -518,6 +734,8 @@ get_security_recommendations() {
   log_info "  6. Keep Composer dependencies updated with 'composer audit'"
   log_info "  7. Review Git dependencies for secure HTTPS URLs"
   log_info "  8. Monitor security advisories for Moodle core and plugins"
+  log_info "  9. Check Moodle security announcements: https://moodle.org/security/"
+  log_info "  10. Review plugin security via GitHub security advisories"
 
   # Check current Dockerfile practices
   if find "$project_dir" -name "*.Dockerfile" -o -name "Dockerfile*" | xargs grep -l "FROM.*:latest" >/dev/null 2>&1; then
@@ -529,5 +747,41 @@ get_security_recommendations() {
     log_error "❌ Found insecure HTTP git clones - update to HTTPS"
   fi
 
+  # Check for SSL verification disabled
+  if find "$project_dir" -name "*.Dockerfile" -o -name "Dockerfile*" | xargs grep -l "GIT_SSL_NO_VERIFY=1" >/dev/null 2>&1; then
+    log_error "❌ CRITICAL: SSL verification disabled in Dockerfiles"
+  fi
+
+  return 0
+}
+
+# Display detailed repository inventory with security information
+display_repository_inventory() {
+  local project_dir="${1:-.}"
+
+  log_info "📦 Repository Inventory:"
+
+  # Save original directory
+  local original_dir="$(pwd)"
+  cd "$project_dir" || return 1
+
+  # Find and analyze all Dockerfiles
+  while IFS= read -r dockerfile; do
+    if command -v jq >/dev/null 2>&1; then
+      local repos_json=$(extract_dockerfile_repos "$dockerfile")
+      local repo_count=$(echo "$repos_json" | jq '. | length')
+
+      if [ "$repo_count" -gt 0 ]; then
+        log_info ""
+        log_info "From: $dockerfile"
+        log_info "Repositories: $repo_count"
+        log_info ""
+
+        echo "$repos_json" | jq -r '.[] | "  • \(.name): \(.url) @ \(.version)"'
+      fi
+    fi
+  done < <(find . -name "*.Dockerfile" -o -name "Dockerfile*")
+
+  cd "$original_dir" || return 1
   return 0
 }

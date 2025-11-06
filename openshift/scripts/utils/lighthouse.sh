@@ -92,9 +92,21 @@ setup_lighthouse_environment() {
 
   log_info "Setting up Lighthouse testing environment..."
 
+  # Ensure we're in workspace root (important if called after other functions that cd)
+  local workspace_root="${GITHUB_WORKSPACE:-.}"
+  if [ -n "$GITHUB_WORKSPACE" ]; then
+    cd "$GITHUB_WORKSPACE" || {
+      log_error "Failed to change to workspace root: $GITHUB_WORKSPACE"
+      return 1
+    }
+    log_debug "Changed to workspace root: $GITHUB_WORKSPACE"
+  fi
+
   # Verify the directory exists before attempting to install
   if [ ! -d "$config_dir" ]; then
     log_error "Lighthouse config directory not found: $config_dir"
+    log_error "Current directory: $(pwd)"
+    log_error "Directory listing: $(ls -la | head -5)"
     return 1
   fi
 
@@ -102,6 +114,7 @@ setup_lighthouse_environment() {
   if [ ! -f "$config_dir/package.json" ]; then
     log_error "package.json not found in: $config_dir"
     log_error "Expected file: $config_dir/package.json"
+    log_error "Directory contents: $(ls -la $config_dir/ 2>/dev/null || echo 'directory not accessible')"
     return 1
   fi
 
@@ -130,7 +143,7 @@ setup_lighthouse_environment() {
   fi
 
   # Return to workspace root
-  cd - > /dev/null || cd ../..
+  cd "$workspace_root" > /dev/null || cd - > /dev/null || cd ../..
 
   log_info "Lighthouse environment ready"
   return 0
