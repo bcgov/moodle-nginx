@@ -292,7 +292,7 @@ extract_dockerfile_repos() {
         local branch_var="${repo_name}_BRANCH_VERSION"
 
         # Extract the corresponding branch/version
-        local branch_version=$(grep "^ARG ${branch_var}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["']?([^"'\'']*)["']?$/\1/')
+        local branch_version=$(grep "^ARG ${branch_var}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["'"'"']?([^"'"'"']*)["'"'"']?$/\1/')
 
         # Parse GitHub URL to extract owner/repo
         if [[ "$var_value" =~ github\.com/([^/]+)/([^/]+)/?$ ]]; then

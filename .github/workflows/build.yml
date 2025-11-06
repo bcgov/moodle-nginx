@@ -12,7 +12,7 @@ env:
   CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
+  SKIP_BUILDS: "YES"
   SKIP_DEPLOY: "NO"
   FORCE_MIGRATE: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
