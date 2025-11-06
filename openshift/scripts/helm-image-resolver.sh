@@ -59,26 +59,37 @@ resolve_helm_image() {
     local repository="${full_image%:*}"  # Everything before the last ':'
     local tag="${full_image##*:}"        # Everything after the last ':'
 
-    # Strip any registry prefix from repository (if present)
+    # Determine image.registry value based on Artifactory usage
+    # Bitnami charts construct images as: {image.registry}/{image.repository}:{image.tag}
+    # When using Artifactory, we include full path in repository and set registry to empty
+    # When using upstream, we let the chart use its default registry (docker.io)
+    local image_registry=""
     if [ "${USE_ARTIFACTORY:-false}" = "true" ]; then
+        # For Artifactory: registry is empty, repository contains full path
+        image_registry=""
+        # Repository already contains full path including Artifactory registry
+    else
+        # For upstream: let Helm chart use its default registry (docker.io for Bitnami)
+        # We don't set registry, so chart defaults will apply
+        image_registry="docker.io"
+        # Strip any registry prefix from repository since chart will add it
         if [[ "$repository" == */docker.io/* ]]; then
             repository="${repository/docker.io\//}"
             echo "📝 Stripped docker.io prefix from repository: $repository" >&2
         elif [[ "$repository" == */registry-1.docker.io/* ]]; then
             repository="${repository/registry-1.docker.io\//}"
             echo "📝 Stripped registry-1.docker.io prefix from repository: $repository" >&2
-        elif [[ "$repository" == */gcr.io/* ]] || [[ "$repository" == */quay.io/* ]]; then
-            repository="${repository#*/}"
-            echo "📝 Stripped external registry prefix from repository: $repository" >&2
         fi
     fi
 
     # Export variables for the calling script
+    export RESOLVED_IMAGE_REGISTRY="$image_registry"
     export RESOLVED_IMAGE_REPOSITORY="$repository"
     export RESOLVED_IMAGE_TAG="$tag"
     export RESOLVED_FULL_IMAGE="$full_image"
 
     echo "🔧 Resolved ${image_var}: ${full_image}"
+    echo "   Registry: ${image_registry:-<chart-default>}"
     echo "   Repository: $repository"
     echo "   Tag: $tag"
     return 0
@@ -95,7 +106,7 @@ get_helm_image_args() {
         return 1
     fi
 
-    echo "--set ${registry_prefix}.repository=${RESOLVED_IMAGE_REPOSITORY} --set ${registry_prefix}.tag=${RESOLVED_IMAGE_TAG}"
+    echo "--set ${registry_prefix}.registry=${RESOLVED_IMAGE_REGISTRY} --set ${registry_prefix}.repository=${RESOLVED_IMAGE_REPOSITORY} --set ${registry_prefix}.tag=${RESOLVED_IMAGE_TAG}"
 }
 
 # Function to validate that all required Helm images are defined

@@ -22,6 +22,7 @@ log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
 log_debug "DEBUG: HELM_REPO=$HELM_REPO"
 log_debug "DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY"
 log_debug "DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REGISTRY=$RESOLVED_IMAGE_REGISTRY"
 log_debug "DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE"
 log_debug "DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY"
 log_debug "DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG"
@@ -96,6 +97,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   # Capture the output of the helm upgrade command into a variable
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+    --set image.registry=$RESOLVED_IMAGE_REGISTRY \
     --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
     --set image.tag=$RESOLVED_IMAGE_TAG \
     --set global.security.allowInsecureImages=true \
@@ -127,6 +129,7 @@ else
   # --atomic \
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+    --set image.registry=$RESOLVED_IMAGE_REGISTRY \
     --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
     --set image.tag=$RESOLVED_IMAGE_TAG \
     --set image.pullPolicy=Always \
@@ -168,6 +171,7 @@ log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
 log_debug "DEBUG: HELM_REPO=$HELM_REPO"
 log_debug "DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY"
 log_debug "DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REGISTRY=$RESOLVED_IMAGE_REGISTRY"
 log_debug "DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE"
 log_debug "DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY"
 log_debug "DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG"

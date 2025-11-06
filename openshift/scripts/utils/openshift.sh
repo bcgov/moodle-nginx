@@ -198,7 +198,7 @@ wait_with_cluster_monitoring() {
     fi
   done
 
-  log_error "❌ Deployment wait timed out after ${max_wait_time} seconds"
+  log_error "Deployment wait timed out after ${max_wait_time} seconds"
 
   # Show final cluster health check on timeout if monitoring enabled
   if [[ "$cluster_monitoring_enabled" == "YES" ]]; then

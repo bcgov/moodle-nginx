@@ -11,6 +11,9 @@ else
     log_warn "example.versions.env not found - using environment variables from deployment"
 fi
 
+# Source Helm image resolver for DRY image management
+source ./openshift/scripts/helm-image-resolver.sh
+
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
 
@@ -35,12 +38,34 @@ REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 # Pin to chart version that works in dev/test environments
 REDIS_CHART_VERSION="${REDIS_CHART_VERSION:-23.1.3}"
 
+# Resolve Redis and Sentinel image configurations
+if ! resolve_helm_image "REDIS_IMAGE"; then
+    echo "❌ Failed to resolve REDIS_IMAGE configuration"
+    exit 1
+fi
+export REDIS_IMAGE_REGISTRY="$RESOLVED_IMAGE_REGISTRY"
+export REDIS_IMAGE_REPOSITORY="$RESOLVED_IMAGE_REPOSITORY"
+export REDIS_IMAGE_TAG="$RESOLVED_IMAGE_TAG"
+
+if ! resolve_helm_image "REDIS_SENTINEL_IMAGE"; then
+    echo "❌ Failed to resolve REDIS_SENTINEL_IMAGE configuration"
+    exit 1
+fi
+export SENTINEL_IMAGE_REGISTRY="$RESOLVED_IMAGE_REGISTRY"
+export SENTINEL_IMAGE_REPOSITORY="$RESOLVED_IMAGE_REPOSITORY"
+export SENTINEL_IMAGE_TAG="$RESOLVED_IMAGE_TAG"
+
+echo "🐳 Using Redis image: ${REDIS_IMAGE_REPOSITORY}:${REDIS_IMAGE_TAG}"
+echo "🐳 Using Sentinel image: ${SENTINEL_IMAGE_REPOSITORY}:${SENTINEL_IMAGE_TAG}"
+
 # Configure Redis deployment arguments
 REDIS_ARGS=(
-  "--set" "image.repository=$(echo "$REDIS_IMAGE" | cut -d':' -f1)"
-  "--set" "image.tag=$(echo "$REDIS_IMAGE" | cut -d':' -f2)"
-  "--set" "sentinel.image.repository=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)"
-  "--set" "sentinel.image.tag=$(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)"
+  "--set" "image.registry=${REDIS_IMAGE_REGISTRY}"
+  "--set" "image.repository=${REDIS_IMAGE_REPOSITORY}"
+  "--set" "image.tag=${REDIS_IMAGE_TAG}"
+  "--set" "sentinel.image.registry=${SENTINEL_IMAGE_REGISTRY}"
+  "--set" "sentinel.image.repository=${SENTINEL_IMAGE_REPOSITORY}"
+  "--set" "sentinel.image.tag=${SENTINEL_IMAGE_TAG}"
   "--set" "global.imagePullSecrets[0].name=${ARTIFACTORY_PULL_SECRET}"
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
