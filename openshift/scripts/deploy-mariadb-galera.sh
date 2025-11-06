@@ -95,6 +95,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "Upgrading $DB_DEPLOYMENT_NAME..."
 
   # Capture the output of the helm upgrade command into a variable
+  # Note: Keep replicas at 0 to prevent pods from starting before patches are applied
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.registry=$RESOLVED_IMAGE_REGISTRY \
@@ -104,7 +105,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
-    --set replicaCount=$DB_REPLICAS \
+    --set replicaCount=0 \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
@@ -127,6 +128,7 @@ else
   # --set metrics.prometheusRules.enabled=false \
   # --set primary.persistence.accessModes={ReadWriteMany} \
   # --atomic \
+  # Note: Start with replicas=0 to prevent pods from starting before patches are applied
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
     --set image.registry=$RESOLVED_IMAGE_REGISTRY \
@@ -144,7 +146,7 @@ else
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
-    --set replicaCount=$DB_REPLICAS \
+    --set replicaCount=0 \
     --set persistence.size=10Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
@@ -161,10 +163,10 @@ else
     --set extraVolumeMounts[0].readOnly=true \
     --set lifecycle.preStop.exec.command[0]="/bin/sh" \
     --set lifecycle.preStop.exec.command[1]="-c" \
-    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
-    --wait \
-    --timeout 20m0s
+    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh"
     #-f ./config/mariadb/galera-values.yaml
+
+  echo "✅ Helm install completed with replicas=0 (pods will be started after patching)"
 fi
 
 log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
@@ -239,6 +241,46 @@ sleep 10
 # StatefulSet, Also ensure PVC retention policy is set to "Retain"
 oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRetentionPolicy":{"whenDeleted":"Retain","whenScaled":"Retain"}, "updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":3}}}}'
 
+echo "✅ All patches applied successfully"
+
+# Verify StatefulSet template has correct image configuration
+echo "🔍 Verifying StatefulSet template configuration..."
+STS_TEMPLATE_IMAGE=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.template.spec.containers[0].image}')
+echo "   StatefulSet template image: $STS_TEMPLATE_IMAGE"
+
+if [[ "$STS_TEMPLATE_IMAGE" == "docker.io/"* ]]; then
+  echo "❌ ERROR: StatefulSet template still has docker.io prefix!"
+  echo "   This indicates the image patches did not apply correctly"
+  exit 1
+elif [[ "$STS_TEMPLATE_IMAGE" == "$RESOLVED_FULL_IMAGE" ]]; then
+  echo "✅ StatefulSet template matches expected image configuration"
+else
+  echo "⚠️  Warning: StatefulSet template image differs from expected"
+  echo "   Expected: $RESOLVED_FULL_IMAGE"
+  echo "   Actual: $STS_TEMPLATE_IMAGE"
+fi
+
+# Now scale up to the desired number of replicas with patched configuration
+echo "📈 Scaling StatefulSet to $DB_REPLICAS replicas with patched configuration..."
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
+
+# Wait for the StatefulSet to show the desired number of replicas
+echo "⏳ Waiting for StatefulSet to update replica count..."
+ATTEMPTS=0
+MAX_ATTEMPTS=30
+while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}') -ne $DB_REPLICAS && $ATTEMPTS -lt $MAX_ATTEMPTS ]]; do
+  WAITED=$((ATTEMPTS * 2))
+  echo "   Waiting for spec.replicas to update... $WAITED seconds"
+  sleep 2
+  ATTEMPTS=$((ATTEMPTS + 1))
+done
+
+if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
+  echo "⚠️  Warning: StatefulSet spec.replicas did not update to $DB_REPLICAS within expected time"
+else
+  echo "✅ StatefulSet spec.replicas set to $DB_REPLICAS"
+fi
+
 sleep 10
 
 echo "Waiting for MariaDB Galera nodes to synchronize..."
@@ -247,6 +289,36 @@ if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 30 $DB_REPLICAS; then
   exit 1
 fi
 echo "✔️ MariaDB Galera nodes are synchronized."
+
+echo "🔍 Verifying pods are using correct image..."
+# Get all pod names for the StatefulSet
+POD_NAMES=$(oc get pods -l app.kubernetes.io/name=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[*].metadata.name}')
+
+if [ -z "$POD_NAMES" ]; then
+  echo "⚠️  Warning: No pods found for verification"
+else
+  IMAGE_VERIFICATION_FAILED=false
+  for POD_NAME in $POD_NAMES; do
+    ACTUAL_IMAGE=$(oc get pod $POD_NAME -o jsonpath='{.spec.containers[0].image}')
+    echo "   Pod $POD_NAME: $ACTUAL_IMAGE"
+
+    # Check if image matches expected (without docker.io prefix)
+    if [[ "$ACTUAL_IMAGE" == "docker.io/"* ]]; then
+      echo "   ❌ ERROR: Pod still has docker.io prefix in image!"
+      IMAGE_VERIFICATION_FAILED=true
+    elif [[ "$ACTUAL_IMAGE" == "$RESOLVED_FULL_IMAGE" ]]; then
+      echo "   ✅ Image matches expected configuration"
+    else
+      echo "   ⚠️  Warning: Image does not match expected: $RESOLVED_FULL_IMAGE"
+    fi
+  done
+
+  if [ "$IMAGE_VERIFICATION_FAILED" = true ]; then
+    echo "❌ Image verification failed - pods are using incorrect images"
+    echo "   This may indicate the StatefulSet needs to be manually scaled to 0 and back up"
+    # Don't exit - let the database check proceed, but warn user
+  fi
+fi
 
 echo "Checking if the database is online and contains expected Moodle data..."
 ATTEMPTS=0

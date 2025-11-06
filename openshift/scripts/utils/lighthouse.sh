@@ -92,26 +92,45 @@ setup_lighthouse_environment() {
 
   log_info "Setting up Lighthouse testing environment..."
 
-  cd "$config_dir" || {
-    log_error "Failed to change to config directory: $config_dir"
+  # Verify the directory exists before attempting to install
+  if [ ! -d "$config_dir" ]; then
+    log_error "Lighthouse config directory not found: $config_dir"
     return 1
-  }
+  fi
 
-  # Install dependencies with security validation
-  source "../../openshift/scripts/utils/npm.sh"
+  # Verify package.json exists
+  if [ ! -f "$config_dir/package.json" ]; then
+    log_error "package.json not found in: $config_dir"
+    log_error "Expected file: $config_dir/package.json"
+    return 1
+  fi
 
-  if npm_install_secure "." "auto" "true"; then
+  log_debug "Found package.json in $config_dir"
+
+  # Source npm utilities from workspace root (don't cd first)
+  source "./openshift/scripts/utils/npm.sh"
+
+  # Install dependencies with security validation (npm_install_secure will cd into the directory)
+  if npm_install_secure "$config_dir" "auto" "true"; then
     log_info "Lighthouse dependencies installed and validated"
   else
     log_error "Failed to install or validate Lighthouse dependencies"
     return 1
   fi
 
-  # Verify required packages
+  # Verify required packages (cd to check)
+  cd "$config_dir" || {
+    log_error "Failed to change to config directory for verification: $config_dir"
+    return 1
+  }
+
   if ! npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
     log_error "Required Lighthouse packages not found"
     return 1
   fi
+
+  # Return to workspace root
+  cd - > /dev/null || cd ../..
 
   log_info "Lighthouse environment ready"
   return 0
