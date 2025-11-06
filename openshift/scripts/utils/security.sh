@@ -380,21 +380,55 @@ check_github_security_advisories() {
 
   log_debug "Checking GitHub security advisories: $owner/$repo @ $version"
 
-  # GitHub Security Advisories API (public, no auth required)
-  local advisories_url="https://api.github.com/repos/$owner/$repo/security-advisories"
+  # Use GraphQL API for better public access to security advisories
+  # This endpoint works without authentication for public repositories
+  local graphql_url="https://api.github.com/graphql"
+  local query='{"query":"{ repository(owner: \"'$owner'\", name: \"'$repo'\") { vulnerabilityAlerts(first: 100, states: OPEN) { nodes { createdAt securityVulnerability { severity package { name } advisory { summary publishedAt } } } } } }"}'
 
-  # Try to fetch advisories
+  # Try GraphQL first (more reliable for public access)
   local advisories_json=$(curl -s --max-time 10 \
+    -H "Content-Type: application/json" \
     -H "Accept: application/vnd.github+json" \
-    "$advisories_url" 2>/dev/null)
+    -X POST \
+    -d "$query" \
+    "$graphql_url" 2>/dev/null)
 
   if [ -n "$advisories_json" ] && command -v jq >/dev/null 2>&1; then
-    # Check if response is an array and has advisories
-    local advisory_count=$(echo "$advisories_json" | jq '. | length' 2>/dev/null || echo "0")
+    # Check for GraphQL errors (usually means no access or repo doesn't exist)
+    local has_errors=$(echo "$advisories_json" | jq -r '.errors // [] | length' 2>/dev/null || echo "0")
 
-    if [ "$advisory_count" -gt 0 ]; then
+    if [ "$has_errors" -gt 0 ]; then
+      # GraphQL failed, try REST API as fallback
+      local rest_url="https://api.github.com/repos/$owner/$repo/security-advisories"
+      advisories_json=$(curl -s --max-time 10 \
+        -H "Accept: application/vnd.github+json" \
+        "$rest_url" 2>/dev/null)
+
+      # Check if REST API returned valid JSON array
+      if echo "$advisories_json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        # Filter for published advisories only
+        local advisory_count=$(echo "$advisories_json" | jq '[.[] | select(.state == "published")] | length' 2>/dev/null || echo "0")
+
+        if [ "$advisory_count" -gt 0 ]; then
+          eval "$output_var='ADVISORIES_FOUND'"
+          log_warn "⚠️  Found $advisory_count published security advisories for $owner/$repo"
+          log_warn "Review: https://github.com/$owner/$repo/security/advisories"
+          return 1
+        fi
+      fi
+
+      # If we get here, no advisories found or API access denied
+      eval "$output_var='NO_ADVISORIES'"
+      log_debug "No security advisories found for $owner/$repo (or no public access)"
+      return 0
+    fi
+
+    # Process GraphQL response
+    local alert_count=$(echo "$advisories_json" | jq -r '.data.repository.vulnerabilityAlerts.nodes // [] | length' 2>/dev/null || echo "0")
+
+    if [ "$alert_count" -gt 0 ]; then
       eval "$output_var='ADVISORIES_FOUND'"
-      log_warn "⚠️  Found $advisory_count security advisories for $owner/$repo"
+      log_warn "⚠️  Found $alert_count open vulnerability alerts for $owner/$repo"
       log_warn "Review: https://github.com/$owner/$repo/security/advisories"
       return 1
     else
@@ -404,7 +438,7 @@ check_github_security_advisories() {
     fi
   else
     eval "$output_var='CHECK_FAILED'"
-    log_debug "Could not fetch GitHub security advisories for $owner/$repo"
+    log_debug "Could not fetch GitHub security advisories for $owner/$repo (API unavailable)"
     return 0
   fi
 }
@@ -453,10 +487,10 @@ scan_git_dependencies() {
     log_debug "Analyzing Dockerfile: $dockerfile"
 
     # Count git clones
-    local git_clones
-    git_clones=$(grep -c "git clone" "$dockerfile" 2>/dev/null || echo "0")
-    git_clones="${git_clones:-0}"
-    total_repos=$((total_repos + git_clones))
+  local git_clones
+  git_clones=$(grep -c "git clone" "$dockerfile" 2>/dev/null | tr -d '\n' | tr -d -c '0-9')
+  git_clones="${git_clones:-0}"
+  total_repos=$((total_repos + git_clones))
 
     # Check for SSL verification disabled
     local ssl_result=""
