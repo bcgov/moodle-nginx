@@ -4,8 +4,8 @@
   "description": "Lighthouse performance testing for Moodle deployment",
   "private": true,
   "dependencies": {
-    "lighthouse": "^11.7.1",
-    "puppeteer": "^21.11.0"
+    "lighthouse": "^13.0.0",
+    "puppeteer": "^24.15.0"
   },
   "devDependencies": {
     "jest": "^29.0.0"

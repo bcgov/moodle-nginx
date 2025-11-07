@@ -4,12 +4,12 @@
 # Multi-ecosystem vulnerability scanning with automation and minimal maintenance
 # Covers: Docker, PHP/Composer, System packages, Git dependencies, Container images
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the directory where this script is located (local to avoid conflicts)
+_SECURITY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source the core OpenShift utilities for logging functions
-if [[ -f "$SCRIPT_DIR/openshift.sh" ]]; then
-  source "$SCRIPT_DIR/openshift.sh"
+if [[ -f "$_SECURITY_SCRIPT_DIR/openshift.sh" ]]; then
+  source "$_SECURITY_SCRIPT_DIR/openshift.sh"
 else
   # Fallback: Define minimal logging functions if openshift.sh not found
   log_info() { echo "ℹ️  $*"; }

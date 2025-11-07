@@ -275,7 +275,8 @@ npm_install_secure() {
 
     # Use NPM audit for security validation
     if [ -f "package.json" ]; then
-      npm_audit_scan "$project_dir" "high" "PREINSTALL_RESULT"
+      # Pass "." since we've already changed to project_dir
+      npm_audit_scan "." "high" "PREINSTALL_RESULT"
       if [ $? -eq 2 ]; then
         log_error "Pre-install security check failed!"
         log_error "Run 'npm audit fix' or check Dependabot for updates"
@@ -310,7 +311,8 @@ npm_install_secure() {
   # Post-install security check
   if [ "$security_check" = "true" ]; then
     log_info "Running post-install security validation..."
-    npm_security_scan "$project_dir" "moderate" "true"
+    # Pass "." since we've already changed to project_dir
+    npm_security_scan "." "moderate" "true"
     return $?
   fi
 
