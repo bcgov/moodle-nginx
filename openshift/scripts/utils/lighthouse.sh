@@ -201,7 +201,25 @@ display_cache_information() {
 
   log_info ""
   log_info "=== Package Information ==="
-  cd "$config_dir" || return 1
+
+  # Ensure we're working from workspace root for relative paths
+  local workspace_root="${GITHUB_WORKSPACE:-.}"
+  local full_config_path="$workspace_root/$config_dir"
+
+  # Handle absolute vs relative paths
+  if [[ "$config_dir" = /* ]]; then
+    full_config_path="$config_dir"
+  fi
+
+  if [ ! -d "$full_config_path" ]; then
+    log_warn "Config directory not found: $full_config_path"
+    return 1
+  fi
+
+  cd "$full_config_path" || {
+    log_warn "Failed to change to config directory: $full_config_path"
+    return 1
+  }
 
   if [ -f "package.json" ]; then
     local cache_key=$(get_lighthouse_cache_key "$config_dir")
@@ -214,6 +232,9 @@ display_cache_information() {
       log_info "package-lock.json not found - will be generated on install"
     fi
   fi
+
+  # Return to workspace root
+  cd "$workspace_root" || log_warn "Failed to return to workspace root"
 }
 
 # =============================================================================
