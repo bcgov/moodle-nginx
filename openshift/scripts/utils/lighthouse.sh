@@ -23,6 +23,10 @@ fi
 # =============================================================================
 
 run_lighthouse_audit() {
+  # Immediate debug output - always visible
+  echo "DEBUG: run_lighthouse_audit function called"
+  echo "DEBUG: Arguments: url=$1, config_dir=$2, output_dir=$3"
+
   local url="$1"
   local config_dir="${2:-config/lighthouse}"
   local output_dir="${3:-tmp/artifacts}"
@@ -79,19 +83,41 @@ run_lighthouse_audit() {
   local lighthouse_output
   local exit_code
 
-  log_debug "Executing Lighthouse with auth script..."
+  log_info "Executing Lighthouse audit..."
   log_debug "Current directory: $(pwd)"
   log_debug "Node version: $(node --version 2>&1 || echo 'Node not found')"
-  log_debug "NPM packages: $(npm list --depth=0 2>&1 | head -5 || echo 'npm list failed')"
 
+  # Verify lighthouse-auth.js exists
   if [ ! -f "lighthouse-auth.js" ]; then
     log_error "lighthouse-auth.js not found in: $(pwd)"
-    log_error "Directory contents: $(ls -la | head -10)"
+    log_error "Directory contents:"
+    ls -la | head -10 | while IFS= read -r line; do
+      log_error "  $line"
+    done
     return 1
   fi
 
+  # Verify Node modules are installed
+  if [ ! -d "node_modules" ]; then
+    log_error "node_modules directory not found - dependencies may not be installed"
+    log_error "Run setup_lighthouse_environment first"
+    return 1
+  fi
+
+  if [ ! -d "node_modules/lighthouse" ]; then
+    log_error "lighthouse package not found in node_modules"
+    log_error "Available packages: $(ls node_modules/ 2>&1 | head -5)"
+    return 1
+  fi
+
+  log_debug "Running: node lighthouse-auth.js"
+  log_debug "Target URL: $APP_HOST_URL"
+
+  # Capture output with better error handling
   lighthouse_output=$(node lighthouse-auth.js 2>&1)
   exit_code=$?
+
+  log_debug "Lighthouse execution completed with exit code: $exit_code"
 
   # Process results
   local status="failure"
@@ -105,14 +131,32 @@ run_lighthouse_audit() {
     fi
     log_info "Lighthouse audit completed successfully$warnings"
   else
-    log_error "Lighthouse audit failed with exit code: $exit_code"
-    log_error "First line of output: $(echo "$lighthouse_output" | head -n 1)"
-    log_error "Last 10 lines of output:"
-    echo "$lighthouse_output" | tail -n 10 | while IFS= read -r line; do
-      log_error "  $line"
-    done
+    log_error "================================"
+    log_error "LIGHTHOUSE AUDIT FAILED"
+    log_error "================================"
+    log_error "Exit code: $exit_code"
+    log_error "Working directory: $(pwd)"
+    log_error "Target URL: $APP_HOST_URL"
+    log_error ""
+    log_error "--- Full Lighthouse Output ---"
 
-    local error_message=$(echo "$lighthouse_output" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
+    # Show ALL output for failed runs (not just first/last lines)
+    if [ -n "$lighthouse_output" ]; then
+      echo "$lighthouse_output" | while IFS= read -r line; do
+        log_error "$line"
+      done
+    else
+      log_error "(No output captured)"
+    fi
+
+    log_error "--- End Output ---"
+    log_error "================================"
+
+    # Extract first non-empty line as error message
+    local error_message=$(echo "$lighthouse_output" | grep -v '^$' | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
+    if [ -z "$error_message" ]; then
+      error_message="Lighthouse failed with exit code $exit_code"
+    fi
     warnings=" (Error: $error_message)"
   fi
 
