@@ -263,7 +263,6 @@ function Get-InfrastructureVersions {
     }
 
     $phpImage = Get-EnvValue -FilePath $envFile -Key "PHP_IMAGE"
-    $nodeVersion = Get-EnvValue -FilePath $envFile -Key "NODE_VERSION"
 
     if (-not $phpImage) {
         Write-ErrorMsg "PHP_IMAGE not found in example.versions.env" "Add PHP_IMAGE=bitnami/php-fpm:X.Y.Z"
@@ -271,7 +270,26 @@ function Get-InfrastructureVersions {
     }
 
     $phpVersion = Get-VersionFromImage $phpImage
-    $nodeVersionNumber = Get-VersionFromImage $nodeVersion
+
+    # Extract Node version from package.json instead of example.versions.env
+    $packageFile = Join-Path $ProjectRoot "config\lighthouse\package.json"
+    $nodeVersionNumber = $null
+    $nodeVersionFull = "Not configured"
+
+    if (Test-Path $packageFile) {
+        try {
+            $packageJson = Get-Content $packageFile -Raw | ConvertFrom-Json
+            if ($packageJson.engines.node) {
+                $nodeVersionFull = $packageJson.engines.node
+                # Extract major version (e.g., ">=18.0.0" -> "18")
+                if ($nodeVersionFull -match '(\d+)') {
+                    $nodeVersionNumber = $matches[1]
+                }
+            }
+        } catch {
+            Write-Warning "Could not parse package.json for Node version"
+        }
+    }
 
     if ($phpVersion) {
         Write-InfoMsg "PHP Runtime" "$phpVersion (from $phpImage)"
@@ -280,16 +298,16 @@ function Get-InfrastructureVersions {
     }
 
     if ($nodeVersionNumber) {
-        Write-InfoMsg "Node Runtime" "$nodeVersionNumber (from $nodeVersion)"
+        Write-InfoMsg "Node Runtime" "$nodeVersionNumber (from package.json engines.node: $nodeVersionFull)"
     } else {
-        Write-InfoMsg "Node Runtime" "Not configured or version not detected"
+        Write-InfoMsg "Node Runtime" "Not configured in package.json"
     }
 
     return @{
         PHPVersion = $phpVersion
         NodeVersion = $nodeVersionNumber
         PHPImage = $phpImage
-        NodeVersionFull = $nodeVersion
+        NodeVersionFull = $nodeVersionFull
     }
 }
 
@@ -446,8 +464,8 @@ function Test-NodeCompatibility {
         Write-InfoMsg "  Infrastructure: Node $($Infrastructure.NodeVersion)"
         Write-InfoMsg "  NPM requires: $($NPM.NodeConstraint) (>= $minVersion)"
     } else {
-        Write-ErrorMsg "Node version mismatch" "Upgrade NODE_VERSION in example.versions.env to >= $minVersion"
-        Write-InfoMsg "  Infrastructure: Node $($Infrastructure.NodeVersion)"
+        Write-ErrorMsg "Node version mismatch" "Upgrade engines.node in config/lighthouse/package.json to >= $minVersion"
+        Write-InfoMsg "  Current: Node $($Infrastructure.NodeVersion) (from package.json)"
         Write-InfoMsg "  NPM requires: $($NPM.NodeConstraint) (>= $minVersion)"
     }
 }

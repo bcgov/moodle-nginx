@@ -30,12 +30,20 @@ get_infrastructure_versions() {
     # Extract major.minor from PHP image tag
     PHP_INFRA_VERSION=$(echo "$PHP_IMAGE" | grep -oP '\d+\.\d+' | head -1)
 
-    # Extract major version from Node
-    NODE_INFRA_VERSION=$(echo "$NODE_VERSION" | grep -oP '^\d+' | head -1)
+    # Extract Node version from package.json (since it's defined per application)
+    local package_file="$PROJECT_ROOT/config/lighthouse/package.json"
+    if [ -f "$package_file" ] && command -v jq >/dev/null 2>&1; then
+        local node_constraint=$(jq -r '.engines.node // ">=18.0.0"' "$package_file")
+        # Extract first number from constraint (e.g., ">=18.0.0" -> "18")
+        NODE_INFRA_VERSION=$(echo "$node_constraint" | grep -oP '\d+' | head -1)
+    else
+        log_warn "Could not determine Node version from package.json"
+        NODE_INFRA_VERSION="unknown"
+    fi
 
     log_info "Infrastructure versions:"
     log_info "  PHP: $PHP_INFRA_VERSION (from $PHP_IMAGE)"
-    log_info "  Node: $NODE_INFRA_VERSION (from $NODE_VERSION)"
+    log_info "  Node: $NODE_INFRA_VERSION (from package.json engines.node)"
 }
 
 get_composer_versions() {
