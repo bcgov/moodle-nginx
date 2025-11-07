@@ -27,6 +27,27 @@ docker-compose --env-file .env.generated up
 ```
 
 📖 **See [.docs/centralized-dependency-management.md](.docs/centralized-dependency-management.md) for complete details**
+📊 **Architecture Diagrams**: [.docs/diagrams/version-management-architecture.md](.docs/diagrams/version-management-architecture.md)
+
+---
+
+## �️ Local Development Scripts
+
+**Windows developers:** See [scripts/README.md](scripts/README.md) for comprehensive local development tooling:
+
+* **Version Validation** - Check version consistency before committing
+* **Security Scanning** - Docker Scout integration for local vulnerability scanning
+* **Pre-commit Hooks** - Automated validation workflows
+
+Quick start:
+
+```powershell
+# Validate version consistency
+.\scripts\local-validate-version-consistency.ps1
+
+# Scan Docker images for vulnerabilities
+.\scripts\local-dev-security-scan.ps1 -ImageName "moodle-php:latest"
+```
 
 ---
 
@@ -34,10 +55,11 @@ docker-compose --env-file .env.generated up
 
 This project implements comprehensive security scanning and vulnerability management:
 
-- **[Security Scanning Guide](.docs/security-scanning.md)** - Quick reference and configuration
-- **[Vulnerability Exception Management](.docs/vulnerability-exceptions.md)** - TuxCare integration and exception handling
-- **[Security Best Practices](.docs/security-scanning-best-practices.md)** - Strategic workflow design
-- **[Dependency Management](.docs/centralized-dependency-management.md)** - Centralized version control
+* **[Security Scanning Guide](.docs/security-scanning.md)** - Quick reference and configuration
+* **[Vulnerability Exception Management](.docs/vulnerability-exceptions.md)** - TuxCare integration and exception handling
+* **[Security Best Practices](.docs/security-scanning-best-practices.md)** - Strategic workflow design
+* **[Dependency Management](.docs/centralized-dependency-management.md)** - Two-tier version control architecture
+* **[Version Management Architecture](.docs/diagrams/version-management-architecture.md)** - Visual architecture guide
 
 Security scanning runs automatically on every build with environment-specific settings (dev/test/prod).
 
@@ -75,11 +97,12 @@ docker scout recommendations moodle:local
 ```
 
 ### Docker Scout Benefits (Local Development)
-- ✅ **Visual Interface**: Built into Docker Desktop
-- ✅ **Real-time Analysis**: Scans as you build
-- ✅ **Remediation Guidance**: Specific fix recommendations
-- ✅ **Windows-Friendly**: Native Windows integration
-- ✅ **Policy Compliance**: Custom security policies
+
+* ✅ **Visual Interface**: Built into Docker Desktop
+* ✅ **Real-time Analysis**: Scans as you build
+* ✅ **Remediation Guidance**: Specific fix recommendations
+* ✅ **Windows-Friendly**: Native Windows integration
+* ✅ **Policy Compliance**: Custom security policies
 
 ### Automated Scanning (PowerShell)
 
@@ -100,7 +123,7 @@ For automated local security validation, see: `scripts/local-dev-security-scan.p
 * Copy config.php from here to that directory - modify as required
 * app/moodledata should be chmod 0777
 * docker-compose up --build -d
-* You should then be able to access/install Moodle at http://localhost:8080
+* You should then be able to access/install Moodle at <http://localhost:8080>
 
 ## Build / Run Moodle
 

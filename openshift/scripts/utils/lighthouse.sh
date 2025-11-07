@@ -190,9 +190,14 @@ display_cache_information() {
   log_info "https://github.com/$repository/actions/caches"
   log_info ""
 
-  # NPM cache info
-  source "../../openshift/scripts/utils/npm.sh"
-  get_npm_cache_info "$config_dir"
+  # NPM cache info - source from absolute path relative to this script
+  local npm_util_path="$_LIGHTHOUSE_SCRIPT_DIR/npm.sh"
+  if [[ -f "$npm_util_path" ]]; then
+    source "$npm_util_path"
+    get_npm_cache_info "$config_dir"
+  else
+    log_warn "npm.sh utility not found at: $npm_util_path"
+  fi
 
   log_info ""
   log_info "=== Package Information ==="

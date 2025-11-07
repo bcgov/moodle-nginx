@@ -174,6 +174,26 @@ jobs:
             echo "PHP_COMPAT_STATUS=⚠️ VALIDATION UNAVAILABLE" >> $GITHUB_OUTPUT
           fi
 
+      # Version consistency validation
+      - name: 🔄 Version Consistency Check
+        id: version-consistency
+        run: |
+          if [ -f "openshift/scripts/validate-version-consistency.sh" ]; then
+            echo "🔄 Validating version consistency across infrastructure and application layers..."
+            chmod +x openshift/scripts/validate-version-consistency.sh
+            if ./openshift/scripts/validate-version-consistency.sh; then
+              echo "✅ All versions are consistent and compatible"
+              echo "VERSION_CONSISTENCY_STATUS=✅ CONSISTENT" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Version consistency issues detected - check report"
+              echo "VERSION_CONSISTENCY_STATUS=⚠️ ISSUES DETECTED" >> $GITHUB_OUTPUT
+              # Continue with warning to allow review
+            fi
+          else
+            echo "⚠️ Version consistency validation script not found"
+            echo "VERSION_CONSISTENCY_STATUS=⚠️ VALIDATION UNAVAILABLE" >> $GITHUB_OUTPUT
+          fi
+
       # Comprehensive security validation (PHP dependencies + container images)
       - name: �️ Comprehensive Security Validation
         id: security-scan
