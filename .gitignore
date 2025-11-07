@@ -11,6 +11,8 @@ var/*
 !example.secrets
 node_modules
 package*.json
+!config/lighthouse/package.json
+!config/lighthouse/package-lock.json
 
 # Generated dependency manifests (auto-generated from example.versions.env)
 config/moodle/composer.json

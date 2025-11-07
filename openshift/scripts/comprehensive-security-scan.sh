@@ -7,9 +7,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Source utility functions
-source "$SCRIPT_DIR/utils/security.sh"
-source "$SCRIPT_DIR/utils/openshift.sh"
+# Source utility functions with error checking
+if [ -f "$SCRIPT_DIR/utils/security.sh" ]; then
+  source "$SCRIPT_DIR/utils/security.sh"
+else
+  echo "❌ Error: security.sh not found at $SCRIPT_DIR/utils/security.sh"
+  exit 1
+fi
+
+if [ -f "$SCRIPT_DIR/utils/openshift.sh" ]; then
+  source "$SCRIPT_DIR/utils/openshift.sh"
+else
+  echo "❌ Error: openshift.sh not found at $SCRIPT_DIR/utils/openshift.sh"
+  exit 1
+fi
 
 # Read configuration from environment variables (set in build.yml)
 SCAN_ENABLED="${SECURITY_SCAN_ENABLED:-YES}"
@@ -20,12 +31,12 @@ USE_CACHE="${SECURITY_SCAN_CACHE:-YES}"
 
 # Early exit if disabled
 if [[ "$SCAN_ENABLED" != "YES" ]]; then
-  log_info "🔒 Security scanning disabled (SECURITY_SCAN_ENABLED!=YES)"
+  echo "🔒 Security scanning disabled (SECURITY_SCAN_ENABLED!=YES)"
   exit 0
 fi
 
 if [[ "$SCAN_LEVEL" == "OFF" ]]; then
-  log_info "🔒 Security scanning skipped (SECURITY_SCAN_LEVEL=OFF)"
+  echo "🔒 Security scanning skipped (SECURITY_SCAN_LEVEL=OFF)"
   exit 0
 fi
 

@@ -1,0 +1,28 @@
+{
+  "name": "moodle-lighthouse-testing",
+  "version": "1.0.0",
+  "description": "Lighthouse performance testing for Moodle deployment",
+  "private": true,
+  "dependencies": {
+    "lighthouse": "^11.7.1",
+    "puppeteer": "^21.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "scripts": {
+    "test": "lighthouse --chrome-flags='--headless --no-sandbox --disable-gpu'",
+    "security-audit": "npm audit --audit-level moderate",
+    "lighthouse": "node lighthouse-auth.js"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "private"
+  },
+  "author": "Infrastructure Team",
+  "license": "UNLICENSED"
+}
