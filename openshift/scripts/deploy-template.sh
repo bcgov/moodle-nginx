@@ -187,4 +187,4 @@ update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAME
 log_info "🔄 Disabling maintenance mode with automatic verification and cleanup..."
 manage_maintenance_mode "disable" "web" "auto"
 
-log_info "Deployment complete."
+log_success "Deployment complete."

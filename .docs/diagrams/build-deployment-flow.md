@@ -322,7 +322,7 @@ flowchart TD
 
     Images --> P2[🔒 Phase 2: Post-Build Security<br/>~3-5 min<br/>Optional: Test/Prod only]
 
-    P2 --> S5[🔍 Image Vulnerability Scan<br/>- Trivy scan<br/>- Docker Scout<br/>- Full layers]
+    P2 --> S5[🔍 Image Vulnerability Scan<br/>- Trivy scan<br/>- Full layers]
     S5 --> S6[📦 SBOM Generation]
     S6 --> S7[🔑 Sign Images]
 

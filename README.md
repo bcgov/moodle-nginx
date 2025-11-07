@@ -54,6 +54,41 @@ without worrying about the containers.
 
 Network host names are the same as the service names (e.g. just 'redis')
 
+## 🛠️ Local Development Security Scanning
+
+For Windows/Docker Desktop developers, **Docker Scout** provides an excellent GUI-based security scanning experience:
+
+### Quick Start with Docker Scout
+
+```powershell
+# Check if Docker Scout is available
+docker scout version
+
+# Scan a built image
+docker scout cves moodle:local
+
+# Scan with detailed recommendations
+docker scout recommendations moodle:local
+
+# View results in Docker Desktop GUI
+# Docker Desktop > Images > [Your Image] > View in Scout
+```
+
+### Docker Scout Benefits (Local Development)
+- ✅ **Visual Interface**: Built into Docker Desktop
+- ✅ **Real-time Analysis**: Scans as you build
+- ✅ **Remediation Guidance**: Specific fix recommendations
+- ✅ **Windows-Friendly**: Native Windows integration
+- ✅ **Policy Compliance**: Custom security policies
+
+### Automated Scanning (PowerShell)
+
+For automated local security validation, see: `scripts/local-dev-security-scan.ps1`
+
+**Note**: CI/CD pipelines use **Trivy** (not Docker Scout) for consistency with OpenShift environments.
+
+---
+
 ## Set up
 
 * Install Docker daemon and get running

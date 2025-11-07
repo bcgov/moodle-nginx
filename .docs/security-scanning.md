@@ -24,7 +24,7 @@ Automated security scanning runs on every build to detect vulnerabilities before
 
 ### FULL Scan (Test/Prod)
 - ✅ Everything in BASIC
-- ✅ Container image vulnerabilities (Trivy/Docker Scout)
+- ✅ Container image vulnerabilities (Trivy)
 - ✅ License compliance checks
 
 ---

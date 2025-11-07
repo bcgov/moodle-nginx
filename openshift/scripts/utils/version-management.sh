@@ -21,13 +21,13 @@ fi
 # =============================================================================
 # VERSION MANAGEMENT UTILITIES MODULE
 # =============================================================================
-# 
+#
 # This module provides utilities for managing dependency versions across
 # the platform while maintaining DRY principles.
-# 
+#
 # NPM Dependencies: Managed in config/lighthouse/package.json (single source)
 # Other Dependencies: Managed in example.versions.env (centralized)
-# 
+#
 # =============================================================================
 
 generate_lighthouse_package_json() {
@@ -233,15 +233,13 @@ scan_containerized_dependencies() {
     composer audit --format=json 2>/dev/null || echo 'No composer.lock found or audit failed'
   "
 
-  # Scan container image itself
+  # Scan container image with Trivy
   if command -v trivy >/dev/null 2>&1; then
     log_info "Running Trivy container scan..."
     trivy image --severity HIGH,CRITICAL "${container_name}:security-scan"
-  elif docker scout version >/dev/null 2>&1; then
-    log_info "Running Docker Scout scan..."
-    docker scout cves "${container_name}:security-scan"
   else
-    log_warn "No container scanning tools available"
+    log_warn "Trivy not available - container scanning skipped"
+    log_debug "Install Trivy for container image vulnerability scanning"
   fi
 
   # Cleanup temporary container

@@ -247,95 +247,47 @@ scan_docker_image_vulnerabilities() {
   log_info "Scanning Docker image vulnerabilities: $image_name"
   log_debug "Scan level: $scan_level"
 
-  # Check for available scanning tools first
-  local has_docker_scout=false
-  local has_trivy=false
-
-  if command -v docker >/dev/null 2>&1 && docker scout version >/dev/null 2>&1; then
-    has_docker_scout=true
-  fi
-
-  if command -v trivy >/dev/null 2>&1; then
-    has_trivy=true
-  fi
-
-  # Exit early if no tools available
-  if [ "$has_docker_scout" = false ] && [ "$has_trivy" = false ]; then
-    eval "$output_var='UNKNOWN'"
-    log_warn "No container scanning tools available (Docker Scout, Trivy)"
+  # Check for Trivy (primary tool for CI/CD and OpenShift deployments)
+  if ! command -v trivy >/dev/null 2>&1; then
+    eval "$output_var='TRIVY_NOT_AVAILABLE'"
+    log_warn "Trivy not available - container scanning skipped"
+    log_debug "Install Trivy for container vulnerability scanning"
     return 0
   fi
 
-  local scan_output
-  local exit_code=0
-  local high_count=0
-  local critical_count=0
+  log_debug "Using Trivy for container vulnerability scanning"
 
-  # Try Docker Scout first if available
-  if [ "$has_docker_scout" = true ]; then
-    log_debug "Using Docker Scout for vulnerability scanning"
-
-    scan_output=$(docker scout cves "$image_name" --format json 2>/dev/null) || exit_code=$?
-
-    if [ $exit_code -eq 0 ] && [ -n "$scan_output" ]; then
-      # Parse Scout results
-      critical_count=$(echo "$scan_output" | jq -r '[.vulnerabilities[]? | select(.severity=="critical")] | length' 2>/dev/null || echo "0")
-      high_count=$(echo "$scan_output" | jq -r '[.vulnerabilities[]? | select(.severity=="high")] | length' 2>/dev/null || echo "0")
-
-      if [ "$critical_count" -gt 0 ]; then
-        eval "$output_var='CRITICAL'"
-        log_error "CRITICAL: $critical_count critical vulnerabilities in $image_name"
-        [ "$exit_on" = "critical" ] && return 2
-        return 1
-      elif [ "$high_count" -gt 0 ]; then
-        eval "$output_var='HIGH'"
-        log_warn "HIGH: $high_count high-severity vulnerabilities in $image_name"
-        [ "$exit_on" != "none" ] && return 1
-        return 0
-      else
-        eval "$output_var='CLEAN'"
-        log_info "No critical/high vulnerabilities found in $image_name"
-        return 0
-      fi
-    fi
+  # Run Trivy scan
+  local trivy_output="/tmp/trivy-scan-$(date +%s).json"
+  if ! trivy image --format json --output "$trivy_output" "$image_name" >/dev/null 2>&1; then
+    rm -f "$trivy_output"
+    eval "$output_var='SCAN_FAILED'"
+    log_warn "Trivy scan failed for $image_name"
+    return 0
   fi
 
-  # Fallback to Trivy if Docker Scout unavailable or failed
-  if [ "$has_trivy" = true ]; then
-    log_debug "Using Trivy for vulnerability scanning"
+  # Parse Trivy results
+  local critical_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$trivy_output" 2>/dev/null || echo "0")
+  local high_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$trivy_output" 2>/dev/null || echo "0")
 
-    local trivy_output="/tmp/trivy-scan-$(date +%s).json"
-    if trivy image --format json --output "$trivy_output" "$image_name" >/dev/null 2>&1; then
-      critical_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$trivy_output" 2>/dev/null || echo "0")
-      high_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$trivy_output" 2>/dev/null || echo "0")
+  rm -f "$trivy_output"
 
-      rm -f "$trivy_output"
-
-      if [ "$critical_count" -gt 0 ]; then
-        eval "$output_var='CRITICAL'"
-        log_error "CRITICAL: $critical_count critical vulnerabilities in $image_name"
-        return 2
-      elif [ "$high_count" -gt 0 ]; then
-        eval "$output_var='HIGH'"
-        log_warn "HIGH: $high_count high-severity vulnerabilities in $image_name"
-        return 1
-      else
-        eval "$output_var='CLEAN'"
-        log_info "No critical/high vulnerabilities found in $image_name"
-        return 0
-      fi
-    else
-      rm -f "$trivy_output"
-      eval "$output_var='SCAN_FAILED'"
-      log_warn "Trivy scan failed for $image_name"
-      return 0
-    fi
+  # Evaluate results
+  if [ "$critical_count" -gt 0 ]; then
+    eval "$output_var='CRITICAL'"
+    log_error "CRITICAL: $critical_count critical vulnerabilities in $image_name"
+    [ "$exit_on" = "critical" ] && return 2
+    return 1
+  elif [ "$high_count" -gt 0 ]; then
+    eval "$output_var='HIGH'"
+    log_warn "HIGH: $high_count high-severity vulnerabilities in $image_name"
+    [ "$exit_on" != "none" ] && return 1
+    return 0
+  else
+    eval "$output_var='CLEAN'"
+    log_info "✅ No critical/high vulnerabilities found in $image_name"
+    return 0
   fi
-
-  # Should never reach here due to early exit, but just in case
-  eval "$output_var='UNKNOWN'"
-  log_warn "No container scanning tools available"
-  return 0
 }
 
 # =============================================================================
@@ -848,7 +800,7 @@ comprehensive_security_scan() {
   local scan_images="${4:-false}"
 
   log_info "Running comprehensive security scan..."
-  log_info "Automated tools: Composer Audit + Docker Scout/Trivy + System Updates + Git Analysis"
+  log_info "Automated tools: Composer Audit + Trivy + System Updates + Git Analysis"
   log_debug "Project: $project_dir, Level: $scan_level, Abort on critical: $abort_on_critical"
 
   # Save original directory to return to it later
@@ -911,42 +863,60 @@ comprehensive_security_scan() {
   if [ "$scan_images" = "true" ]; then
     log_info "🔍 Phase 4: Docker Image Security"
 
-    # Check if we have scanning tools available before attempting scans
-    local has_docker_scout=false
-    local has_trivy=false
-
-    if command -v docker >/dev/null 2>&1 && docker scout version >/dev/null 2>&1; then
-      has_docker_scout=true
-    fi
-
-    if command -v trivy >/dev/null 2>&1; then
-      has_trivy=true
-    fi
-
-    if [ "$has_docker_scout" = false ] && [ "$has_trivy" = false ]; then
-      log_warn "Skipping Docker image scans - no scanning tools available (Docker Scout, Trivy)"
-      log_debug "Install Trivy or enable Docker Scout for image vulnerability scanning"
+    # Check if Trivy is available
+    if ! command -v trivy >/dev/null 2>&1; then
+      log_warn "Skipping Docker image scans - Trivy not available"
+      log_debug "Install Trivy for container image vulnerability scanning"
     else
+      # Source environment variables if available
+      if [ -f "example.versions.env" ]; then
+        log_debug "Loading environment variables from example.versions.env"
+        set -a
+        source example.versions.env
+        set +a
+      fi
+
       # Scan base images mentioned in Dockerfiles
       find . -name "*.Dockerfile" -o -name "Dockerfile*" | while read -r dockerfile; do
+        # Re-source in subshell (find creates subshells)
+        if [ -f "example.versions.env" ]; then
+          set -a
+          source example.versions.env
+          set +a
+        fi
+
         # Extract base images and expand ARG variables if possible
         local base_images=$(grep -i "^FROM " "$dockerfile" | awk '{print $2}')
 
         for image in $base_images; do
-          # Skip build stage aliases and unexpanded variables
-          if [[ "$image" == scratch ]] || [[ "$image" == *"AS"* ]] || [[ "$image" == \$* ]]; then
-            log_debug "Skipping non-scannable image reference: $image"
+          # Skip build stage aliases
+          if [[ "$image" == scratch ]] || [[ "$image" == *"AS"* ]] || [[ "$image" == *" as "* ]]; then
+            log_debug "Skipping build stage alias: $image"
             continue
           fi
 
-          # Try to expand ARG variables from Dockerfile
+          # Expand ${VAR} syntax using environment variables
+          if [[ "$image" =~ \$\{([A-Z_]+)\} ]]; then
+            local var_name="${BASH_REMATCH[1]}"
+            local var_value="${!var_name}"
+            
+            if [ -n "$var_value" ]; then
+              image="$var_value"
+              log_debug "Expanded \${${var_name}} to: $image"
+            else
+              log_debug "Could not expand \${${var_name}} - variable not set, skipping"
+              continue
+            fi
+          fi
+
+          # Try to expand ARG variables from Dockerfile as fallback
           if [[ "$image" =~ ^\$\{([A-Z_]+)\}$ ]]; then
             local var_name="${BASH_REMATCH[1]}"
             local expanded_image=$(grep "^ARG ${var_name}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["'"'"']?([^"'"'"']*)["'"'"']?$/\1/')
 
             if [ -n "$expanded_image" ]; then
               image="$expanded_image"
-              log_debug "Expanded \${${var_name}} to: $image"
+              log_debug "Expanded from Dockerfile ARG \${${var_name}} to: $image"
             else
               log_debug "Could not expand \${${var_name}} - skipping"
               continue
@@ -1010,14 +980,7 @@ setup_security_tools() {
   local tools_available=()
   local tools_missing=()
 
-  # Check Docker Scout
-  if docker scout version >/dev/null 2>&1; then
-    tools_available+=("Docker Scout")
-  else
-    tools_missing+=("Docker Scout")
-  fi
-
-  # Check Trivy
+  # Check Trivy (primary tool for CI/CD and OpenShift)
   if command -v trivy >/dev/null 2>&1; then
     tools_available+=("Trivy")
   else
@@ -1068,7 +1031,7 @@ get_security_recommendations() {
   log_info "  2. Run security scans in CI/CD pipeline (✅ Implemented)"
   log_info "  3. Regular base image updates via Dependabot Docker ecosystem"
   log_info "  4. Use specific image tags instead of 'latest' in Dockerfiles"
-  log_info "  5. Enable Docker Scout or Trivy for container scanning"
+  log_info "  5. Use Trivy for container image vulnerability scanning"
   log_info "  6. Keep Composer dependencies updated with 'composer audit'"
   log_info "  7. Review Git dependencies for secure HTTPS URLs"
   log_info "  8. Monitor security advisories for Moodle core and plugins"

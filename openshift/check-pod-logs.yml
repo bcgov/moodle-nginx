@@ -44,6 +44,22 @@ objects:
                       value: ${OPENSHIFT_SERVER}
                     - name: DEPLOY_NAMESPACE
                       value: ${DEPLOY_NAMESPACE}
+                    # Database credentials from moodle-secrets
+                    - name: DB_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: moodle-secrets
+                          key: database-password
+                    - name: DB_USER
+                      valueFrom:
+                        secretKeyRef:
+                          name: moodle-secrets
+                          key: database-user
+                    - name: DB_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: moodle-secrets
+                          key: database-name
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts

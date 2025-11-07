@@ -24,8 +24,8 @@ env:
   # Prod: LEVEL=FULL,  EXIT_ON=CRITICAL, CONTAINERS=YES (~6-8 min, blocks Critical only)
 
   # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
-  SKIP_DEPLOY: "NO"
+  SKIP_BUILDS: "YES"
+  SKIP_DEPLOY: "YES"
   FORCE_MIGRATE: "YES"
   # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
   CLEAN_BUILDS: "NO"
@@ -313,6 +313,7 @@ jobs:
       COURSESEARCH_BRANCH_VERSION: ${{ needs.checkEnv.outputs.COURSESEARCH_BRANCH_VERSION }}
       PCURATOR_URL: ${{ needs.checkEnv.outputs.PCURATOR_URL }}
       PCURATOR_BRANCH_VERSION: ${{ needs.checkEnv.outputs.PCURATOR_BRANCH_VERSION }}
+
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
@@ -396,15 +397,15 @@ jobs:
       !contains(needs.*.result, 'failure')
     steps:
       - uses: actions/checkout@v4
-      
+
       # Setup Node.js 22 for Lighthouse (requires Node 22.19+)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '25'
           cache: 'npm'
           cache-dependency-path: 'config/lighthouse/package-lock.json'
-      
+
       - run: mkdir -p tmp/artifacts
 
       - name: Install Trivy

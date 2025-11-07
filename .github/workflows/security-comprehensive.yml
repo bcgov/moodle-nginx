@@ -104,11 +104,8 @@ jobs:
       - name: 🛠️ Setup Security Tools
         if: steps.cache-check.outputs.cache-hit != 'true'
         run: |
-          # Install latest Trivy
+          # Install latest Trivy (primary container scanning tool)
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
-          # Install Docker Scout
-          curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
 
           # Setup Node.js for NPM scanning
           curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
@@ -138,7 +135,7 @@ jobs:
             "$UBUNTU_IMAGE"
           )
 
-          echo "🔍 Scanning ${#images[@]} container images..."
+          echo "🔍 Scanning ${#images[@]} container images with Trivy..."
 
           for image in "${images[@]}"; do
             echo "Scanning: $image"
@@ -146,9 +143,6 @@ jobs:
 
             # Trivy scan (comprehensive)
             trivy image --format json --output "security-results/containers/trivy-$image_safe.json" "$image" || true
-
-            # Docker Scout scan (if available)
-            docker scout cves --format json --output "security-results/containers/scout-$image_safe.json" "$image" 2>/dev/null || true
           done
 
       - name: 📦 Scan NPM Dependencies
