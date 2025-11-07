@@ -899,7 +899,7 @@ comprehensive_security_scan() {
           if [[ "$image" =~ \$\{([A-Z_]+)\} ]]; then
             local var_name="${BASH_REMATCH[1]}"
             local var_value="${!var_name}"
-            
+
             if [ -n "$var_value" ]; then
               image="$var_value"
               log_debug "Expanded \${${var_name}} to: $image"
