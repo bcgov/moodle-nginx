@@ -81,11 +81,29 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: 🐸 Buld to JFrog
+      - name: Setup Versions Env Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Set up Docker Buildx (container driver)
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver-opts: network=host
+          buildkitd-flags: --debug
+
+      - name: 🐸 Build to JFrog
         run: |
+          export BUILDKIT_PROGRESS=plain
           docker buildx build \
-            --cache-from type=gha,scope=${{ github.ref_name }} \
-            --cache-to type=gha,scope=${{ github.ref_name }},mode=max \
+            --cache-from type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache \
+            --cache-from type=gha,scope=moodle-${{ github.ref_name }} \
+            --cache-to type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache,mode=max \
+            --cache-to type=gha,scope=moodle-${{ github.ref_name }},mode=min \
             --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} \
             --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
             --build-arg THEME_URL=${{ inputs.THEME_URL }} \

@@ -488,7 +488,7 @@ jobs:
           path: |
             ~/.npm
             config/lighthouse/node_modules
-          key: ${{ runner.os }}-lighthouse-${{ hashFiles('example.versions.env') }}-v4
+          key: ${{ runner.os }}-lighthouse-${{ hashFiles('config/lighthouse/package-lock.json') }}-v4
           restore-keys: |
             ${{ runner.os }}-lighthouse-
             ${{ runner.os }}-node-
