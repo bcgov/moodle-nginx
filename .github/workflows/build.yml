@@ -129,21 +129,10 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
-      # 🔧 Cache security scanning tools
-      - name: 🔧 Cache Trivy Installation
-        id: cache-trivy
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/bin/trivy
-            /usr/bin/trivy
-          key: ${{ runner.os }}-trivy-${{ hashFiles('.github/workflows/build.yml') }}-v1
-          restore-keys: |
-            ${{ runner.os }}-trivy-
-
-      - name: 🛡️ Install Trivy
-        if: steps.cache-trivy.outputs.cache-hit != 'true'
+      # 🔧 Install Trivy (lightweight, fast install - caching not needed)
+      - name: �️ Install Trivy
         run: |
+          # Trivy installation is fast (~5-10s), no need to cache
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
@@ -480,20 +469,8 @@ jobs:
 
       - run: mkdir -p tmp/artifacts
 
-      # 🔧 Cache security scanning tools
-      - name: 🔧 Cache Trivy Installation
-        id: cache-trivy-lh
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/bin/trivy
-            /usr/bin/trivy
-          key: ${{ runner.os }}-trivy-${{ hashFiles('.github/workflows/build.yml') }}-v1
-          restore-keys: |
-            ${{ runner.os }}-trivy-
-
-      - name: Install Trivy
-        if: steps.cache-trivy-lh.outputs.cache-hit != 'true'
+      # �️ Install Trivy (fast install, no caching needed)
+      - name: 🛡️ Install Trivy
         run: |
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
