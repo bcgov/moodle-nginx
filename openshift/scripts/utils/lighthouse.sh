@@ -131,7 +131,13 @@ setup_lighthouse_environment() {
     return 1
   fi
 
-  # Verify required packages (cd to check)
+  # Return to workspace root after npm_install_secure (it may have changed directory)
+  cd "$workspace_root" || {
+    log_error "Failed to return to workspace root: $workspace_root"
+    return 1
+  }
+
+  # Verify required packages (now cd from workspace root)
   cd "$config_dir" || {
     log_error "Failed to change to config directory for verification: $config_dir"
     return 1

@@ -396,6 +396,15 @@ jobs:
       !contains(needs.*.result, 'failure')
     steps:
       - uses: actions/checkout@v4
+      
+      # Setup Node.js 22 for Lighthouse (requires Node 22.19+)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'config/lighthouse/package-lock.json'
+      
       - run: mkdir -p tmp/artifacts
 
       - name: Install Trivy

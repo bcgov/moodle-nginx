@@ -442,7 +442,7 @@ scan_system_package_vulnerabilities() {
 
       # Get security updates with details
       security_updates=$(apt list --upgradable 2>/dev/null | grep -i security || echo "")
-      security_count=$(echo "$security_updates" | grep -c "^" || echo "0")
+      security_count=$(echo "$security_updates" | grep -v "^$" | wc -l)
 
       if [ "$security_count" -gt 0 ]; then
         echo "SECURITY_UPDATES_FOUND:$security_count"
@@ -469,6 +469,12 @@ scan_system_package_vulnerabilities() {
     fi
   ' 2>/dev/null)
 
+  # Debug: Show raw scan output when DEBUG_LEVEL is set
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+    log_debug "Raw system package scan output:"
+    log_debug "$scan_output"
+  fi
+
   # Cleanup container (optional - keep for speed)
   # docker rmi "$container_tag" >/dev/null 2>&1 || true
 
@@ -488,9 +494,9 @@ scan_system_package_vulnerabilities() {
       eval "$output_var='UPDATES_NEEDED'"
 
       if [ "$update_count" -gt 10 ]; then
-        log_error "❌ CRITICAL: $update_count security updates needed in container"
+        log_error "CRITICAL: $update_count security updates needed in container"
       else
-        log_warn "⚠️  WARNING: $update_count security updates needed in container"
+        log_warn "WARNING: $update_count security updates needed in container"
       fi
 
       # List the specific packages needing updates
@@ -507,6 +513,10 @@ scan_system_package_vulnerabilities() {
         if [ "$total_shown" -gt 10 ]; then
           log_info "   ... and $((total_shown - 10)) more packages"
         fi
+      else
+        # Fallback: Show the raw security updates if UPDATE: lines not found
+        log_warn "Package details not parsed. Showing raw output:"
+        echo "$scan_output" | grep -v "^SECURITY_UPDATES_FOUND" | grep -v "^NO_UPDATES" | grep -v "^NO_PACKAGE_MANAGER" | head -10
       fi
 
       if [ "$update_count" -gt 10 ]; then
@@ -607,7 +617,7 @@ check_moodle_security_advisories() {
 
     if [ "$affected_count" -gt 0 ]; then
       eval "$output_var='ADVISORIES_FOUND'"
-      log_warn "⚠️  Found $affected_count security advisories affecting Moodle $version_number"
+      log_warn "Found $affected_count security advisories affecting Moodle $version_number"
       log_warn "Review: https://moodle.org/security/"
       return 1
     else
@@ -662,7 +672,7 @@ check_github_security_advisories() {
 
         if [ "$advisory_count" -gt 0 ]; then
           eval "$output_var='ADVISORIES_FOUND'"
-          log_warn "⚠️  Found $advisory_count published security advisories for $owner/$repo"
+          log_warn "Found $advisory_count published security advisories for $owner/$repo"
           log_warn "Review: https://github.com/$owner/$repo/security/advisories"
           return 1
         fi
@@ -679,7 +689,7 @@ check_github_security_advisories() {
 
     if [ "$alert_count" -gt 0 ]; then
       eval "$output_var='ADVISORIES_FOUND'"
-      log_warn "⚠️  Found $alert_count open vulnerability alerts for $owner/$repo"
+      log_warn "Found $alert_count open vulnerability alerts for $owner/$repo"
       log_warn "Review: https://github.com/$owner/$repo/security/advisories"
       return 1
     else
@@ -701,7 +711,7 @@ check_git_ssl_verification() {
 
   if grep -q "GIT_SSL_NO_VERIFY=1" "$dockerfile" 2>/dev/null; then
     eval "$output_var='SSL_DISABLED'"
-    log_warn "⚠️  WARNING: SSL verification disabled (GIT_SSL_NO_VERIFY=1) in $dockerfile"
+    log_warn "WARNING: SSL verification disabled (GIT_SSL_NO_VERIFY=1) in $dockerfile"
     log_warn "This may be acceptable for development but is a security risk in production"
     log_warn "Recommendation: Remove GIT_SSL_NO_VERIFY or set to 0 for production builds"
     return 1  # Changed from 2 (critical) to 1 (warning)
@@ -757,7 +767,7 @@ scan_git_dependencies() {
 
     # Check for insecure HTTP git clone patterns
     if grep -q "git clone.*http://" "$dockerfile" 2>/dev/null; then
-      log_warn "⚠️  Insecure HTTP git clone found in $dockerfile"
+      log_warn "Insecure HTTP git clone found in $dockerfile"
       security_issues=$((security_issues + 1))
     fi
 
@@ -1067,7 +1077,7 @@ get_security_recommendations() {
 
   # Check current Dockerfile practices
   if find "$project_dir" -name "*.Dockerfile" -o -name "Dockerfile*" | xargs grep -l "FROM.*:latest" >/dev/null 2>&1; then
-    log_warn "⚠️  Found 'latest' tags in Dockerfiles - consider using specific versions"
+    log_warn "Found 'latest' tags in Dockerfiles - consider using specific versions"
   fi
 
   # Check for HTTP git clones
