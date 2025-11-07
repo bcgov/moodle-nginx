@@ -737,7 +737,8 @@ scan_git_dependencies() {
         log_info "📦 Found $repo_count repositories defined in $dockerfile"
 
         # Check each repository for security advisories
-        echo "$repos_json" | jq -c '.[]' | while read -r repo; do
+        # Use different file descriptor to avoid interfering with outer loop
+        while IFS= read -r -u 3 repo; do
           local name=$(echo "$repo" | jq -r '.name')
           local owner=$(echo "$repo" | jq -r '.owner')
           local repo_name=$(echo "$repo" | jq -r '.repo')
@@ -761,7 +762,7 @@ scan_git_dependencies() {
           if [[ "$github_result" == "ADVISORIES_FOUND" ]]; then
             advisories_found=$((advisories_found + 1))
           fi
-        done
+        done 3< <(echo "$repos_json" | jq -c '.[]')
       fi
     fi
   done < <(find . -name "*.Dockerfile" -o -name "Dockerfile*")

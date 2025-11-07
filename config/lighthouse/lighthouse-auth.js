@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const {URL} = require('url');
-const testURL = 'https://' + process.env.APP_HOST_URL + '/login/index.php'
+const testURL = process.env.APP_HOST_URL + '/login/index.php'
 
 const options = {
   chromeFlags: ['--headless'],
