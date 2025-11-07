@@ -31,11 +31,37 @@ run_lighthouse_audit() {
 
   log_info "Running Lighthouse audit for: $url"
 
-  # Ensure output directory exists
-  mkdir -p "$output_dir"
+  # Establish workspace root for reliable path resolution
+  local workspace_root="${GITHUB_WORKSPACE:-.}"
+  local full_config_path="$workspace_root/$config_dir"
+  local full_output_path="$workspace_root/$output_dir"
 
-  cd "$config_dir" || {
-    log_error "Failed to change to config directory: $config_dir"
+  # Handle absolute vs relative paths
+  if [[ "$config_dir" = /* ]]; then
+    full_config_path="$config_dir"
+  fi
+
+  if [[ "$output_dir" = /* ]]; then
+    full_output_path="$output_dir"
+  fi
+
+  # Ensure output directory exists
+  mkdir -p "$full_output_path" || {
+    log_error "Failed to create output directory: $full_output_path"
+    return 1
+  }
+
+  # Verify config directory exists
+  if [ ! -d "$full_config_path" ]; then
+    log_error "Config directory not found: $full_config_path"
+    log_error "Current directory: $(pwd)"
+    log_error "Workspace root: $workspace_root"
+    return 1
+  fi
+
+  log_debug "Changing to config directory: $full_config_path"
+  cd "$full_config_path" || {
+    log_error "Failed to change to config directory: $full_config_path"
     return 1
   }
 
@@ -54,6 +80,16 @@ run_lighthouse_audit() {
   local exit_code
 
   log_debug "Executing Lighthouse with auth script..."
+  log_debug "Current directory: $(pwd)"
+  log_debug "Node version: $(node --version 2>&1 || echo 'Node not found')"
+  log_debug "NPM packages: $(npm list --depth=0 2>&1 | head -5 || echo 'npm list failed')"
+
+  if [ ! -f "lighthouse-auth.js" ]; then
+    log_error "lighthouse-auth.js not found in: $(pwd)"
+    log_error "Directory contents: $(ls -la | head -10)"
+    return 1
+  fi
+
   lighthouse_output=$(node lighthouse-auth.js 2>&1)
   exit_code=$?
 
@@ -69,13 +105,24 @@ run_lighthouse_audit() {
     fi
     log_info "Lighthouse audit completed successfully$warnings"
   else
+    log_error "Lighthouse audit failed with exit code: $exit_code"
+    log_error "First line of output: $(echo "$lighthouse_output" | head -n 1)"
+    log_error "Last 10 lines of output:"
+    echo "$lighthouse_output" | tail -n 10 | while IFS= read -r line; do
+      log_error "  $line"
+    done
+
     local error_message=$(echo "$lighthouse_output" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
     warnings=" (Error: $error_message)"
-    log_error "Lighthouse audit failed: $error_message"
   fi
 
-  # Save full output
-  echo "$lighthouse_output" > "../../$output_dir/lighthouse-full.log"
+  # Save full output using absolute path
+  local log_file="$full_output_path/lighthouse-full.log"
+  echo "$lighthouse_output" > "$log_file"
+  log_debug "Full output saved to: $log_file"
+
+  # Return to workspace root
+  cd "$workspace_root" || log_warn "Failed to return to workspace root"
 
   # Return status information
   echo "${status}${warnings}"
