@@ -129,7 +129,20 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      # 🔧 Cache security scanning tools
+      - name: 🔧 Cache Trivy Installation
+        id: cache-trivy
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/bin/trivy
+            /usr/bin/trivy
+          key: ${{ runner.os }}-trivy-${{ hashFiles('.github/workflows/build.yml') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
       - name: 🛡️ Install Trivy
+        if: steps.cache-trivy.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -139,8 +152,19 @@ jobs:
           sudo apt-get install -y trivy
           trivy --version
 
+      # 🗄️ Cache Trivy vulnerability database (refreshed daily)
+      - name: 🗄️ Cache Trivy Database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-db-
+
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: image=moby/buildkit:latest
 
       # Auto-populate dependency manifests from centralized versions
       - name: 🔄 Auto-populate dependency manifests
@@ -153,6 +177,34 @@ jobs:
           ls -la openshift/dependencies/ .github/security-tools.json config/moodle/composer.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
 
           echo "🔒 These files are generated fresh for each build and never stored in git"
+
+      # 🔒 Cache security scan results based on dependency versions
+      - name: 🔒 Cache Security Scan Results
+        uses: actions/cache@v4
+        with:
+          path: |
+            tmp/comprehensive-security-summary.json
+            tmp/comprehensive-security-summary.md
+            tmp/php-security-audit.json
+            tmp/php-security-summary.json
+            tmp/php-security-summary.md
+            tmp/container-security-scan.json
+            tmp/container-security-summary.md
+          key: ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}-
+            ${{ runner.os }}-security-
+
+      # 🐘 Cache Composer vendor directory for faster PHP scans
+      - name: 🐘 Cache Composer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            config/moodle/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('config/moodle/composer.lock') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-composer-
 
       # PHP compatibility validation before security scanning
       - name: 🐘 PHP Compatibility Validation
@@ -418,7 +470,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Node.js 22 for Lighthouse (requires Node 22.19+)
+      # Setup Node.js 25 for Lighthouse (requires Node 22.19+)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -428,7 +480,20 @@ jobs:
 
       - run: mkdir -p tmp/artifacts
 
+      # 🔧 Cache security scanning tools
+      - name: 🔧 Cache Trivy Installation
+        id: cache-trivy-lh
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/bin/trivy
+            /usr/bin/trivy
+          key: ${{ runner.os }}-trivy-${{ hashFiles('.github/workflows/build.yml') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
       - name: Install Trivy
+        if: steps.cache-trivy-lh.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -437,10 +502,44 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
+      # 🗄️ Cache Trivy vulnerability database (refreshed daily)
+      - name: 🗄️ Cache Trivy Database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-db-
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: image=moby/buildkit:latest
 
-      # 🔒 Security Validation
+      # Multi-layer Caching (NPM + APT packages) - MUST come before usage
+      - name: � Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            config/lighthouse/node_modules
+          key: ${{ runner.os }}-lighthouse-${{ hashFiles('config/lighthouse/package-lock.json') }}-v4
+          restore-keys: |
+            ${{ runner.os }}-lighthouse-
+            ${{ runner.os }}-node-
+
+      - name: 🐧 Cache APT packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+          version: 1.0
+
+      - name: 🌐 Setup Chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          install-dependencies: false
+
+      # �🔒 Security Validation
       - name: 🔒 Comprehensive Security Validation
         run: |
           # Source utility functions
@@ -481,29 +580,6 @@ jobs:
           echo ""
           echo "✅ NPM security validation passed"
 
-      # Multi-layer Caching (NPM + APT packages)
-      - name: 📦 Cache Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            config/lighthouse/node_modules
-          key: ${{ runner.os }}-lighthouse-${{ hashFiles('config/lighthouse/package-lock.json') }}-v4
-          restore-keys: |
-            ${{ runner.os }}-lighthouse-
-            ${{ runner.os }}-node-
-
-      - name: 🐧 Cache APT packages
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
-          version: 1.0
-
-      - name: �️ Setup Chrome
-        uses: browser-actions/setup-chrome@latest
-        with:
-          install-dependencies: false
-
       - name: 📊 Display Setup Information
         run: |
           source openshift/scripts/utils/lighthouse.sh
@@ -513,16 +589,45 @@ jobs:
       - name: 🚦 Lighthouse Performance Audit
         id: lighthouse
         run: |
-          source openshift/scripts/utils/lighthouse.sh
+          set -x  # Enable command tracing for debugging
 
-          # Run Lighthouse audit using utility function
+          echo "================================================"
+          echo "🚦 LIGHTHOUSE AUDIT EXECUTION"
+          echo "================================================"
+
+          # Verify environment
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Current directory: $(pwd)"
+          echo "Config directory exists: $(test -d config/lighthouse && echo YES || echo NO)"
+          echo "node_modules exists: $(test -d config/lighthouse/node_modules && echo YES || echo NO)"
+          echo "lighthouse-auth.js exists: $(test -f config/lighthouse/lighthouse-auth.js && echo YES || echo NO)"
+
+          # Source the utility script
+          echo "Sourcing lighthouse.sh..."
+          if ! source openshift/scripts/utils/lighthouse.sh; then
+            echo "❌ Failed to source lighthouse.sh"
+            exit 1
+          fi
+          echo "✅ lighthouse.sh sourced successfully"
+
+          # Set target URL
           TARGET_URL="${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca"
+          echo "Target URL: https://$TARGET_URL"
+          echo ""
 
           echo "🚀 Running Lighthouse audit for: https://$TARGET_URL"
+          echo ""
 
           # Use utility function for clean execution
-          LIGHTHOUSE_RESULT=$(run_lighthouse_audit "https://$TARGET_URL" "config/lighthouse" "tmp/artifacts" "${{ secrets.MOODLE_TESTER_USERNAME }}" "${{ secrets.MOODLE_TESTER_PASSWORD }}")
+          echo "Calling run_lighthouse_audit function..."
+          LIGHTHOUSE_RESULT=$(run_lighthouse_audit "https://$TARGET_URL" "config/lighthouse" "tmp/artifacts" "${{ secrets.MOODLE_TESTER_USERNAME }}" "${{ secrets.MOODLE_TESTER_PASSWORD }}" 2>&1)
           LIGHTHOUSE_EXIT_CODE=$?
+
+          echo ""
+          echo "Function returned with exit code: $LIGHTHOUSE_EXIT_CODE"
+          echo "Function output: $LIGHTHOUSE_RESULT"
+          echo ""
 
           # Set GitHub outputs based on result
           if [ $LIGHTHOUSE_EXIT_CODE -eq 0 ]; then

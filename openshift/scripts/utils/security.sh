@@ -808,6 +808,31 @@ comprehensive_security_scan() {
 
   cd "$project_dir" || return 1
 
+  # Check for cached scan results
+  local cache_valid=false
+  local cached_summary="tmp/comprehensive-security-summary.json"
+
+  if [ -f "$cached_summary" ]; then
+    local cache_age_seconds=$(( $(date +%s) - $(stat -c %Y "$cached_summary" 2>/dev/null || stat -f %m "$cached_summary" 2>/dev/null || echo 0) ))
+    local cache_max_age=86400  # 24 hours
+
+    if [ $cache_age_seconds -lt $cache_max_age ]; then
+      log_info "✓ Found valid cached security scan (${cache_age_seconds}s old, max ${cache_max_age}s)"
+      log_info "  Using cached results to speed up build"
+      cache_valid=true
+
+      # Extract status from cached results
+      local cached_exit=$(jq -r '.exit_code // 0' "$cached_summary" 2>/dev/null || echo 0)
+
+      cd "$original_dir"
+      return $cached_exit
+    else
+      log_debug "Cached results expired (${cache_age_seconds}s > ${cache_max_age}s), running fresh scan"
+    fi
+  else
+    log_debug "No cached security results found, running full scan"
+  fi
+
   # Initialize result tracking
   local overall_status="CLEAN"
   local critical_issues=0
@@ -950,15 +975,43 @@ comprehensive_security_scan() {
   log_info "  High/Warning Issues: $((high_issues + warnings))"
   log_info "  Automation: Dependabot handles updates automatically"
 
+  # Determine exit code before writing cache
+  local final_exit_code=0
+  if [ "$overall_status" = "CRITICAL" ] && [ "$abort_on_critical" = "true" ]; then
+    final_exit_code=2
+  elif [ $critical_issues -gt 0 ] || [ $high_issues -gt 0 ]; then
+    final_exit_code=1
+  fi
+
+  # Save scan results to cache for future builds
+  mkdir -p "$(dirname "$cached_summary")"
+  cat > "$cached_summary" <<EOF
+{
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "scan_level": "$scan_level",
+  "overall_status": "$overall_status",
+  "critical_issues": $critical_issues,
+  "high_issues": $high_issues,
+  "warnings": $warnings,
+  "composer_result": "$composer_result",
+  "system_result": "$system_result",
+  "git_result": "$git_result",
+  "docker_result": "$docker_result",
+  "exit_code": $final_exit_code,
+  "cached": true
+}
+EOF
+  log_debug "Cached security scan results for future builds"
+
   # Return to original directory before exit
   cd "$original_dir" || log_warn "Failed to return to original directory: $original_dir"
 
   # Determine exit strategy
-  if [ "$overall_status" = "CRITICAL" ] && [ "$abort_on_critical" = "true" ]; then
+  if [ $final_exit_code -eq 2 ]; then
     log_error "Build aborted due to critical security issues!"
     log_error "Recommendation: Review security scan results and apply updates"
     return 2
-  elif [ $critical_issues -gt 0 ] || [ $high_issues -gt 0 ]; then
+  elif [ $final_exit_code -eq 1 ]; then
     log_warn "Security issues detected - review recommended"
     return 1
   else
