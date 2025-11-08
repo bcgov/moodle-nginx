@@ -309,8 +309,6 @@ jobs:
             if [ $scan_exit -eq 2 ]; then
               echo "❌ Critical vulnerabilities detected - blocking build"
               exit 2
-            else
-              echo "⚠️ Vulnerabilities detected but allowing build to continue"
             fi
           fi
 

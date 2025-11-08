@@ -85,12 +85,22 @@ generate_composer_manifest() {
     mkdir -p "$(dirname "$output_file")"
 
     # Generate composer.json with centralized versions for both production and Dependabot
+    # Extract PHP version from PHP_IMAGE (e.g., "php:8.1-fpm" -> "8.1")
+    local php_version
+    if [[ "${PHP_IMAGE}" =~ php:([0-9]+\.[0-9]+) ]]; then
+        php_version="${BASH_REMATCH[1]}"
+    else
+        log_warn "Could not extract PHP version from PHP_IMAGE: ${PHP_IMAGE}, defaulting to 8.1"
+        php_version="8.1"
+    fi
+
     cat > "$output_file" << EOF
 {
   "name": "bcgov/moodle-php-dependencies",
   "description": "PHP dependencies for Moodle deployment - Security-controlled versions from centralized management",
   "type": "project",
   "require": {
+    "php": ">=${php_version}",
     "maennchen/zipstream-php": "${ZIPSTREAM_PHP_VERSION}"
   },
   "require-dev": {},

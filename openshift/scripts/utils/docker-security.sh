@@ -84,10 +84,20 @@ scan_public_base_images() {
 
       if [ "$critical_count" -gt 0 ]; then
         log_error "  🔴 CRITICAL: $critical_count vulnerabilities"
+
+        # Show top 5 critical vulnerabilities
+        log_error "     Top Critical Issues:"
+        echo "$scan_output" | jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "       • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix available")"' 2>/dev/null | head -5
       fi
 
       if [ "$high_count" -gt 0 ]; then
         log_warn "  🟡 HIGH: $high_count vulnerabilities"
+
+        # Show top 3 high vulnerabilities if requested
+        if [[ "$severity" == *"HIGH"* ]]; then
+          log_warn "     Top High Issues:"
+          echo "$scan_output" | jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "       • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix available")"' 2>/dev/null | head -3
+        fi
       fi
 
       if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
@@ -104,13 +114,59 @@ scan_public_base_images() {
   log_info "  High vulnerabilities: $total_high"
   log_info "  Failed scans: $failed_scans"
 
+  # Provide version upgrade recommendations if vulnerabilities found
+  if [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ]; then
+    log_info ""
+    log_info "💡 Recommended Actions:"
+
+    # Generate upgrade recommendations based on image type
+    for image in "${images_to_scan[@]}"; do
+      if [ -z "$image" ]; then
+        continue
+      fi
+
+      # Extract base image and version
+      local base_image=$(echo "$image" | cut -d: -f1)
+      local current_version=$(echo "$image" | cut -d: -f2)
+
+      case "$base_image" in
+        "golang")
+          log_info "   📦 GOLANG_IMAGE: Update to golang:1.23 (latest stable as of 2024)"
+          log_info "      Current: $image"
+          log_info "      Suggested: golang:1.23"
+          ;;
+        "php")
+          log_info "   📦 PHP_IMAGE/CRON_IMAGE: Update to php:8.3-fpm or php:8.3-cli"
+          log_info "      Current: $image"
+          log_info "      Suggested: php:8.3-fpm (or php:8.3-cli for CRON)"
+          ;;
+        "nginxinc/nginx-unprivileged")
+          log_info "   📦 WEB_IMAGE: Update to latest nginx unprivileged"
+          log_info "      Current: $image"
+          log_info "      Suggested: nginxinc/nginx-unprivileged:1.27-alpine"
+          ;;
+        "ubuntu")
+          log_info "   📦 UBUNTU_IMAGE: Already on latest LTS (24.04)"
+          log_info "      Current: $image"
+          ;;
+      esac
+    done
+
+    log_info ""
+    log_info "   📝 Update these versions in: $versions_file"
+    log_info "   🔄 Then re-run the build to validate fixes"
+  fi
+
   # Determine exit code
   if [ "$exit_on_critical" = "true" ] && [ "$total_critical" -gt 0 ]; then
+    log_error ""
     log_error "❌ Blocking build due to critical vulnerabilities in base images"
-    log_error "   Review vulnerabilities and update base image versions in $versions_file"
+    log_error "   Apply recommended version updates above to resolve"
     return 2
   elif [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ]; then
+    log_warn ""
     log_warn "⚠️  Vulnerabilities detected but allowing build to continue"
+    log_warn "   Consider applying recommended updates for improved security"
     return 1
   else
     log_success "✅ All base images passed security scan"
@@ -187,7 +243,14 @@ scan_built_image() {
   if [ "$critical_count" -gt 0 ]; then
     log_error ""
     log_error "🔴 Top Critical Vulnerabilities:"
-    jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) - \(.Title // "No description")[:80]"' "$json_output" 2>/dev/null | head -5
+    jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix") - \(.Title // "No description")"' "$json_output" 2>/dev/null | head -5 | cut -c1-120
+  fi
+
+  # Show top 3 high vulnerabilities if any
+  if [ "$high_count" -gt 0 ]; then
+    log_warn ""
+    log_warn "🟡 Top High Vulnerabilities:"
+    jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix") - \(.Title // "No description")"' "$json_output" 2>/dev/null | head -3 | cut -c1-120
   fi
 
   # Determine exit code
