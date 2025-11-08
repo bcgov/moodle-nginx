@@ -104,20 +104,20 @@ jobs:
           echo "📊 REDIS PROXY BASE IMAGES OPTIMIZATION REPORT"
           echo "=============================================="
           echo "Golang Image: ${{ env.GOLANG_IMAGE }}"
-          echo "  Cache Hit: ${GOLANG_CACHE_HIT:-unknown}"
-          echo "  Build Time: ${GOLANG_BUILD_TIME:-unknown}s"
+          echo "  Cache Hit: ${{ env.GOLANG_CACHE_HIT || 'false' }}"
+          echo "  Build Time: ${{ env.GOLANG_BUILD_TIME || '0' }}s"
           echo ""
           echo "Ubuntu Image: ${{ env.UBUNTU_IMAGE }}"
-          echo "  Cache Hit: ${UBUNTU_CACHE_HIT:-unknown}"
-          echo "  Build Time: ${UBUNTU_BUILD_TIME:-unknown}s"
+          echo "  Cache Hit: ${{ env.UBUNTU_CACHE_HIT || 'false' }}"
+          echo "  Build Time: ${{ env.UBUNTU_BUILD_TIME || '0' }}s"
           echo ""
 
-          # Calculate total optimization
+          # Calculate total optimization using GitHub Actions env vars
           TOTAL_OPTIMIZED=0
-          if [ "${GOLANG_CACHE_HIT:-false}" = "true" ]; then
+          if [ "${{ env.GOLANG_CACHE_HIT }}" = "true" ]; then
             TOTAL_OPTIMIZED=$((TOTAL_OPTIMIZED + 1))
           fi
-          if [ "${UBUNTU_CACHE_HIT:-false}" = "true" ]; then
+          if [ "${{ env.UBUNTU_CACHE_HIT }}" = "true" ]; then
             TOTAL_OPTIMIZED=$((TOTAL_OPTIMIZED + 1))
           fi
 
