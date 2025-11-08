@@ -798,7 +798,6 @@ comprehensive_security_scan() {
   local project_dir="${1:-.}"
   local scan_level="${2:-$DEFAULT_SCAN_LEVEL}"
   local abort_on_critical="${3:-$DEFAULT_ABORT_ON_CRITICAL}"
-  local scan_images="${4:-false}"
 
   log_info "Running comprehensive security scan..."
   log_info "Automated tools: Composer Audit + Trivy + System Updates + Git Analysis"
@@ -842,7 +841,6 @@ comprehensive_security_scan() {
 
   # Track individual scan results
   local composer_result=""
-  local docker_result=""
   local system_result=""
   local git_result=""
 
@@ -885,92 +883,11 @@ comprehensive_security_scan() {
     [ "$overall_status" = "CLEAN" ] && overall_status="WARNINGS"
   fi
 
-  # 4. Docker Image Scan (optional - can be slow)
-  if [ "$scan_images" = "true" ]; then
-    log_info "🔍 Phase 4: Docker Image Security"
-
-    # Check if Trivy is available
-    if ! command -v trivy >/dev/null 2>&1; then
-      log_warn "Skipping Docker image scans - Trivy not available"
-      log_debug "Install Trivy for container image vulnerability scanning"
-    else
-      # Source environment variables if available
-      if [ -f "example.versions.env" ]; then
-        log_debug "Loading environment variables from example.versions.env"
-        set -a
-        source example.versions.env
-        set +a
-      fi
-
-      # Scan base images mentioned in Dockerfiles
-      find . -name "*.Dockerfile" -o -name "Dockerfile*" | while read -r dockerfile; do
-        # Re-source in subshell (find creates subshells)
-        if [ -f "example.versions.env" ]; then
-          set -a
-          source example.versions.env
-          set +a
-        fi
-
-        # Extract base images and expand ARG variables if possible
-        local base_images=$(grep -i "^FROM " "$dockerfile" | awk '{print $2}')
-
-        for image in $base_images; do
-          # Skip build stage aliases
-          if [[ "$image" == scratch ]] || [[ "$image" == *"AS"* ]] || [[ "$image" == *" as "* ]]; then
-            log_debug "Skipping build stage alias: $image"
-            continue
-          fi
-
-          # Expand ${VAR} syntax using environment variables
-          if [[ "$image" =~ \$\{([A-Z_]+)\} ]]; then
-            local var_name="${BASH_REMATCH[1]}"
-            local var_value="${!var_name}"
-
-            if [ -n "$var_value" ]; then
-              image="$var_value"
-              log_debug "Expanded \${${var_name}} to: $image"
-            else
-              log_debug "Could not expand \${${var_name}} - variable not set, skipping"
-              continue
-            fi
-          fi
-
-          # Try to expand ARG variables from Dockerfile as fallback
-          if [[ "$image" =~ ^\$\{([A-Z_]+)\}$ ]]; then
-            local var_name="${BASH_REMATCH[1]}"
-            local expanded_image=$(grep "^ARG ${var_name}=" "$dockerfile" | sed -E 's/^ARG [^=]+=["'"'"']?([^"'"'"']*)["'"'"']?$/\1/')
-
-            if [ -n "$expanded_image" ]; then
-              image="$expanded_image"
-              log_debug "Expanded from Dockerfile ARG \${${var_name}} to: $image"
-            else
-              log_debug "Could not expand \${${var_name}} - skipping"
-              continue
-            fi
-          fi
-
-          log_debug "Scanning base image: $image"
-          scan_docker_image_vulnerabilities "$image" "$scan_level" "docker_result"
-          local docker_exit=$?
-
-          if [ $docker_exit -eq 2 ]; then
-            critical_issues=$((critical_issues + 1))
-            overall_status="CRITICAL"
-          elif [ $docker_exit -eq 1 ]; then
-            high_issues=$((high_issues + 1))
-            [ "$overall_status" = "CLEAN" ] && overall_status="HIGH"
-          fi
-        done
-      done
-    fi
-  fi
-
   # Generate comprehensive summary
   log_info "🛡️  Comprehensive Security Scan Summary:"
   log_info "  PHP Composer: $composer_result"
   log_info "  System Packages: $system_result"
   log_info "  Git Dependencies: $git_result"
-  [ "$scan_images" = "true" ] && log_info "  Docker Images: $docker_result"
   log_info "  Overall Status: $overall_status"
   log_info "  Critical Issues: $critical_issues"
   log_info "  High/Warning Issues: $((high_issues + warnings))"
@@ -997,7 +914,6 @@ comprehensive_security_scan() {
   "composer_result": "$composer_result",
   "system_result": "$system_result",
   "git_result": "$git_result",
-  "docker_result": "$docker_result",
   "exit_code": $final_exit_code,
   "cached": true
 }

@@ -160,16 +160,16 @@ scan_public_base_images() {
   # Determine exit code
   if [ "$exit_on_critical" = "true" ] && [ "$total_critical" -gt 0 ]; then
     log_error ""
-    log_error "❌ Blocking build due to critical vulnerabilities in base images"
+    log_error "Blocking build due to critical vulnerabilities in base images"
     log_error "   Apply recommended version updates above to resolve"
     return 2
   elif [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ]; then
     log_warn ""
-    log_warn "⚠️  Vulnerabilities detected but allowing build to continue"
+    log_warn "Vulnerabilities detected but allowing build to continue"
     log_warn "   Consider applying recommended updates for improved security"
     return 1
   else
-    log_success "✅ All base images passed security scan"
+    log_success "All base images passed security scan"
     return 0
   fi
 }
@@ -256,13 +256,13 @@ scan_built_image() {
   # Determine exit code
   if [ "$exit_on_critical" = "true" ] && [ "$critical_count" -gt 0 ]; then
     log_error ""
-    log_error "❌ BLOCKING PUSH: Critical vulnerabilities detected"
+    log_error "BLOCKING PUSH: Critical vulnerabilities detected"
     log_error "   Image will NOT be pushed to registry"
     log_error "   Review scan results and fix vulnerabilities before retrying"
     return 2
   elif [ "$critical_count" -gt 0 ] || [ "$high_count" -gt 0 ]; then
     log_warn ""
-    log_warn "⚠️  Vulnerabilities detected but allowing push"
+    log_warn "   Vulnerabilities detected but allowing push"
     log_warn "   Consider reviewing and fixing these issues"
     return 1
   else
