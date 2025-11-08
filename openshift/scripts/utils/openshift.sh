@@ -1288,30 +1288,30 @@ check_timestamp() {
 # Function to log debug messages only when DEBUG_LEVEL is set to DEBUG
 log_debug() {
   if [[ "${DEBUG_LEVEL}" == "DEBUG" ]] || [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
-    echo "🔍 Debug: $*"
+    echo "🔍 Debug: $*" >&2
   fi
 }
 
 # Function to log trace messages (ultra-verbose, command-level detail)
 log_trace() {
   if [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
-    echo "🔬 Trace: $*"
+    echo "🔬 Trace: $*" >&2
   fi
 }
 
 # Function to log info messages (always shown)
 log_info() {
-  echo "ℹ️  $*"
+  echo "ℹ️  $*" >&2
 }
 
 # Function to log warning messages (always shown)
 log_warn() {
-  echo "⚠️  $*"
+  echo "⚠️  $*" >&2
 }
 
 # Function to log error messages (always shown)
 log_error() {
-  echo "❌ $*"
+  echo "❌ $*" >&2
 }
 
 # Function to log success messages (always shown)

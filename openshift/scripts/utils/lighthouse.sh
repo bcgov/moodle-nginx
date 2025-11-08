@@ -11,20 +11,21 @@ if [[ -f "$_LIGHTHOUSE_SCRIPT_DIR/openshift.sh" ]]; then
   source "$_LIGHTHOUSE_SCRIPT_DIR/openshift.sh"
 else
   # Fallback: Define minimal logging functions if openshift.sh not found
-  log_info() { echo "ℹ️  $*"; }
-  log_warn() { echo "⚠️  $*"; }
-  log_error() { echo "❌ $*"; }
-  log_debug() { 
+  # All log output goes to stderr to avoid contaminating stdout (used for return values)
+  log_info() { echo "ℹ️  $*" >&2; }
+  log_warn() { echo "⚠️  $*" >&2; }
+  log_error() { echo "❌ $*" >&2; }
+  log_debug() {
     if [[ "${DEBUG_LEVEL}" == "DEBUG" ]] || [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
-      echo "🔍 Debug: $*"
+      echo "🔍 Debug: $*" >&2
     fi
   }
   log_trace() {
     if [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
-      echo "🔬 Trace: $*"
+      echo "🔬 Trace: $*" >&2
     fi
   }
-  log_success() { echo "✅ $*"; }
+  log_success() { echo "✅ $*" >&2; }
 fi
 
 # =============================================================================
