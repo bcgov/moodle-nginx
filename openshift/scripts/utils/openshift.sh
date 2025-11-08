@@ -1287,8 +1287,15 @@ check_timestamp() {
 
 # Function to log debug messages only when DEBUG_LEVEL is set to DEBUG
 log_debug() {
-  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]] || [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
     echo "🔍 Debug: $*"
+  fi
+}
+
+# Function to log trace messages (ultra-verbose, command-level detail)
+log_trace() {
+  if [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
+    echo "🔬 Trace: $*"
   fi
 }
 

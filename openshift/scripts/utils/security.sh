@@ -798,10 +798,18 @@ comprehensive_security_scan() {
   local project_dir="${1:-.}"
   local scan_level="${2:-$DEFAULT_SCAN_LEVEL}"
   local abort_on_critical="${3:-$DEFAULT_ABORT_ON_CRITICAL}"
+  local skip_containerized="${4:-true}"  # Skip container builds by default (handled post-build)
 
   log_info "Running comprehensive security scan..."
-  log_info "Automated tools: Composer Audit + Trivy + System Updates + Git Analysis"
-  log_debug "Project: $project_dir, Level: $scan_level, Abort on critical: $abort_on_critical"
+
+  if [ "$skip_containerized" = "true" ]; then
+    log_info "Strategy: Git Dependencies + Base Images (checkEnv) + Post-Build Scanning (build jobs)"
+    log_trace "Skipping containerized scans to avoid duplicate builds"
+  else
+    log_info "Automated tools: Composer Audit + Trivy + System Updates + Git Analysis"
+  fi
+
+  log_trace "Project: $project_dir, Level: $scan_level, Abort on critical: $abort_on_critical"
 
   # Save original directory to return to it later
   local original_dir="$(pwd)"
@@ -827,10 +835,10 @@ comprehensive_security_scan() {
       cd "$original_dir"
       return $cached_exit
     else
-      log_debug "Cached results expired (${cache_age_seconds}s > ${cache_max_age}s), running fresh scan"
+      log_trace "Cached results expired (${cache_age_seconds}s > ${cache_max_age}s), running fresh scan"
     fi
   else
-    log_debug "No cached security results found, running full scan"
+    log_trace "No cached security results found, running full scan"
   fi
 
   # Initialize result tracking
@@ -840,37 +848,42 @@ comprehensive_security_scan() {
   local warnings=0
 
   # Track individual scan results
-  local composer_result=""
-  local system_result=""
+  local composer_result="SKIPPED"
+  local system_result="SKIPPED"
   local git_result=""
 
-  # 1. PHP Composer Security Scan (Containerized)
-  log_info "🔍 Phase 1: PHP Composer Security (Containerized Build)"
-  scan_containerized_composer_vulnerabilities "Moodle.Dockerfile" "moodle:security-scan-$$" "$scan_level" "composer_result"
-  local composer_exit=$?
+  # Conditional scanning based on skip_containerized flag
+  if [ "$skip_containerized" = "false" ]; then
+    # 1. PHP Composer Security Scan (Containerized) - Only if not skipping
+    log_info "🔍 Phase 1: PHP Composer Security (Containerized Build)"
+    scan_containerized_composer_vulnerabilities "Moodle.Dockerfile" "moodle:security-scan-$$" "$scan_level" "composer_result"
+    local composer_exit=$?
 
-  if [ $composer_exit -eq 2 ]; then
-    critical_issues=$((critical_issues + 1))
-    overall_status="CRITICAL"
-  elif [ $composer_exit -eq 1 ]; then
-    high_issues=$((high_issues + 1))
-    [ "$overall_status" = "CLEAN" ] && overall_status="HIGH"
+    if [ $composer_exit -eq 2 ]; then
+      critical_issues=$((critical_issues + 1))
+      overall_status="CRITICAL"
+    elif [ $composer_exit -eq 1 ]; then
+      high_issues=$((high_issues + 1))
+      [ "$overall_status" = "CLEAN" ] && overall_status="HIGH"
+    fi
+
+    # 2. System Package Security Scan
+    log_info "🔍 Phase 2: System Package Security"
+    scan_system_package_vulnerabilities "Moodle.Dockerfile" "moodle:security-scan-$$" "$scan_level" "system_result"
+    local system_exit=$?
+
+    if [ $system_exit -eq 2 ]; then
+      critical_issues=$((critical_issues + 1))
+      overall_status="CRITICAL"
+    elif [ $system_exit -eq 1 ]; then
+      warnings=$((warnings + 1))
+      [ "$overall_status" = "CLEAN" ] && overall_status="WARNINGS"
+    fi
+  else
+    log_trace "Skipping Phases 1-2 (containerized scans) - handled by post-build scanning"
   fi
 
-  # 2. System Package Security Scan
-  log_info "🔍 Phase 2: System Package Security"
-  scan_system_package_vulnerabilities "Moodle.Dockerfile" "moodle:security-scan-$$" "$scan_level" "system_result"
-  local system_exit=$?
-
-  if [ $system_exit -eq 2 ]; then
-    critical_issues=$((critical_issues + 1))
-    overall_status="CRITICAL"
-  elif [ $system_exit -eq 1 ]; then
-    warnings=$((warnings + 1))
-    [ "$overall_status" = "CLEAN" ] && overall_status="WARNINGS"
-  fi
-
-  # 3. Git Dependencies Security
+  # 3. Git Dependencies Security (Always run - no container build needed)
   log_info "🔍 Phase 3: Git Dependencies Security"
   scan_git_dependencies "$project_dir" "git_result"
   local git_exit=$?
@@ -885,12 +898,21 @@ comprehensive_security_scan() {
 
   # Generate comprehensive summary
   log_info "🛡️  Comprehensive Security Scan Summary:"
-  log_info "  PHP Composer: $composer_result"
-  log_info "  System Packages: $system_result"
+
+  if [ "$skip_containerized" = "false" ]; then
+    log_info "  PHP Composer: $composer_result"
+    log_info "  System Packages: $system_result"
+  fi
+
   log_info "  Git Dependencies: $git_result"
   log_info "  Overall Status: $overall_status"
   log_info "  Critical Issues: $critical_issues"
   log_info "  High/Warning Issues: $((high_issues + warnings))"
+
+  if [ "$skip_containerized" = "true" ]; then
+    log_info "  Note: Container security scans run post-build (before push to registry)"
+  fi
+
   log_info "  Automation: Dependabot handles updates automatically"
 
   # Determine exit code before writing cache
@@ -914,11 +936,12 @@ comprehensive_security_scan() {
   "composer_result": "$composer_result",
   "system_result": "$system_result",
   "git_result": "$git_result",
+  "skip_containerized": "$skip_containerized",
   "exit_code": $final_exit_code,
   "cached": true
 }
 EOF
-  log_debug "Cached security scan results for future builds"
+  log_trace "Cached security scan results for future builds"
 
   # Return to original directory before exit
   cd "$original_dir" || log_warn "Failed to return to original directory: $original_dir"

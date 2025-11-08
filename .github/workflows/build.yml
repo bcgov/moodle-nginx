@@ -8,7 +8,10 @@ env:
   APP: moodle
   USER: ${{ github.actor }}
 
-  DEBUG_LEVEL: "DEBUG" # Options: INFO, DEBUG
+  DEBUG_LEVEL: "DEBUG" # Options: INFO, DEBUG, TRACE
+  # INFO:  Clean logs for production (errors/warnings/info only)
+  # DEBUG: Show debug messages without command tracing
+  # TRACE: Full verbosity with command tracing (set -x)
   CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
   # Security Scanning Configuration (CI/CD only)
@@ -593,10 +596,10 @@ jobs:
       - name: 🚦 Lighthouse Performance Audit
         id: lighthouse
         run: |
-          # Enable command tracing only when debugging
-          if [ "${{ needs.checkEnv.outputs.DEBUG_LEVEL }}" = "DEBUG" ]; then
+          # Enable command tracing only when TRACE level debugging
+          if [ "${{ needs.checkEnv.outputs.DEBUG_LEVEL }}" = "TRACE" ]; then
             set -x
-            echo "🔍 Debug mode enabled - command tracing active"
+            echo "� TRACE mode enabled - full command tracing active"
           fi
 
           echo "================================================"

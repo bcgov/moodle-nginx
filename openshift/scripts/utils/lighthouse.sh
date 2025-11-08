@@ -14,7 +14,16 @@ else
   log_info() { echo "ℹ️  $*"; }
   log_warn() { echo "⚠️  $*"; }
   log_error() { echo "❌ $*"; }
-  log_debug() { echo "🔍 Debug: $*"; }
+  log_debug() { 
+    if [[ "${DEBUG_LEVEL}" == "DEBUG" ]] || [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
+      echo "🔍 Debug: $*"
+    fi
+  }
+  log_trace() {
+    if [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
+      echo "🔬 Trace: $*"
+    fi
+  }
   log_success() { echo "✅ $*"; }
 fi
 
@@ -23,15 +32,13 @@ fi
 # =============================================================================
 
 run_lighthouse_audit() {
-  # Immediate debug output - always visible
-  echo "DEBUG: run_lighthouse_audit function called"
-  echo "DEBUG: Arguments: url=$1, config_dir=$2, output_dir=$3"
-
   local url="$1"
   local config_dir="${2:-config/lighthouse}"
   local output_dir="${3:-tmp/artifacts}"
   local auth_username="${4:-}"
   local auth_password="${5:-}"
+
+  log_trace "run_lighthouse_audit function called with url=$url, config_dir=$config_dir, output_dir=$output_dir"
 
   log_info "Running Lighthouse audit for: $url"
 
