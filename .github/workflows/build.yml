@@ -631,8 +631,9 @@ jobs:
           echo ""
 
           # Use utility function for clean execution
+          # Note: Logs go to stderr (visible in workflow), return value goes to stdout (captured)
           echo "Calling run_lighthouse_audit function..."
-          LIGHTHOUSE_RESULT=$(run_lighthouse_audit "https://$TARGET_URL" "config/lighthouse" "tmp/artifacts" "${{ secrets.MOODLE_TESTER_USERNAME }}" "${{ secrets.MOODLE_TESTER_PASSWORD }}" 2>&1)
+          LIGHTHOUSE_RESULT=$(run_lighthouse_audit "https://$TARGET_URL" "config/lighthouse" "tmp/artifacts" "${{ secrets.MOODLE_TESTER_USERNAME }}" "${{ secrets.MOODLE_TESTER_PASSWORD }}")
           LIGHTHOUSE_EXIT_CODE=$?
 
           echo ""
