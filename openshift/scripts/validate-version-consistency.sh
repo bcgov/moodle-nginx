@@ -166,20 +166,20 @@ check_documented_dependencies() {
     local versions_file="$PROJECT_ROOT/example.versions.env"
     local has_warnings=0
 
-    # Check for Lighthouse documentation
+    # Check for NPM/Lighthouse documentation (look for package.json reference)
     if [ "$NPM_LIGHTHOUSE_VERSION" != "none" ]; then
-        if ! grep -q "LIGHTHOUSE_VERSION" "$versions_file" 2>/dev/null; then
-            log_warn "Lighthouse version not documented in example.versions.env"
-            log_warn "  Consider adding: # LIGHTHOUSE_VERSION=$NPM_LIGHTHOUSE_VERSION (managed in package.json)"
+        if ! grep -q "managed in package.json" "$versions_file" 2>/dev/null; then
+            log_warn "NPM dependencies not documented in example.versions.env"
+            log_warn "  Consider adding: # Lighthouse: $NPM_LIGHTHOUSE_VERSION (managed in package.json)"
             has_warnings=1
         fi
     fi
 
-    # Check for Composer dependencies documentation
+    # Check for PHP/Composer dependencies documentation (look for composer.json reference)
     if [ -f "$PROJECT_ROOT/config/moodle/composer.json" ]; then
-        if ! grep -q "PHP_DEPENDENCIES" "$versions_file" 2>/dev/null; then
+        if ! grep -q "managed in config/moodle/composer.json" "$versions_file" 2>/dev/null; then
             log_warn "PHP dependencies not documented in example.versions.env"
-            log_warn "  Consider adding comment section for Composer packages"
+            log_warn "  Consider adding comment: # PHP packages managed in config/moodle/composer.json"
             has_warnings=1
         fi
     fi

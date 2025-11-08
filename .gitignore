@@ -15,7 +15,7 @@ package*.json
 !config/lighthouse/package-lock.json
 
 # Generated dependency manifests (auto-generated from example.versions.env)
-config/moodle/composer.json
+# config/moodle/composer.json
 config/moodle/composer.lock
 openshift/dependencies/
 .github/security-tools.json
