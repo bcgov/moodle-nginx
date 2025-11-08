@@ -179,9 +179,8 @@ jobs:
             tmp/php-security-summary.md
             tmp/container-security-scan.json
             tmp/container-security-summary.md
-          key: ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}-${{ github.run_id }}
+          key: ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}
           restore-keys: |
-            ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}-
             ${{ runner.os }}-security-
 
       # 🐘 Cache Composer vendor directory for faster PHP scans
