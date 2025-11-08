@@ -533,18 +533,7 @@ jobs:
         with:
           driver-opts: image=moby/buildkit:latest
 
-      # Multi-layer Caching (NPM + APT packages) - MUST come before usage
-      - name: � Cache Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            config/lighthouse/node_modules
-          key: ${{ runner.os }}-lighthouse-${{ hashFiles('config/lighthouse/package-lock.json') }}-v4
-          restore-keys: |
-            ${{ runner.os }}-lighthouse-
-            ${{ runner.os }}-node-
-
+      # 🐧 Cache APT packages for Lighthouse dependencies
       - name: 🐧 Cache APT packages
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -602,11 +591,14 @@ jobs:
           source openshift/scripts/utils/lighthouse.sh
           display_cache_information "config/lighthouse" "10GB" "${{ github.repository }}"
 
-      # 🚦 Lighthouse Execution (simplified)
       - name: 🚦 Lighthouse Performance Audit
         id: lighthouse
         run: |
-          set -x  # Enable command tracing for debugging
+          # Enable command tracing only when debugging
+          if [ "${{ needs.checkEnv.outputs.DEBUG_LEVEL }}" = "DEBUG" ]; then
+            set -x
+            echo "🔍 Debug mode enabled - command tracing active"
+          fi
 
           echo "================================================"
           echo "🚦 LIGHTHOUSE AUDIT EXECUTION"
