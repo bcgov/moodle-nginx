@@ -16,7 +16,7 @@ env:
   SECURITY_SCAN_ENABLED: "YES"          # YES, NO - Enable/disable security scanning
   SECURITY_SCAN_LEVEL: "BASIC"          # OFF, MINIMAL, BASIC, FULL - Scan thoroughness
   SECURITY_SCAN_EXIT_ON: "WARN"         # WARN, CRITICAL, HIGH, MEDIUM, ANY - When to fail builds
-  SECURITY_SCAN_CONTAINERS: "NO"        # YES, NO - Enable expensive container image scanning
+  SECURITY_SCAN_CONTAINERS: "YES"        # YES, NO - Enable expensive container image scanning
   SECURITY_SCAN_CACHE: "YES"            # YES, NO - Cache Trivy vulnerability database
   # Recommended per environment:
   # Dev:  LEVEL=BASIC, EXIT_ON=WARN,     CONTAINERS=NO  (~2-3 min, never blocks)
@@ -269,6 +269,48 @@ jobs:
               echo "SECURITY_STATUS=⚠️ SKIPPED" >> $GITHUB_OUTPUT
               echo "SECURITY_RESULT=skipped" >> $GITHUB_OUTPUT
               echo "SECURITY_SUMMARY=Security validation scripts not found" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      # 🔒 Scan public base images (Docker FROM images)
+      - name: 🔒 Scan Public Base Images
+        if: env.SECURITY_SCAN_CONTAINERS == 'YES'
+        run: |
+          echo "🔍 Scanning public Docker base images for vulnerabilities..."
+          source openshift/scripts/utils/docker-security.sh
+
+          # Determine severity based on SECURITY_SCAN_LEVEL
+          SEVERITY="HIGH,CRITICAL"
+          if [ "${{ env.SECURITY_SCAN_LEVEL }}" = "FULL" ]; then
+            SEVERITY="MEDIUM,HIGH,CRITICAL"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "BASIC" ]; then
+            SEVERITY="HIGH,CRITICAL"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "MINIMAL" ]; then
+            SEVERITY="CRITICAL"
+          fi
+
+          # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
+          EXIT_ON_CRITICAL="false"
+          if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "HIGH" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "MEDIUM" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
+            EXIT_ON_CRITICAL="true"
+          fi
+
+          echo "Scan configuration:"
+          echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
+          echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
+          echo ""
+
+          # Scan all public base images defined in example.versions.env
+          # This catches vulnerabilities in PHP, Nginx, Redis, MariaDB, Golang, Ubuntu, etc.
+          if scan_public_base_images "example.versions.env" "$SEVERITY" "$EXIT_ON_CRITICAL"; then
+            echo "✅ All public base images passed security scan"
+          else
+            scan_exit=$?
+            if [ $scan_exit -eq 2 ]; then
+              echo "❌ Critical vulnerabilities detected - blocking build"
+              exit 2
+            else
+              echo "⚠️ Vulnerabilities detected but allowing build to continue"
             fi
           fi
 
@@ -686,7 +728,7 @@ jobs:
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "fields": [{
                   "title": "Verify Moodle",
-                  "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](https://${{ env.APP_HOST_URL }}/admin/index.php)"
+                  "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](${{ env.APP_HOST_URL }}/admin/index.php)"
                 },{
                   "title": "Build Helm Images: ${{ needs.helm-images.result }}"
                 },{

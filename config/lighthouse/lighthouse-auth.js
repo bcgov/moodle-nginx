@@ -220,7 +220,7 @@ async function runLighthouse(url, options, config = null) {
   await page.screenshot({path: 'after_login_click.png'}); // Take a screenshot after clicking the login button
 
   // After login, generate dynamic paths
-  const baseUrl = 'https://' + process.env.APP_HOST_URL;
+  const baseUrl = process.env.APP_HOST_URL;
   const numberOfPages = 5; // Limit to 5 pages
   const paths = await getDynamicPaths(page, baseUrl, numberOfPages);
   const pathCount = paths.length;
@@ -230,7 +230,7 @@ async function runLighthouse(url, options, config = null) {
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
-    const url = 'https://' + process.env.APP_HOST_URL + path;
+    const url = process.env.APP_HOST_URL + path;
     // await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
     await retryNavigation(page, url); // Navigate to the new URL

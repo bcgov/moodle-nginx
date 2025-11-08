@@ -99,6 +99,8 @@ jobs:
       - name: 🐸 Build to JFrog
         run: |
           export BUILDKIT_PROGRESS=plain
+          
+          # Build image but don't push yet
           docker buildx build \
             --cache-from type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache \
             --cache-from type=gha,scope=moodle-${{ github.ref_name }} \
@@ -120,7 +122,26 @@ jobs:
             --build-arg REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }} \
             --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
-            --output=type=image,push=true \
-            --push \
+            --output=type=docker \
             -f ${{ env.MOODLE_DOCKER_FILE_PATH }} \
             .
+      
+      # 🔒 Security scan built image BEFORE pushing to Artifactory
+      - name: 🔒 Security Scan Built Image
+        run: |
+          source openshift/scripts/utils/docker-security.sh
+          
+          # Scan the built image (now available locally)
+          scan_built_image_for_github_actions \
+            "${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}" \
+            "CRITICAL,HIGH" \
+            "false"
+          
+          # Note: exit_on_critical set to "false" for dev/test environments
+          # Change to "true" for production to block vulnerable pushes
+      
+      # Only push if security scan passed
+      - name: 📤 Push to Artifactory
+        run: |
+          echo "Pushing validated image to Artifactory..."
+          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}
