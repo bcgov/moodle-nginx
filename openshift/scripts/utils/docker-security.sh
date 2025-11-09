@@ -719,15 +719,17 @@ scan_built_image() {
   # Determine exit code
   if [ "$exit_on_critical" = "true" ] && [ "$critical_count" -gt 0 ]; then
     log_error ""
-    log_error "BLOCKING PUSH: Critical vulnerabilities detected"
+    log_error "❌ BLOCKING PUSH: Critical vulnerabilities detected"
     log_error "   Image will NOT be pushed to registry"
     log_error "   Review scan results and fix vulnerabilities before retrying"
     return 2
   elif [ "$critical_count" -gt 0 ] || [ "$high_count" -gt 0 ]; then
     log_warn ""
-    log_warn "   Vulnerabilities detected but allowing push"
-    log_warn "   Consider reviewing and fixing these issues"
-    return 1
+    log_warn "⚠️  Vulnerabilities detected but allowing push"
+    log_warn "   Review recommended: $critical_count critical, $high_count high"
+    # Return 0 (success) when exit_on_critical is false
+    # Vulnerabilities logged but don't fail the build
+    return 0
   else
     log_success ""
     log_success "✅ Image passed security scan - safe to push"

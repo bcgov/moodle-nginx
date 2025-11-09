@@ -63,7 +63,7 @@ on:
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
-    name: 📋 Environment Check
+    name: 🛡️ Environment Check and Preflight Security Scan
     runs-on: ubuntu-22.04
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
