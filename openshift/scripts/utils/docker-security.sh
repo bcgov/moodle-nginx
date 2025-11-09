@@ -28,6 +28,63 @@ else
 fi
 
 # =============================================================================
+# VULNERABILITY COUNTING UTILITIES
+# =============================================================================
+
+# Safely parse vulnerability counts from Trivy JSON output
+# Returns: vulnerability count or 0 if parsing fails
+# Usage: count=$(parse_vulnerability_count "$scan_json" "CRITICAL")
+parse_vulnerability_count() {
+  local scan_output="$1"
+  local severity="$2"
+
+  # Check if we have jq
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq not found, cannot parse vulnerability counts"
+    echo "0"
+    return 1
+  fi
+
+  # Check if scan output is empty
+  if [ -z "$scan_output" ]; then
+    log_trace "Empty scan output for severity: $severity"
+    echo "0"
+    return 0
+  fi
+
+  # Try to parse JSON and count vulnerabilities
+  local count
+  count=$(echo "$scan_output" | jq -r "[.Results[]?.Vulnerabilities[]? | select(.Severity==\"${severity}\")] | length" 2>/dev/null)
+
+  # Validate result is a number
+  if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+    log_trace "Failed to parse ${severity} count from JSON (got: '${count}')"
+    echo "0"
+    return 0
+  fi
+
+  echo "$count"
+  return 0
+}
+
+# Validate that scan output is valid JSON with expected structure
+# Returns: 0 if valid, 1 if invalid
+validate_scan_output() {
+  local scan_output="$1"
+
+  if [ -z "$scan_output" ]; then
+    return 1
+  fi
+
+  # Check if it's valid JSON with Results array
+  if ! echo "$scan_output" | jq -e '.Results' >/dev/null 2>&1; then
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
 # VERSION INTELLIGENCE & RECOMMENDATIONS
 # =============================================================================
 
@@ -83,11 +140,27 @@ find_upgrade_candidates() {
   local base_image=$(echo "$current_image" | cut -d: -f1)
 
   # Parse current version components
-  local version_base=$(echo "$current_version" | grep -oE '^[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "$current_version")
+  local version_base=$(echo "$current_version" | grep -oE '^[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "")
+
+  # Validate we got a proper version
+  if [ -z "$version_base" ]; then
+    log_warn "Cannot parse version from: $current_version"
+    # Still try :latest as fallback
+    echo "latest"
+    return 0
+  fi
+
   local major=$(echo "$version_base" | cut -d. -f1)
   local minor=$(echo "$version_base" | cut -d. -f2)
   local patch=$(echo "$version_base" | cut -d. -f3)
   local suffix=$(echo "$current_version" | sed "s/^${version_base}//")  # e.g., "-alpine", "-fpm"
+
+  # Validate major/minor are numbers
+  if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]]; then
+    log_warn "Invalid version components: major=$major, minor=$minor"
+    echo "latest"
+    return 0
+  fi
 
   log_trace "Parsed version: major=$major, minor=$minor, patch=$patch, suffix=$suffix"
 
@@ -101,6 +174,9 @@ find_upgrade_candidates() {
 
     # Find newer versions with same suffix
     while IFS= read -r tag; do
+      # Skip empty lines
+      [ -z "$tag" ] && continue
+
       # Match suffix if present
       if [ -n "$suffix" ] && [[ ! "$tag" =~ $suffix ]]; then
         continue
@@ -108,8 +184,14 @@ find_upgrade_candidates() {
 
       # Extract version from tag
       local tag_version=$(echo "$tag" | grep -oE '^[0-9]+\.[0-9]+(\.[0-9]+)?')
+      [ -z "$tag_version" ] && continue
+
       local tag_major=$(echo "$tag_version" | cut -d. -f1)
       local tag_minor=$(echo "$tag_version" | cut -d. -f2)
+
+      # Validate numeric
+      [[ "$tag_major" =~ ^[0-9]+$ ]] || continue
+      [[ "$tag_minor" =~ ^[0-9]+$ ]] || continue
 
       # Only consider newer versions within reasonable range (next 2 major/minor versions)
       if [ "$tag_major" -gt "$major" ] && [ "$tag_major" -le $((major + 2)) ]; then
@@ -120,12 +202,12 @@ find_upgrade_candidates() {
     done <<< "$available_tags"
   fi
 
-  # Strategy 2: Try common upgrade patterns
+  # Strategy 2: Try common upgrade patterns (only if we have valid version)
   if [ ${#candidates[@]} -eq 0 ]; then
     log_debug "Using common version patterns"
 
     # Next patch version
-    if [ -n "$patch" ] && [ "$patch" != "0" ]; then
+    if [ -n "$patch" ] && [[ "$patch" =~ ^[0-9]+$ ]] && [ "$patch" != "0" ]; then
       candidates+=("${major}.${minor}.$((patch + 1))${suffix}")
     fi
 
@@ -153,10 +235,22 @@ find_best_upgrade() {
   local severity="${2:-HIGH,CRITICAL}"
   local max_candidates="${3:-5}"
 
+  # Validate image format
+  if [[ ! "$current_image" =~ : ]]; then
+    log_error "Invalid image format for find_best_upgrade: '$current_image' (expected 'name:tag')"
+    return 1
+  fi
+
   local base_image=$(echo "$current_image" | cut -d: -f1)
   local current_version=$(echo "$current_image" | cut -d: -f2)
+  
+  # Validate we got both parts
+  if [ -z "$base_image" ] || [ -z "$current_version" ]; then
+    log_error "Failed to parse image: '$current_image'"
+    return 1
+  fi
 
-  log_info "   � Analyzing upgrade options for: $current_image"
+  log_info "   🔍 Analyzing upgrade options for: $current_image"
 
   # Get current vulnerability baseline
   log_debug "Scanning current image: $current_image"
@@ -167,8 +261,14 @@ find_best_upgrade() {
     return 1
   fi
 
-  local current_critical=$(echo "$current_scan" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "999")
-  local current_high=$(echo "$current_scan" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "999")
+  # Validate scan output
+  if ! validate_scan_output "$current_scan"; then
+    log_warn "      Invalid scan output for current image"
+    return 1
+  fi
+
+  local current_critical=$(parse_vulnerability_count "$current_scan" "CRITICAL")
+  local current_high=$(parse_vulnerability_count "$current_scan" "HIGH")
 
   log_info "      Current: $current_critical critical, $current_high high"
 
@@ -201,12 +301,18 @@ find_best_upgrade() {
     local candidate_scan=$(trivy image --quiet --format json --severity "$severity" "$candidate_image" 2>&1)
 
     if [ $? -ne 0 ]; then
-      log_trace "Failed to scan $candidate_image, skipping"
+      log_trace "Failed to scan $candidate_image (scan error), skipping"
       continue
     fi
 
-    local candidate_critical=$(echo "$candidate_scan" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "999")
-    local candidate_high=$(echo "$candidate_scan" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "999")
+    # Validate scan output before parsing
+    if ! validate_scan_output "$candidate_scan"; then
+      log_trace "Failed to scan $candidate_image (invalid JSON), skipping"
+      continue
+    fi
+
+    local candidate_critical=$(parse_vulnerability_count "$candidate_scan" "CRITICAL")
+    local candidate_high=$(parse_vulnerability_count "$candidate_scan" "HIGH")
 
     # Calculate score (critical weighted 10x more than high)
     local candidate_score=$((candidate_critical * 10 + candidate_high))
@@ -245,8 +351,20 @@ get_version_recommendation() {
   local image="$1"
   local severity="${2:-HIGH,CRITICAL}"
 
+  # Validate image format (must contain :)
+  if [[ ! "$image" =~ : ]]; then
+    log_error "Invalid image format: '$image' (expected 'name:tag')"
+    return 1
+  fi
+
   local base_image=$(echo "$image" | cut -d: -f1)
   local current_version=$(echo "$image" | cut -d: -f2)
+  
+  # Validate we got both parts
+  if [ -z "$base_image" ] || [ -z "$current_version" ]; then
+    log_error "Failed to parse image: '$image' (got base='$base_image', version='$current_version')"
+    return 1
+  fi
 
   log_info "   📦 Analyzing: $image"
 
@@ -297,13 +415,23 @@ compare_image_security() {
 
   # Scan current image
   local scan_a=$(trivy image --quiet --format json --severity "$severity" "$image_a" 2>&1)
-  local critical_a=$(echo "$scan_a" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "999")
-  local high_a=$(echo "$scan_a" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "999")
+  if ! validate_scan_output "$scan_a"; then
+    log_warn "Failed to scan $image_a - cannot compare"
+    return 1
+  fi
+
+  local critical_a=$(parse_vulnerability_count "$scan_a" "CRITICAL")
+  local high_a=$(parse_vulnerability_count "$scan_a" "HIGH")
 
   # Scan proposed image
   local scan_b=$(trivy image --quiet --format json --severity "$severity" "$image_b" 2>&1)
-  local critical_b=$(echo "$scan_b" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "999")
-  local high_b=$(echo "$scan_b" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "999")
+  if ! validate_scan_output "$scan_b"; then
+    log_warn "Failed to scan $image_b - cannot compare"
+    return 1
+  fi
+
+  local critical_b=$(parse_vulnerability_count "$scan_b" "CRITICAL")
+  local high_b=$(parse_vulnerability_count "$scan_b" "HIGH")
 
   log_info "   Security comparison:"
   log_info "      $image_a: $critical_a critical, $high_a high"
@@ -374,36 +502,44 @@ scan_public_base_images() {
     local scan_exit=$?
 
     if [ $scan_exit -ne 0 ]; then
-      log_error "Failed to scan $image"
+      log_error "Failed to scan $image (exit code: $scan_exit)"
       failed_scans=$((failed_scans + 1))
       continue
     fi
 
-    # Parse results
-    if command -v jq >/dev/null 2>&1; then
-      local critical_count=$(echo "$scan_output" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "0")
-      local high_count=$(echo "$scan_output" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "0")
+    # Validate scan output
+    if ! validate_scan_output "$scan_output"; then
+      log_error "Failed to scan $image (invalid JSON output)"
+      failed_scans=$((failed_scans + 1))
+      continue
+    fi
 
-      total_critical=$((total_critical + critical_count))
-      total_high=$((total_high + high_count))
+    # Parse results using safe helper functions
+    local critical_count=$(parse_vulnerability_count "$scan_output" "CRITICAL")
+    local high_count=$(parse_vulnerability_count "$scan_output" "HIGH")
 
-      if [ "$critical_count" -gt 0 ]; then
-        log_error "  🔴 CRITICAL: $critical_count vulnerabilities"
+    total_critical=$((total_critical + critical_count))
+    total_high=$((total_high + high_count))
 
-        # Show top 5 critical vulnerabilities
+    if [ "$critical_count" -gt 0 ]; then
+      log_error "  🔴 CRITICAL: $critical_count vulnerabilities"
+
+      # Show top 5 critical vulnerabilities
+      if command -v jq >/dev/null 2>&1; then
         log_error "     Top Critical Issues:"
         echo "$scan_output" | jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "       • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix available")"' 2>/dev/null | head -5
       fi
+    fi
 
-      if [ "$high_count" -gt 0 ]; then
-        log_warn "  🟡 HIGH: $high_count vulnerabilities"
+    if [ "$high_count" -gt 0 ]; then
+      log_warn "  🟡 HIGH: $high_count vulnerabilities"
 
-        # Show top 3 high vulnerabilities if requested
-        if [[ "$severity" == *"HIGH"* ]]; then
-          log_warn "     Top High Issues:"
-          echo "$scan_output" | jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "       • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix available")"' 2>/dev/null | head -3
-        fi
+      # Show top 3 high vulnerabilities if requested
+      if [[ "$severity" == *"HIGH"* ]] && command -v jq >/dev/null 2>&1; then
+        log_warn "     Top High Issues:"
+        echo "$scan_output" | jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "       • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix available")"' 2>/dev/null | head -3
       fi
+    fi
 
       if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
         log_success "  ✅ No $severity vulnerabilities found"
@@ -438,9 +574,9 @@ scan_public_base_images() {
       local scan_output
       scan_output=$(trivy image --quiet --format json --severity "$severity" "$image" 2>&1)
 
-      if command -v jq >/dev/null 2>&1; then
-        local image_critical=$(echo "$scan_output" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "0")
-        local image_high=$(echo "$scan_output" | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "0")
+      if validate_scan_output "$scan_output"; then
+        local image_critical=$(parse_vulnerability_count "$scan_output" "CRITICAL")
+        local image_high=$(parse_vulnerability_count "$scan_output" "HIGH")
 
         if [ "$image_critical" -gt 0 ] || [ "$image_high" -gt 0 ]; then
           image_has_vulns=true
@@ -452,12 +588,8 @@ scan_public_base_images() {
         continue
       fi
 
-      # Extract base image and version
-      local base_image=$(echo "$image" | cut -d: -f1)
-      local current_version=$(echo "$image" | cut -d: -f2)
-
-      # Get smart recommendations based on actual current version
-      local recommendation=$(get_version_recommendation "$base_image" "$current_version" "$severity")
+      # Get smart recommendations for this image (pass full image:tag format)
+      local recommendation=$(get_version_recommendation "$image" "$severity")
 
       if [ -n "$recommendation" ]; then
         recommendations_found=true
@@ -543,15 +675,25 @@ scan_built_image() {
     return 1
   fi
 
-  # Parse results
-  if [ ! -f "$json_output" ] || ! command -v jq >/dev/null 2>&1; then
-    log_warn "Cannot parse scan results (missing jq or output file)"
-    return 0
+  # Validate scan output exists and is readable
+  if [ ! -f "$json_output" ]; then
+    log_error "Scan output file not created: $json_output"
+    return 1
   fi
 
-  local critical_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$json_output" 2>/dev/null || echo "0")
-  local high_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$json_output" 2>/dev/null || echo "0")
-  local medium_count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$json_output" 2>/dev/null || echo "0")
+  # Read the scan file for parsing
+  local scan_content
+  scan_content=$(cat "$json_output" 2>/dev/null)
+
+  if ! validate_scan_output "$scan_content"; then
+    log_error "Invalid scan output in: $json_output"
+    return 1
+  fi
+
+  # Parse results using safe helper functions
+  local critical_count=$(parse_vulnerability_count "$scan_content" "CRITICAL")
+  local high_count=$(parse_vulnerability_count "$scan_content" "HIGH")
+  local medium_count=$(parse_vulnerability_count "$scan_content" "MEDIUM")
 
   # Display results
   log_info ""
@@ -562,14 +704,14 @@ scan_built_image() {
   log_info "  📄 Full report: $json_output"
 
   # Show top 5 critical vulnerabilities if any
-  if [ "$critical_count" -gt 0 ]; then
+  if [ "$critical_count" -gt 0 ] && command -v jq >/dev/null 2>&1; then
     log_error ""
     log_error "🔴 Top Critical Vulnerabilities:"
     jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix") - \(.Title // "No description")"' "$json_output" 2>/dev/null | head -5 | cut -c1-120
   fi
 
   # Show top 3 high vulnerabilities if any
-  if [ "$high_count" -gt 0 ]; then
+  if [ "$high_count" -gt 0 ] && command -v jq >/dev/null 2>&1; then
     log_warn ""
     log_warn "🟡 Top High Vulnerabilities:"
     jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix") - \(.Title // "No description")"' "$json_output" 2>/dev/null | head -3 | cut -c1-120
@@ -627,14 +769,17 @@ scan_built_image_for_github_actions() {
   local scan_result=$?
 
   # Add to GitHub Actions summary if available
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$output_file" ]; then
     {
       echo "## 🔒 Security Scan: $image_tag"
       echo ""
 
-      if command -v jq >/dev/null 2>&1 && [ -f "$output_file" ]; then
-        local critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$output_file" 2>/dev/null || echo "0")
-        local high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$output_file" 2>/dev/null || echo "0")
+      # Read and parse scan file
+      local scan_content=$(cat "$output_file" 2>/dev/null)
+
+      if validate_scan_output "$scan_content"; then
+        local critical=$(parse_vulnerability_count "$scan_content" "CRITICAL")
+        local high=$(parse_vulnerability_count "$scan_content" "HIGH")
 
         echo "| Severity | Count |"
         echo "|----------|-------|"
@@ -649,6 +794,8 @@ scan_built_image_for_github_actions() {
         else
           echo "✅ **SCAN PASSED** - No critical vulnerabilities"
         fi
+      else
+        echo "⚠️  **Unable to parse scan results**"
       fi
     } >> "$GITHUB_STEP_SUMMARY"
   fi
