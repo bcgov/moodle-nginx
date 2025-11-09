@@ -243,7 +243,7 @@ find_best_upgrade() {
 
   local base_image=$(echo "$current_image" | cut -d: -f1)
   local current_version=$(echo "$current_image" | cut -d: -f2)
-  
+
   # Validate we got both parts
   if [ -z "$base_image" ] || [ -z "$current_version" ]; then
     log_error "Failed to parse image: '$current_image'"
@@ -359,7 +359,7 @@ get_version_recommendation() {
 
   local base_image=$(echo "$image" | cut -d: -f1)
   local current_version=$(echo "$image" | cut -d: -f2)
-  
+
   # Validate we got both parts
   if [ -z "$base_image" ] || [ -z "$current_version" ]; then
     log_error "Failed to parse image: '$image' (got base='$base_image', version='$current_version')"
@@ -541,9 +541,8 @@ scan_public_base_images() {
       fi
     fi
 
-      if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
-        log_success "  ✅ No $severity vulnerabilities found"
-      fi
+    if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
+      log_success "  ✅ No $severity vulnerabilities found"
     fi
   done
 
