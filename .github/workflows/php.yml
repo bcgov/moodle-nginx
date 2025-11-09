@@ -81,11 +81,11 @@ jobs:
           echo "📊 PHP BASE IMAGE OPTIMIZATION REPORT"
           echo "======================================"
           echo "Image: ${{ env.PHP_IMAGE }}"
-          echo "Cache Hit: ${IMAGE_CACHE_HIT:-unknown}"
-          echo "Build Time: ${IMAGE_BUILD_TIME:-unknown}s"
-          echo "Operation: ${IMAGE_OPERATION:-standard}"
+          echo "Cache Hit: ${{ env.IMAGE_CACHE_HIT || 'false' }}"
+          echo "Build Time: ${{ env.IMAGE_BUILD_TIME || '0' }}s"
+          echo "Operation: ${{ env.IMAGE_OPERATION || 'standard' }}"
 
-          if [ "${IMAGE_CACHE_HIT:-false}" = "true" ]; then
+          if [ "${{ env.IMAGE_CACHE_HIT }}" = "true" ]; then
             echo "💡 Time Saved: ~60-300s (typical pull/push duration)"
             echo "🎉 Optimization: SUCCESSFUL"
           else

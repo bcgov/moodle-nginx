@@ -163,7 +163,7 @@ jobs:
                 --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
                 --timeout 600 \
                 --retry-count 3; then                # Check if it was cached
-                if [ "${IMAGE_CACHE_HIT:-false}" = "true" ]; then
+                if [ "${{ env.IMAGE_CACHE_HIT }}" = "true" ]; then
                   CACHED_IMAGES=$((CACHED_IMAGES + 1))
                   echo "✅ $image: CACHED (time saved)"
                 else
