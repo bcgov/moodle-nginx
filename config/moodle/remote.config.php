@@ -45,7 +45,7 @@ $CFG->session_redis_compressor = 'gzip';
 $CFG->filecache = '/mnt/ramdisk/filecache';
 // localrequestdir should be on LOCAL fast storage
 $CFG->localrequestdir = '/mnt/ramdisk/requests';
-$CFG->backuptempdir = '/tmp/backuptemp';
+$CFG->backuptempdir = '/var/www/moodledata/temp/backup';
 // cachedir should be on SHARED storage
 $CFG->cachedir = '/var/shared/cache';
 // tempdir should be on SHARED storage
