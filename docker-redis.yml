@@ -20,9 +20,10 @@ services:
     tty: true
     restart: no
     ports:
-      - "6450:6450"
+      #- "6450:6450"
+      - "6379:6450"
     expose:
-      - "6450"
+      - "6379"
     networks:
       moodle-net:
         ipv4_address: 172.99.0.3
@@ -50,10 +51,10 @@ services:
       service: redis
     container_name: redis-primary
     hostname: redis-primary
-    ports:
-      - "6379:6379"
-    expose:
-      - "6379"
+    # ports:
+    #   - "6379:6379"
+    # expose:
+    #   - "6379"
     networks:
       moodle-net:
         ipv4_address: 172.99.0.10

@@ -46,6 +46,7 @@ services:
     volumes:
       - mysqldata-0:/var/lib/mysql:delegated
       - ./temp/db-backups:/tmp/db-backups:delegated
+      - ./openshift/scripts/fix-mojibake-conversion.sh:/usr/local/bin/fix-mojibake-conversion.sh:delegated
     networks:
       moodle-net:
         ipv4_address: 172.99.0.18
@@ -114,12 +115,14 @@ services:
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
+      - ./config/cron/cron.sh:/usr/local/bin/cron.sh:delegated
       - ./temp/docker/moodledata-0:/var/www/moodledata:delegated
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
       - ./openshift/scripts/includes/mojibake_replacements_2.csv:/usr/local/bin/includes/mojibake_replacements_2.csv:delegated
       - ./openshift/scripts/includes/content_replacement_columns.csv:/scripts/content_replacement_columns.csv
       - ./temp/courses:/tmp/courses:delegated
+      - ./temp/var/shared:/var/shared:delegated
     links:
       - db-0
       - redis

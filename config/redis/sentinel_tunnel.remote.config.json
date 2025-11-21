@@ -4,22 +4,7 @@
 		"redis-node-1.redis-headless.950003-dev.svc.cluster.local:26379",
 		"redis-node-2.redis-headless.950003-dev.svc.cluster.local:26379",
 		"redis-node-3.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-4.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-5.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-6.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-7.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-8.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-9.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-10.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-11.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-12.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-13.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-14.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-15.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-16.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-17.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-18.redis-headless.950003-dev.svc.cluster.local:26379",
-		"redis-node-19.redis-headless.950003-dev.svc.cluster.local:26379"
+		"redis-node-4.redis-headless.950003-dev.svc.cluster.local:26379"
 	],
 	"Databases":[
 		{

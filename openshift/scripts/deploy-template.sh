@@ -32,16 +32,19 @@ if ! wait_for "deployment/$WEB_DEPLOYMENT_NAME" "ready" "600s" "down"; then
   exit 1
 fi
 
-log_info "Delete jobs..."
+log_info "Delete jobs and monitoring resources..."
 delete_resource_if_exists cronjob check-pod-logs
+delete_resource_if_exists deployment pod-health-monitor
 delete_resource_if_exists deployment $CRON_NAME
 delete_resource_if_exists job moodle-upgrade
 delete_resource_if_exists job migrate-build-files
 
 # Delete ConfigMaps
 delete_resource_if_exists configmap $CRON_NAME-config
+delete_resource_if_exists configmap pod-health-monitor-script
+delete_resource_if_exists configmap log-aggregator-script
 
-# Create ConfigMaps
+# Create ConfigMaps for application components
 create_or_update_configmap "$WEB_DEPLOYMENT_NAME-config" "default.conf=./config/nginx/fastcgi.conf"
 create_or_update_configmap "$WEB_DEPLOYMENT_NAME-nginx-root-config" "./config/nginx/nginx.conf"
 create_or_update_configmap "$APP-config" "config.php=./config/moodle/$DEPLOY_ENVIRONMENT.config.php"
@@ -49,11 +52,23 @@ create_or_update_configmap "$PHP_DEPLOYMENT_NAME-fpm-config" "zz-docker.conf=./c
 create_or_update_configmap "$CRON_NAME-config" "config.php=./config/cron/$DEPLOY_ENVIRONMENT.config.php"
 create_or_update_configmap "$CRON_NAME-php-config" "moodle-php.ini=./config/php/php.ini"
 create_or_update_configmap "$CRON_NAME-shell" "cron.sh=./config/cron/cron.sh"
+
+# Create ConfigMaps for monitoring scripts with modular utilities
 create_or_update_configmap "check-pod-logs-script" \
   "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" \
   "${UTILITY_CONFIGMAP_ARGS[@]}" \
-  "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv"
-create_or_update_configmap "migrate-courses" "update-course-tag.php=./config/moodle/update-course-tag.php" "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
+  "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv" \
+  "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
+
+create_or_update_configmap "pod-health-monitor-script" \
+  "monitor-pods.sh=./openshift/scripts/monitor-pods.sh"
+
+create_or_update_configmap "log-aggregator-script" \
+  "log-aggregator.sh=./openshift/scripts/log-aggregator.sh"
+
+create_or_update_configmap "migrate-courses" \
+  "update-course-tag.php=./config/moodle/update-course-tag.php" \
+  "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 
 # Annotate the web deployment to trigger a restart if it already exists
 if [[ `oc describe deployment/$WEB_DEPLOYMENT_NAME 2>&1` =~ "NotFound" ]]; then
@@ -146,11 +161,15 @@ sleep 10
 # Right-sizing cluster, according to environment
 bash ./openshift/scripts/right-sizing.sh
 
-# Create cronjob to check pod logs for errors, and restart if necessary
-deploy_resource_from_template ./openshift/check-pod-logs.yml \
-  OPENSHIFT_SERVER=$OPENSHIFT_SERVER \
-  OPENSHIFT_SA_TOKEN_NAME=$OPENSHIFT_SA_TOKEN_NAME \
-  DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE
+# Deploy pod health monitoring (replaces old CronJob)
+echo "Deploying continuous pod health monitoring..."
+bash ./openshift/scripts/deploy-health-monitor.sh
+monitor_status=$?
+
+if [[ $monitor_status -ne 0 ]]; then
+  echo "Warning: Health monitor deployment failed, continuing with deployment..."
+  # Don't exit - deployment should continue even if monitoring fails
+fi
 
 sleep 60
 

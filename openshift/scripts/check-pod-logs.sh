@@ -21,7 +21,19 @@ if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
   oc project "$DEPLOY_NAMESPACE"
 fi
 
-echo "Checking pod logs for errors..."
+# Check if log aggregation is enabled
+USE_LOG_AGGREGATOR=${USE_LOG_AGGREGATOR:-"true"}
+
+# Function to run with or without log aggregation
+run_with_logging() {
+  if [[ "$USE_LOG_AGGREGATOR" == "true" && -f "/scripts/log-aggregator.sh" ]]; then
+    echo "Starting pod health checks with log aggregation..."
+    exec 1> >(bash /scripts/log-aggregator.sh pipe)
+    exec 2>&1
+  fi
+
+  echo "Checking pod logs for errors..."
+}
 
 # Define the list of deployments and their corresponding error messages and handling functions
 declare -A DEPLOYMENTS
@@ -34,7 +46,12 @@ DEPLOYMENTS=(
   # ["app=cron"]="error"
 )
 
-# Galera cluster health monitoring and auto-healing
+# Initialize logging
+run_with_logging
+
+# =============================================================================
+# GALERA CLUSTER HEALTH MONITORING AND AUTO-HEALING
+# =============================================================================
 echo "🩺 Checking Galera cluster health..."
 current_namespace=$(oc project -q)
 
@@ -93,82 +110,66 @@ else
   echo "ℹ️  No MariaDB Galera StatefulSet found in namespace $current_namespace"
 fi
 
+# =============================================================================
+# POD LOG CHECKING AND ERROR DETECTION
+# =============================================================================
+echo ""
+echo "🔍 Checking pod logs for errors..."
 
-# # Handle Moodle course migrations between environments (dev > test > production)
-# # Based on course tags: Testing, Production
-# current_namespace=$(oc project -q)
-# prefix=$(echo "$current_namespace" | sed -E 's/-.*//')
-# course_transfer_dir="/tmp/file-backups/transfer"
+# Main execution
+total_checked=0
+total_restarted=0
 
-# declare -A tag_env_map
-# tag_env_map["Testing"]="test"
-# tag_env_map["Production"]="prod"
+for selector in "${!DEPLOYMENTS[@]}"; do
+  error_patterns="${DEPLOYMENTS[$selector]}"
 
-# for tag in "Testing" "Production"; do
-#   target_env="${tag_env_map[$tag]}"
-#   target_ns="${prefix}-${target_env}"
+  echo ""
+  echo "════════════════════════════════════════"
 
-#   echo "Migrating courses with tag $tag from $current_namespace to $target_ns"
+  pods_before=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | wc -w)
 
-#   # Only migrate if not already in the target environment
-#   if [[ "$current_namespace" == *"$target_env" ]]; then
-#     continue
-#   fi
+  # Special handling for mariadb-galera: check cluster health and auto-heal
+  if [[ "$selector" == "app.kubernetes.io/name=mariadb-galera" ]]; then
+    echo "🔍 Checking Galera cluster with selector: $selector"
+    check_and_heal_galera_cluster "$selector" "$DEPLOY_NAMESPACE" 5 true
+    galera_status=$?
+    case $galera_status in
+      0)
+        echo "    ✅ Galera cluster is healthy, proceeding with log checks"
+        ;;
+      2)
+        echo "    🔄 Galera auto-heal completed, counting as restart"
+        # Auto-heal performed, count all pods as 'restarted'
+        total_checked=$((total_checked + pods_before))
+        total_restarted=$((total_restarted + pods_before))
+        continue
+        ;;
+      *)
+        echo "    ⚠️  Galera issues detected but continuing with log checks"
+        ;;
+    esac
+  fi
 
-#   # 1. Find courses to migrate (in current env)
-#   echo "DEBUG: Running find_courses_with_tag \"$tag\" \"$current_namespace\""
-#   course_ids=$(find_courses_with_tag "$tag" "$current_namespace")
-#   echo "DEBUG: Courses found for tag '$tag': $course_ids"
+  check_and_restart_pod "$selector" "$error_patterns"
 
-#   if [[ -z "$course_ids" ]]; then
-#     echo "No courses found with tag '$tag' in namespace $current_namespace"
-#     continue
-#   fi
+  pods_after=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | wc -w)
+  restarted=$((pods_before - pods_after))
 
-#   for courseid in $course_ids; do
-#     echo "Migrating course $courseid from $current_namespace to $target_ns"
-#     backup_course "$courseid" "$current_namespace"
+  total_checked=$((total_checked + pods_before))
+  total_restarted=$((total_restarted + restarted))
+done
 
-#     # Find the backup file on the remote cron pod
-#     cron_pod=$(oc get pods -n "$current_namespace" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-#     echo "DEBUG: cron_pod='$cron_pod'"
-#     if [[ -z "$cron_pod" ]]; then
-#       echo "No cron pod found in namespace $current_namespace"
-#       continue
-#     fi
+echo ""
+echo "════════════════════════════════════════"
+echo "📊 SUMMARY:"
+echo "   Pods checked: $total_checked"
+echo "   Pods restarted: $total_restarted"
+echo "   Completed at: $(date)"
 
-#     remote_backup_file=$(oc exec -n "$current_namespace" "$cron_pod" -- bash -c "ls -t /tmp/file-backups/transfer/backup-moodle2-course-${courseid}-*.mbz 2>/dev/null | head -n1")
-#     echo "DEBUG: remote_backup_file='$remote_backup_file'"
-#     if [[ -z "$remote_backup_file" ]]; then
-#       echo "Backup file for course $courseid not found in pod $cron_pod"
-#       continue
-#     fi
-
-#     # Copy the backup file from the remote pod to local
-#     local_file="${course_transfer_dir}/${target_env}/$(basename "$remote_backup_file")"
-#     echo "DEBUG: local_file='$local_file'"
-#     mkdir -p "$(dirname "$local_file")"
-
-#     # Copy backup out of cron pod to checck-pod-logs
-#     copy_backup_out "$current_namespace" "$cron_pod" "$remote_backup_file" "$local_file"
-
-#     # Copy backup in to target env
-#     target_cron_pod=$(oc get pods -n "$target_ns" -l app=cron -o jsonpath='{.items[0].metadata.name}')
-#     echo "DEBUG: target_cron_pod='$target_cron_pod'"
-#     if [[ -z "$target_cron_pod" ]]; then
-#       echo "No cron pod found in namespace $target_ns"
-#       continue
-#     fi
-
-#     copy_backup_in "$target_ns" "$target_cron_pod" "$local_file" "$remote_backup_file"
-
-#     # Update tag in current env
-#     update_course_tag "$courseid" "Transferred-${tag}" "$current_namespace"
-#     # Clean up local file
-#     if [[ -f "$local_file" ]]; then
-#       rm "$local_file"
-#     fi
-#     # Clean up old backups in the cron pod
-#     cleanup_old_backups "$current_namespace" "$cron_pod"
-#   done
-# done
+if [[ $total_restarted -gt 0 ]]; then
+  echo "⚠️  $total_restarted pod(s) were restarted due to errors"
+  exit 1
+else
+  echo "✅ All pods are healthy"
+  exit 0
+fi

@@ -17,20 +17,21 @@ $CFG->moodleappdir    = '/var/www/html';
 $CFG->prefix    = '';
 $CFG->tool_generator_users_password = 'moodle-gen-PWd';
 
-$CFG->session_redis_host = $_SERVER['REDIS_HOST'];
+// $CFG->session_redis_host = $_SERVER['REDIS_HOST'];
 // $CFG->session_redis_auth = $_SERVER['REDIS_PASSWORD'];
-$CFG->session_handler_class = '\core\session\redis';
-$CFG->session_redis_port = 6450; // Optional if TCP. For socket use -1
-$CFG->session_redis_database = 0; // Optional, default is db 0.
-$CFG->session_redis_acquire_lock_timeout = 120;
-$CFG->session_redis_lock_expire = 7200;
-$CFG->session_redis_serializer_use_igbinary = true;
+$CFG->session_handler_class = '\core\session\file';
+// $CFG->session_redis_port = 6450; // Optional if TCP. For socket use -1
+// $CFG->session_redis_database = 0; // Optional, default is db 0.
+// $CFG->session_redis_acquire_lock_timeout = 120;
+// $CFG->session_redis_lock_expire = 7200;
+// $CFG->session_redis_serializer_use_igbinary = true;
 
 $CFG->dboptions =  array (
   'dbpersist' => 0,
   'dbport' => '3306',
   'dbsocket' => '',
   'dbcollation' => 'utf8mb4_unicode_ci',
+  // 'dbcollation' => 'latin1_swedish_ci', // Use latin1 for compatibility with existing data
 );
 
 if (php_sapi_name() == "cli") {

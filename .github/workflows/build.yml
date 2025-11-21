@@ -1,4 +1,4 @@
-name: 🚀 Deploy to OpenShift
+name: 🚀 Build and Deploy to OpenShift
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref }}
@@ -44,6 +44,11 @@ on:
   schedule:
     - cron: "0 3 * * 6"
   push:
+    branches:
+      - 950003-dev
+      - 950003-test
+      - 950003-prod
+  pull_request:
     branches:
       - 950003-dev
       - 950003-test
@@ -751,6 +756,9 @@ jobs:
                 },{
                   "title": "Security Coverage:",
                   "value": "Container Images + PHP Dependencies + Dependabot + License Compliance"
+                },{
+                  "title": "Health Monitor:",
+                  "value": "✅ Continuous monitoring deployed\\n• Pod log error detection\\n• Galera cluster monitoring\\n• Split-brain auto-healing"
                 }]
               }]
             }

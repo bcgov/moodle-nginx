@@ -12,7 +12,21 @@ parameters:
   - name: DEPLOY_NAMESPACE
     description: The namespace where the deployment is located
     required: true
+  - name: ROCKETCHAT_WEBHOOK_URL
+    description: Rocket.Chat webhook URL for notifications
+    value: ""
+  - name: USE_LOG_AGGREGATOR
+    description: Enable enhanced logging and notifications
+    value: "true"
 objects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: notification-webhooks
+      namespace: ${DEPLOY_NAMESPACE}
+    type: Opaque
+    stringData:
+      rocketchat-webhook-url: ${ROCKETCHAT_WEBHOOK_URL}
   - apiVersion: batch/v1
     kind: CronJob
     metadata:
@@ -60,6 +74,14 @@ objects:
                         secretKeyRef:
                           name: moodle-secrets
                           key: database-name
+                    - name: USE_LOG_AGGREGATOR
+                      value: ${USE_LOG_AGGREGATOR}
+                    - name: ROCKET_CHAT_WEBHOOK
+                      valueFrom:
+                        secretKeyRef:
+                          name: notification-webhooks
+                          key: rocketchat-webhook-url
+                          optional: true
                   volumeMounts:
                     - name: script-volume
                       mountPath: /scripts

@@ -280,3 +280,13 @@ jobs:
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
+      - name: Deploy Pod Health Monitor
+        if: success()
+        run: bash ./openshift/scripts/deploy-health-monitor.sh
+        env:
+          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
+          OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
+          ROCKETCHAT_WEBHOOK_URL: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          DEPLOYMENT_TYPE: "continuous"
+
