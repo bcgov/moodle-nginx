@@ -1,7 +1,54 @@
 #!/bin/bash
+#==============================================================================
 # validate-php-compatibility.sh
-# Validates PHP dependency compatibility with current runtime version
-# Prevents deployment of packages requiring newer PHP versions
+#==============================================================================
+# PURPOSE:
+#   Validates PHP dependency compatibility with current runtime PHP version.
+#   Prevents deployment of Composer packages requiring newer PHP versions,
+#   avoiding runtime errors and compatibility issues.
+#
+# COMPATIBILITY CHECKS:
+#   1. PHP Runtime Version: From example.versions.env (PHP_RUNTIME_VERSION)
+#   2. Composer Require: Minimum PHP version in composer.json
+#   3. Package Matrix: Known packages with specific PHP requirements
+#   4. Installed Packages: Checks composer.lock for incompatible versions
+#
+# COMPATIBILITY MATRIX:
+#   Pre-defined list of packages with known PHP version requirements:
+#   - maennchen/zipstream-php >= 3.2.0 requires PHP 8.2+
+#   - symfony/console >= 6.0.0 requires PHP 8.2+
+#   - guzzlehttp/guzzle >= 8.0.0 requires PHP 8.2+
+#   - doctrine/orm >= 3.0.0 requires PHP 8.2+
+#   - monolog/monolog >= 3.0.0 requires PHP 8.1+
+#
+# VALIDATION PROCESS:
+#   1. Load runtime PHP version from example.versions.env
+#   2. Parse composer.json for minimum PHP requirement
+#   3. Check composer.lock for installed package versions
+#   4. Compare against compatibility matrix
+#   5. Report incompatibilities with upgrade recommendations
+#
+# OUTPUTS:
+#   - Console: Human-readable compatibility report
+#   - File: tmp/php-compatibility-report.json (detailed findings)
+#   - Exit Code: 0=compatible, 1=incompatibilities found
+#
+# USAGE:
+#   # Run compatibility validation
+#   ./openshift/scripts/validate-php-compatibility.sh
+#
+#   # Check report
+#   cat tmp/php-compatibility-report.json
+#
+# CI/CD INTEGRATION:
+#   Called by: comprehensive-security-scan.sh (MEDIUM and FULL levels)
+#   Artifacts: php-compatibility-report.json uploaded to GitHub Actions
+#
+# RELATED DOCS:
+#   - Configuration: ../../example.versions.env
+#   - Composer: ../../config/moodle/composer.json
+#   - Security Scan: ./comprehensive-security-scan.sh
+#==============================================================================
 
 set -euo pipefail
 

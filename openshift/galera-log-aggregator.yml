@@ -1,0 +1,113 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: galera-log-aggregator
+  annotations:
+    description: "Log aggregator for Galera cluster monitoring"
+    tags: "logging,galera,mariadb"
+objects:
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: galera-log-aggregator
+    namespace: ${NAMESPACE}
+    labels:
+      app: galera-log-aggregator
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: galera-log-aggregator
+    template:
+      metadata:
+        labels:
+          app: galera-log-aggregator
+      spec:
+        serviceAccountName: ${SERVICE_ACCOUNT_NAME}
+        containers:
+        - name: log-aggregator
+          image: ${IMAGE_REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
+          command:
+          - /bin/bash
+          - /scripts/log-aggregator.sh
+          - follow
+          - ${CRONJOB_NAME}
+          - ${NAMESPACE}
+          env:
+          - name: NAMESPACE
+            value: ${NAMESPACE}
+          - name: CRONJOB_NAME
+            value: ${CRONJOB_NAME}
+          - name: ROCKET_CHAT_WEBHOOK
+            valueFrom:
+              secretKeyRef:
+                name: notification-webhooks
+                key: rocketchat-webhook-url
+                optional: true
+          - name: SLACK_WEBHOOK
+            valueFrom:
+              secretKeyRef:
+                name: notification-webhooks
+                key: slack-webhook
+                optional: true
+          - name: LOG_RETENTION_HOURS
+            value: "72"
+          volumeMounts:
+          - name: scripts
+            mountPath: /scripts
+            readOnly: true
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+        volumes:
+        - name: scripts
+          configMap:
+            name: log-aggregator-script
+            defaultMode: 0755
+        restartPolicy: Always
+
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: notification-webhooks
+    namespace: ${NAMESPACE}
+  type: Opaque
+  stringData:
+    rocketchat-webhook-url: ${ROCKET_CHAT_WEBHOOK}
+    slack-webhook: ${SLACK_WEBHOOK}
+
+parameters:
+- name: NAMESPACE
+  description: "The namespace to deploy the log aggregator"
+  value: "default"
+  required: true
+- name: SERVICE_ACCOUNT_NAME
+  description: "Service account with permissions to read logs and create events"
+  value: "log-aggregator"
+  required: true
+- name: IMAGE_REGISTRY
+  description: "Container image registry"
+  value: "image-registry.openshift-image-registry.svc:5000"
+  required: true
+- name: IMAGE_NAME
+  description: "Container image name"
+  value: "moodle-cron"
+  required: true
+- name: IMAGE_TAG
+  description: "Container image tag"
+  value: "latest"
+  required: true
+- name: CRONJOB_NAME
+  description: "Name of the CronJob to monitor"
+  value: "check-pod-logs"
+  required: true
+- name: ROCKET_CHAT_WEBHOOK
+  description: "Rocket.Chat webhook URL for notifications"
+  value: ""
+- name: SLACK_WEBHOOK
+  description: "Slack webhook URL for notifications"
+  value: ""

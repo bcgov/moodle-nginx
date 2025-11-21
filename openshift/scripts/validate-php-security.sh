@@ -1,7 +1,49 @@
 #!/bin/bash
+#==============================================================================
 # validate-php-security.sh
-# Comprehensive PHP dependency security validation script
-# Integrates with centralized version management and CI/CD security scanning
+#==============================================================================
+# PURPOSE:
+#   Comprehensive PHP dependency security validation using Composer audit.
+#   Scans for known vulnerabilities (CVEs) in PHP dependencies and provides
+#   detailed reporting for CI/CD integration.
+#
+# SCAN TYPES:
+#   1. Composer Security Audit (composer audit)
+#      - Checks PHP dependencies against security advisories
+#      - Reports CVE IDs, severity levels, affected versions
+#      - Generates JSON and table format outputs
+#
+#   2. Outdated Dependency Check (composer outdated)
+#      - Identifies packages with available updates
+#      - Highlights major vs. minor version updates
+#      - Helps prioritize security patches
+#
+# ARCHITECTURE:
+#   - Works with: config/moodle/composer.json and composer.lock
+#   - Outputs: JSON reports for CI/CD, human-readable tables for local
+#   - Integration: Called by comprehensive-security-scan.sh and build.yml
+#
+# OUTPUTS:
+#   - Console: Human-readable vulnerability tables with severity
+#   - File: tmp/php-security-report.json (detailed CVE information)
+#   - Exit Code: 0=no vulns, 1=vulnerabilities found
+#
+# USAGE:
+#   # Run PHP security audit
+#   ./openshift/scripts/validate-php-security.sh
+#
+#   # Check report
+#   cat tmp/php-security-report.json
+#
+# CI/CD INTEGRATION:
+#   Called by: .github/workflows/build.yml (security scanning)
+#   Artifacts: php-security-report.json uploaded to GitHub Actions
+#
+# RELATED DOCS:
+#   - Composer Config: ../../config/moodle/composer.json
+#   - Security Scanning: ./comprehensive-security-scan.sh
+#   - CI/CD: ../../.github/workflows/build.yml
+#==============================================================================
 
 set -euo pipefail
 

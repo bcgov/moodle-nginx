@@ -1,4 +1,56 @@
 #!/bin/bash
+#==============================================================================
+# migrate-build-files.sh
+#==============================================================================
+# PURPOSE:
+#   Safely migrate Moodle application files from build container (/app/public)
+#   to runtime volume (/var/www/html) during deployment. Includes version
+#   checking and downgrade protection to prevent deploying outdated code.
+#
+# SAFETY FEATURES:
+#   - Version comparison: Prevents accidental downgrades
+#   - File count validation: Detects incomplete builds
+#   - Force migrate option: Override safety checks when needed
+#   - Timestamp tracking: Avoids redundant migrations
+#
+# VERSION CHECKING:
+#   Compares version.php in source and destination:
+#   - PROCEED: Source version > destination version
+#   - ABORT: Source version < destination (dangerous downgrade)
+#   - SKIP: Versions match and file counts match
+#
+# MIGRATION PROCESS:
+#   1. Check version compatibility (should_migrate_by_version)
+#   2. Compare file counts if versions match
+#   3. Copy files from /app/public to /var/www/html
+#   4. Set proper ownership (www-data:www-data)
+#   5. Record migration timestamp
+#
+# CONFIGURATION:
+#   FORCE_MIGRATE            - "yes" to override safety checks
+#   IMAGE_REBUILD_TIME_LIMIT - Seconds before allowing re-migration
+#
+# EXECUTION CONTEXT:
+#   - Runs inside: OpenShift Job (migrate-build-files.yml)
+#   - Source: /app/public (read-only volume from build image)
+#   - Destination: /var/www/html (persistent volume)
+#   - User: root (requires chown for www-data)
+#
+# USAGE:
+#   # Normal migration (with safety checks)
+#   ./migrate-build-files.sh
+#
+#   # Force migration (skip version checks)
+#   export FORCE_MIGRATE="yes"
+#   ./migrate-build-files.sh
+#
+#   # Deployed via OpenShift Job
+#   oc create job migrate-build-files --from=job/migrate-build-files-template
+#
+# RELATED DOCS:
+#   - Job Template: ../migrate-build-files.yml
+#   - Utilities: ./_utils.sh (should_migrate_by_version)
+#==============================================================================
 
 # Ensure the script is running with bash
 if [ -z "$BASH_VERSION" ]; then

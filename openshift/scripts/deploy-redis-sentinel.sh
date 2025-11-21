@@ -1,5 +1,45 @@
 #!/bin/bash
-#set -e # Exit on error
+#==============================================================================
+# deploy-redis-sentinel.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy Redis Sentinel cluster with high availability failover. Manages
+#   StatefulSet for Redis nodes, Sentinel processes for monitoring, and proxy
+#   for transparent connection routing.
+#
+# ARCHITECTURE:
+#   - 3-node Redis StatefulSet with replication (1 master + 2 replicas)
+#   - 3 Sentinel processes for automatic failover detection
+#   - Redis Proxy deployment for connection routing
+#   - Helm-based deployment with Artifactory image support
+#   - ConfigMaps for stats endpoint and configuration
+#
+# QUICK CONFIG:
+#   REDIS_NAME               - Base name for Redis resources (default: redis)
+#   REDIS_CHART_VERSION      - Bitnami Redis Helm chart version (default: 23.1.3)
+#   REDIS_REQUEST_CPU        - CPU request per pod (default: 20m)
+#   REDIS_REQUEST_MEMORY     - Memory request per pod (default: 128Mi)
+#   REDIS_LIMIT_CPU          - CPU limit per pod (default: 150m)
+#   REDIS_LIMIT_MEMORY       - Memory limit per pod (default: 256Mi)
+#   USE_ARTIFACTORY          - Pull from Artifactory vs. public registry
+#
+# USAGE:
+#   # Standard deployment
+#   export REDIS_NAME="redis"
+#   export REDIS_CHART_VERSION="23.1.3"
+#   ./openshift/scripts/deploy-redis-sentinel.sh
+#
+#   # Deploy with custom resources
+#   export REDIS_REQUEST_MEMORY="256Mi"
+#   export REDIS_LIMIT_MEMORY="512Mi"
+#   ./openshift/scripts/deploy-redis-sentinel.sh
+#
+# RELATED DOCS:
+#   - Configuration: ../../config/redis/
+#   - Proxy Config: ../redis-proxy.yml
+#   - Services: ../redis-services.yml
+#   - Image Resolver: ./helm-image-resolver.sh
+#==============================================================================
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh

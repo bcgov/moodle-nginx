@@ -1,6 +1,40 @@
 #!/bin/bash
+#==============================================================================
 # ensure-artifactory-access.sh
-# Utility script to ensure all deployments have proper Artifactory imagePullSecrets
+#==============================================================================
+# PURPOSE:
+#   Ensure all OpenShift deployments and StatefulSets have proper Artifactory
+#   imagePullSecrets configured. Required when USE_ARTIFACTORY=true to pull
+#   container images from private Artifactory registry.
+#
+# RESOURCES CONFIGURED:
+#   - deployment/moodle-backup          - Database backup container
+#   - statefulset/mariadb-galera        - Database cluster
+#   - statefulset/redis-node            - Redis cache cluster
+#   - deployment/redis-proxy            - Redis connection proxy
+#   - deployment/maintenance-message    - Maintenance page
+#   - deployment/moodle-php             - PHP-FPM application
+#   - deployment/moodle-web             - NGINX web server
+#
+# ARCHITECTURE:
+#   1. Load centralized configuration (example.versions.env)
+#   2. Call ensure_artifactory_access() utility function
+#   3. Verify configuration on all applicable resources
+#   4. Report status and any missing configurations
+#
+# CONFIGURATION:
+#   ARTIFACTORY_PULL_SECRET  - Secret name (default: artifactory-m950-learning)
+#   OC_PROJECT               - Target namespace
+#
+# USAGE:
+#   # Configure all deployments
+#   export ARTIFACTORY_PULL_SECRET="artifactory-m950-learning"
+#   ./openshift/scripts/ensure-artifactory-access.sh
+#
+# RELATED DOCS:
+#   - Utilities: ./_utils.sh (ensure_artifactory_access function)
+#   - Configuration: ../../example.versions.env
+#==============================================================================
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh

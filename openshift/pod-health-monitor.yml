@@ -1,0 +1,147 @@
+kind: Template
+apiVersion: template.openshift.io/v1
+metadata:
+  name: pod-health-monitor
+  annotations:
+    description: "Continuous pod health monitoring deployment"
+    tags: "monitoring,galera,health-check"
+parameters:
+  - name: OPENSHIFT_SERVER
+    description: The OpenShift server URL
+    required: true
+  - name: OPENSHIFT_SA_TOKEN_NAME
+    description: The name of the secret containing the service account token
+    required: true
+  - name: DEPLOY_NAMESPACE
+    description: The namespace where the deployment is located
+    required: true
+  - name: ROCKETCHAT_WEBHOOK_URL
+    description: Rocket.Chat webhook URL for notifications
+    value: ""
+  - name: MONITORING_INTERVAL
+    description: Interval between health checks in seconds
+    value: "60"
+  - name: IMAGE_REGISTRY
+    description: Container image registry
+    value: "image-registry.openshift-image-registry.svc:5000"
+  - name: IMAGE_NAME
+    description: Container image name (should include oc CLI)
+    value: "moodle-cron"
+  - name: IMAGE_TAG
+    description: Container image tag
+    value: "latest"
+objects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: notification-webhooks
+      namespace: ${DEPLOY_NAMESPACE}
+    type: Opaque
+    stringData:
+      rocketchat-webhook-url: ${ROCKETCHAT_WEBHOOK_URL}
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: pod-health-monitor
+      namespace: ${DEPLOY_NAMESPACE}
+      labels:
+        app: pod-health-monitor
+        component: monitoring
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate  # Ensure only one instance runs
+      selector:
+        matchLabels:
+          app: pod-health-monitor
+      template:
+        metadata:
+          labels:
+            app: pod-health-monitor
+        spec:
+          serviceAccountName: ${OPENSHIFT_SA_TOKEN_NAME}
+          containers:
+          - name: health-monitor
+            image: ${IMAGE_REGISTRY}/${DEPLOY_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
+            command: ["/bin/bash", "/scripts/monitor-pods.sh"]
+            resources:
+              requests:
+                cpu: 25m
+                memory: 128Mi
+              limits:
+                cpu: 100m
+                memory: 256Mi
+            env:
+            - name: OPENSHIFT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ${OPENSHIFT_SA_TOKEN_NAME}
+                  key: token
+            - name: OPENSHIFT_SERVER
+              value: ${OPENSHIFT_SERVER}
+            - name: DEPLOY_NAMESPACE
+              value: ${DEPLOY_NAMESPACE}
+            - name: MONITORING_INTERVAL
+              value: ${MONITORING_INTERVAL}
+            - name: ROCKET_CHAT_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: notification-webhooks
+                  key: rocketchat-webhook-url
+                  optional: true
+            volumeMounts:
+            - name: script-volume
+              mountPath: /scripts
+            - name: monitor-script
+              mountPath: /scripts/monitor-pods.sh
+              subPath: monitor-pods.sh
+            - name: migrate-courses
+              mountPath: /var/www/html/migrate-courses
+            livenessProbe:
+              exec:
+                command:
+                - /bin/bash
+                - -c
+                - "ps aux | grep -v grep | grep monitor-pods.sh"
+              initialDelaySeconds: 30
+              periodSeconds: 60
+            readinessProbe:
+              exec:
+                command:
+                - /bin/bash
+                - -c
+                - "oc whoami >/dev/null 2>&1"
+              initialDelaySeconds: 10
+              periodSeconds: 30
+          volumes:
+          - name: script-volume
+            configMap:
+              name: check-pod-logs-script
+              defaultMode: 0755
+          - name: monitor-script
+            configMap:
+              name: pod-health-monitor-script
+              defaultMode: 0755
+          - name: migrate-courses
+            configMap:
+              name: migrate-courses
+              defaultMode: 0755
+          restartPolicy: Always
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: pod-health-monitor
+      namespace: ${DEPLOY_NAMESPACE}
+      labels:
+        app: pod-health-monitor
+    spec:
+      selector:
+        app: pod-health-monitor
+      ports:
+      - name: metrics
+        port: 8080
+        targetPort: 8080
+        protocol: TCP
+      type: ClusterIP

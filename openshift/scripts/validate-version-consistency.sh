@@ -1,7 +1,45 @@
 #!/bin/bash
+#==============================================================================
 # validate-version-consistency.sh
-# Validates consistency between infrastructure and application dependency versions
-# Ensures compatibility without enforcing single source of truth
+#==============================================================================
+# PURPOSE:
+#   Validates consistency between infrastructure versions (PHP, Node, MariaDB,
+#   Redis) and application dependency versions (Composer, npm packages).
+#   Ensures compatibility without enforcing single source of truth.
+#
+# VALIDATION SCOPE:
+#   - Infrastructure: example.versions.env (PHP_IMAGE, MARIADB_IMAGE, REDIS_IMAGE)
+#   - Composer: config/moodle/composer.json (PHP version, dependencies)
+#   - Node: config/lighthouse/package.json (Node version, npm dependencies)
+#   - OpenShift: Template parameter validation
+#
+# ARCHITECTURE:
+#   1. Extract versions from infrastructure config (example.versions.env)
+#   2. Extract versions from application manifests (composer.json, package.json)
+#   3. Compare major.minor versions for compatibility
+#   4. Generate markdown report with findings and recommendations
+#
+# OUTPUTS:
+#   - Console: Human-readable validation results with emojis
+#   - File: tmp/version-consistency-report.md (detailed findings)
+#   - Exit Code: 0=success, 1=errors found, 2=warnings only
+#
+# USAGE:
+#   # Run validation
+#   ./openshift/scripts/validate-version-consistency.sh
+#
+#   # Check report
+#   cat tmp/version-consistency-report.md
+#
+# CI/CD INTEGRATION:
+#   Called by: .github/workflows/build.yml (checkEnv job)
+#   Artifacts: tmp/version-consistency-report.md uploaded to GitHub Actions
+#
+# RELATED DOCS:
+#   - Configuration: ../../example.versions.env
+#   - Composer: ../../config/moodle/composer.json
+#   - Dependencies: ../../config/dependencies/dependency-config.json
+#==============================================================================
 
 set -euo pipefail
 

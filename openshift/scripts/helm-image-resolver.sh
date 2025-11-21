@@ -1,6 +1,56 @@
 #!/bin/bash
+#==============================================================================
 # helm-image-resolver.sh
-# Utility functions for resolving Helm chart images with Artifactory support
+#==============================================================================
+# PURPOSE:
+#   Utility functions for resolving Helm chart container images with support
+#   for both public registries (Docker Hub, GCR, Quay) and private Artifactory
+#   registry. Provides DRY image management across all deployment scripts.
+#
+# FUNCTIONS:
+#   resolve_helm_image()        - Resolve full image URL from environment variable
+#   validate_helm_environment() - Validate required Helm/registry environment variables
+#   show_artifactory_status()   - Display current registry configuration
+#
+# ARCHITECTURE:
+#   - Reads image definitions from environment (e.g., MARIADB_IMAGE, REDIS_IMAGE)
+#   - Strips public registry prefixes when using Artifactory (docker.io/*, gcr.io/*, quay.io/*)
+#   - Concatenates appropriate registry prefix based on USE_ARTIFACTORY setting
+#   - Exports RESOLVED_* variables for consumption by deployment scripts
+#
+# ARTIFACTORY MODE:
+#   When USE_ARTIFACTORY=true:
+#   - Strips external registry prefixes from image names
+#   - Prepends ARTIFACTORY_REGISTRY to create full image path
+#   - Example: docker.io/bitnami/mariadb:11.0.3 → artifactory.example.com/bitnami/mariadb:11.0.3
+#
+# PUBLIC REGISTRY MODE:
+#   When USE_ARTIFACTORY=false:
+#   - Uses HELM_REPO as registry (typically empty for Docker Hub)
+#   - Preserves full image path as-is
+#   - Example: bitnami/mariadb:11.0.3 → bitnami/mariadb:11.0.3
+#
+# EXPORTED VARIABLES:
+#   RESOLVED_IMAGE_REGISTRY      - Registry hostname (with or without Artifactory)
+#   RESOLVED_IMAGE_REPOSITORY    - Repository path (e.g., bitnami/mariadb)
+#   RESOLVED_IMAGE_TAG           - Image tag (e.g., 11.0.3)
+#   RESOLVED_FULL_IMAGE          - Complete image URL
+#
+# USAGE:
+#   # Source this file in deployment scripts
+#   source ./openshift/scripts/helm-image-resolver.sh
+#
+#   # Resolve MariaDB image
+#   if ! resolve_helm_image "MARIADB_IMAGE"; then
+#       echo "Failed to resolve image"
+#       exit 1
+#   fi
+#   echo "Using: ${RESOLVED_FULL_IMAGE}"
+#
+# RELATED FILES:
+#   - Environment: ./example.versions.env
+#   - Deployments: ./deploy-mariadb-galera.sh, ./deploy-redis-sentinel.sh
+#==============================================================================
 
 # Function to resolve full image URL by concatenating registry and image
 # Usage: resolve_helm_image "MARIADB_IMAGE"

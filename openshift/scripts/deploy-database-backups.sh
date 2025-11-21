@@ -1,3 +1,60 @@
+#!/bin/bash
+#==============================================================================
+# deploy-database-backups.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy automated database backup solution using BCGov backup-container
+#   Helm chart. Manages scheduled backups, retention policies, and backup
+#   verification for MariaDB Galera cluster.
+#
+# BACKUP STRATEGY:
+#   - Daily backups: Retained for 7 days
+#   - Weekly backups: Retained for 4 weeks
+#   - Monthly backups: Retained for 12 months
+#   - Verification: Automated backup integrity checks
+#
+# ARCHITECTURE:
+#   - Helm chart: bcgov/backup-container
+#   - CronJob: Scheduled backup execution
+#   - PVC: Persistent storage for backup files
+#   - Secrets: Database credentials, backup storage credentials
+#   - ConfigMap: Backup configuration and schedules
+#
+# HELM INTEGRATION:
+#   - Repository: http://bcgov.github.io/helm-charts
+#   - Chart: backup-container
+#   - Artifactory support for cached images
+#   - Custom values for environment-specific configuration
+#
+# CONFIGURATION:
+#   DB_BACKUP_DEPLOYMENT_NAME    - Helm release name
+#   BACKUP_IMAGE                 - Container image (with Artifactory support)
+#   BACKUP_SCHEDULE              - Cron schedule for backups
+#   BACKUP_RETENTION_DAYS        - Number of days to retain backups
+#   DB_BACKUP_PVC_SIZE           - Storage size for backups
+#   USE_ARTIFACTORY              - Pull from Artifactory vs. upstream
+#
+# SECRETS REQUIRED:
+#   - moodle-secrets: Database connection credentials
+#   - backup-storage-secret: Backup storage credentials (optional)
+#
+# USAGE:
+#   # Deploy with defaults
+#   export DB_BACKUP_DEPLOYMENT_NAME="moodle-backup"
+#   export BACKUP_IMAGE="bcgovimages/backup-container:latest"
+#   ./openshift/scripts/deploy-database-backups.sh
+#
+#   # Deploy with custom schedule
+#   export BACKUP_SCHEDULE="0 2 * * *"  # 2 AM daily
+#   export BACKUP_RETENTION_DAYS="14"
+#   ./openshift/scripts/deploy-database-backups.sh
+#
+# RELATED DOCS:
+#   - Helm Chart: https://github.com/bcgov/helm-charts/tree/master/charts/backup-container
+#   - Configuration: ../../config/mariadb/db-backups.yaml
+#   - Image Resolver: ./helm-image-resolver.sh
+#==============================================================================
+
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 source ./openshift/scripts/helm-image-resolver.sh

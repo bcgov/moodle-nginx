@@ -1,4 +1,41 @@
-# Deploy MariaDB Galera to OpenShift
+#!/bin/bash
+#==============================================================================
+# deploy-mariadb-galera.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy MariaDB Galera cluster to OpenShift with 3-node replication for
+#   high availability. Manages StatefulSet deployment, ConfigMaps, PVCs, and
+#   custom preStop hooks for graceful shutdown.
+#
+# ARCHITECTURE:
+#   - 3-node StatefulSet for multi-master replication
+#   - Custom my.cnf configuration via ConfigMap
+#   - Helm-based deployment with Artifactory image support
+#   - PreStop hook prevents split-brain scenarios during pod shutdown
+#   - Persistent volumes for each pod (data/, temp/, backups/)
+#
+# QUICK CONFIG:
+#   DB_DEPLOYMENT_NAME       - StatefulSet name (default: mariadb-galera)
+#   USE_ARTIFACTORY          - Pull from Artifactory vs. public registry
+#   MARIADB_IMAGE            - Image name:tag (resolved via helm-image-resolver.sh)
+#   GALERA_CLUSTER_BOOTSTRAP - Bootstrap mode (default: no)
+#
+# USAGE:
+#   # Standard deployment
+#   export DB_DEPLOYMENT_NAME="mariadb-galera"
+#   ./openshift/scripts/deploy-mariadb-galera.sh
+#
+#   # Bootstrap new cluster (first deployment only)
+#   export GALERA_CLUSTER_BOOTSTRAP="yes"
+#   ./openshift/scripts/deploy-mariadb-galera.sh
+#
+# RELATED DOCS:
+#   - Architecture: ../../docs/galera-monitoring-solution.md
+#   - Troubleshooting: ../../docs/manual-galera-troubleshooting.md
+#   - Configuration: ../../config/mariadb/my.cnf
+#   - Helm Values: ../../config/mariadb/galera-values.yaml
+#   - PreStop Patch: ../../config/mariadb/mariadb-galera-prestop-patch.json
+#==============================================================================
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh

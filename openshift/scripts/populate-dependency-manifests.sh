@@ -1,7 +1,66 @@
 #!/bin/bash
+#==============================================================================
 # populate-dependency-manifests.sh
-# Cross-platform script to populate dependency manifests from example.versions.env
-# Works in GitHub Actions, OpenShift builds, and local development
+#==============================================================================
+# PURPOSE:
+#   Populate dependency manifest files (composer.json, package.json) from
+#   centralized version configuration (example.versions.env). Ensures DRY
+#   principle by maintaining single source of truth for all dependency versions.
+#
+# TEMPLATING SYSTEM:
+#   Uses JSON config (config/dependencies/dependency-config.json) to define:
+#   - Target manifest files to update
+#   - Environment variable mappings
+#   - JSONPath locations for version substitution
+#   - Validation rules
+#
+# SUPPORTED MANIFESTS:
+#   - config/moodle/composer.json        - PHP dependencies
+#   - config/lighthouse/package.json     - Node.js dependencies
+#   - Custom manifests via config file
+#
+# AUTOMATION PROCESS:
+#   1. Load versions from example.versions.env
+#   2. Parse dependency-config.json for manifest templates
+#   3. Use jq to update version fields in target files
+#   4. Validate updated manifests (JSON syntax)
+#   5. Report changes and generate summary
+#
+# CROSS-PLATFORM:
+#   - Works in: GitHub Actions, OpenShift builds, local development
+#   - Requires: bash, jq (JSON processor)
+#   - Handles: Unix and Windows line endings
+#
+# CONFIGURATION:
+#   Config file: config/dependencies/dependency-config.json
+#   Format:
+#   {
+#     "manifests": [
+#       {
+#         "file": "config/moodle/composer.json",
+#         "mappings": [
+#           {"env": "PHP_VERSION", "path": ".require.php"}
+#         ]
+#       }
+#     ]
+#   }
+#
+# USAGE:
+#   # Populate all manifests
+#   ./openshift/scripts/populate-dependency-manifests.sh
+#
+#   # Dry-run (no file modifications)
+#   DRY_RUN=true ./openshift/scripts/populate-dependency-manifests.sh
+#
+# CI/CD INTEGRATION:
+#   Called by: .github/workflows/build.yml (checkEnv job)
+#   Ensures manifests are synchronized before build
+#
+# RELATED DOCS:
+#   - Configuration: ../../config/dependencies/dependency-config.json
+#   - Versions: ../../example.versions.env
+#   - CI/CD: ../../.github/workflows/build.yml
+#==============================================================================
 
 set -euo pipefail
 

@@ -1,20 +1,49 @@
 #!/bin/bash
-#set -e # Exit on error
+#==============================================================================
+# right-sizing.sh
+#==============================================================================
+# PURPOSE:
+#   Apply resource allocation (CPU/memory requests and limits) and scaling
+#   configuration (pod count, HPA settings) to all deployments and StatefulSets
+#   in the namespace based on CSV configuration files.
+#
+# CSV FORMAT:
+#   Deployment,Type,PodCount,MaxPods,PVCCount,PVCCapacity,CPURequest,CPULimit,MemRequest,MemLimit,CPUScaleValue
+#   moodle-php,deployment,3,10,0,0,500m,2000m,1Gi,4Gi,80
+#   mariadb-galera,sts,3,3,3,20Gi,1000m,4000m,4Gi,8Gi,80
+#
+# ARCHITECTURE:
+#   Reads CSV file: ./openshift/${DEPLOY_NAMESPACE}-sizing.csv
+#   - Sets resource requests/limits for each deployment
+#   - Scales pods to specified count
+#   - Creates HorizontalPodAutoscaler if MaxPods > PodCount
+#   - Skips resources with PodCount=0 (optional/temporary resources)
+#
+# QUICK CONFIG:
+#   DEPLOY_NAMESPACE         - Determines CSV file to use (required)
+#   CSV Location             - ./openshift/${DEPLOY_NAMESPACE}-sizing.csv
+#
+# USAGE:
+#   # Apply sizing for dev namespace
+#   export DEPLOY_NAMESPACE="e66ac2-dev"
+#   ./openshift/scripts/right-sizing.sh
+#
+#   # Apply sizing for prod namespace
+#   export DEPLOY_NAMESPACE="950003-prod"
+#   ./openshift/scripts/right-sizing.sh
+#
+# CSV FILES:
+#   - Dev:  ./openshift/e66ac2-dev-sizing.csv
+#   - Test: ./openshift/950003-test-sizing.csv
+#   - Prod: ./openshift/950003-prod-sizing.csv
+#
+# RELATED DOCS:
+#   - SharePoint source (manual export):
+#     "OpenShift Cluster Right-Sizing" spreadsheet
+#   - Future: Direct Microsoft Graph API integration
+#==============================================================================
 
 echo "Right-sizing cluster..."
-
-# Read the CSV file line by line and set deployment resources
-# The file is chosen using the DEPLOY_NAMESPACE environment variable (+ '-sizing.csv')
-# Ensure that there is a CSV file for each namespace
-# This is to allow the correct resources to be set for each deployment
-# Example: ./openshift/e66ac2-dev-sizing.csv
-## Hope to replace this with a direct call to the Microsoft Graph API in the future
-## If we can get permissions sorted out for a service account
-# For now, the CSV file is generated manually by exporting the "Export" tabs from the
-# "OpenShift Cluster Right-Sizing" sheet:
-# https://bcgov-my.sharepoint.com/:x:/r/personal/warren_christian_gov_bc_ca/_layouts/15/Doc.aspx?sourcedoc=%7BC236A074-8A5C-4B2F-AE7C-9F2F393AF8CE%7D&file=OpenShift%20Cluster%20Right-Sizing.xlsx&action=default&mobileredirect=true
-# You can always just edit/copy the CSV files and adjust manually
-# Read the CSV file line by line and set deployment resources
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh

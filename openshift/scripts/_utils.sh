@@ -1,15 +1,70 @@
 #!/bin/bash
+#==============================================================================
+# _utils.sh
+#==============================================================================
+# PURPOSE:
+#   Main entry point for modular utility system. Loads and initializes all
+#   utility modules, providing centralized access to deployment functions
+#   across all OpenShift scripts.
+#
+# MODULAR ARCHITECTURE:
+#   Core design separates concerns into focused, testable modules:
+#
+#   utils/openshift.sh   - Core OpenShift operations
+#                          (create/update/delete resources, ConfigMaps, secrets,
+#                           maintenance mode, scaling, logging functions)
+#
+#   utils/redis.sh       - Redis-specific operations
+#                          (services, proxy, Sentinel configuration, health checks)
+#
+#   utils/database.sh    - Galera/MariaDB operations
+#                          (cluster health checks, auto-healing, replication status,
+#                           split-brain detection and recovery)
+#
+#   utils/moodle.sh      - Moodle-specific operations
+#                          (course management, cache operations, content cleanup,
+#                           CLI tool wrappers)
+#
+# CONFIGMAP COMPATIBILITY:
+#   Supports both directory structure (utils/) and flat structure (all files
+#   in same directory). This enables seamless operation whether sourced from
+#   local filesystem or mounted as ConfigMap in OpenShift pods.
+#
+# INITIALIZATION:
+#   1. Loads openshift.sh first (provides logging functions)
+#   2. Loads remaining modules (redis, database, moodle)
+#   3. Falls back to legacy inline mode if modules missing
+#   4. Exports initialize_utility_arrays() for ConfigMap file tracking
+#
+# BACKWARD COMPATIBILITY:
+#   - Maintains legacy global variables (timestamp_file, etc.)
+#   - Provides fallback logging functions if modules missing
+#   - Supports both sourcing methods: source _utils.sh or source ./utils/*.sh
+#
+# CONFIGURATION:
+#   DEBUG_LEVEL                  - INFO/DEBUG (default: INFO)
+#   CLUSTER_HEALTH_MONITORING    - YES/NO (default: YES)
+#
+# USAGE:
+#   # Standard usage in deployment scripts
+#   source ./openshift/scripts/_utils.sh
+#   initialize_utility_arrays  # For ConfigMap operations
+#
+#   # Use any function from modules
+#   create_or_update_configmap "my-config" "./config/file.conf"
+#   check_galera_cluster_health
+#   manage_maintenance_mode "enable" "maintenance-message"
+#
+# RELATED DOCS:
+#   - Module Details: ./utils/README.md
+#   - OpenShift Utils: ./utils/openshift.sh
+#   - Database Utils: ./utils/database.sh
+#   - Redis Utils: ./utils/redis.sh
+#   - Moodle Utils: ./utils/moodle.sh
+#==============================================================================
 
 # =============================================================================
 # MODULAR UTILITY LOADER - OPENSHIFT SCRIPTS
-# =============================================================================
-# This file serves as the main entry point for the deployment utilities.
-#
-# Module Structure:
-# - utils/openshift.sh: Core OpenShift operations (resource management, maintenance, secrets)
-# - utils/redis.sh: Redis-specific operations (services, proxy, scaling)
-# - utils/database.sh: Galera/MariaDB operations (health checks, auto-healing)
-# - utils/moodle.sh: Moodle-specific operations (courses, cache, content)
 # =============================================================================
 
 # Get the directory where this script is located

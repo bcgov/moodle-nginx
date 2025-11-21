@@ -1,6 +1,59 @@
 #!/bin/bash
-# Comprehensive security scanning with environment-aware configuration
-# Configuration read from GitHub Actions workflow env (in .github/workflows/build.yml)
+#==============================================================================
+# comprehensive-security-scan.sh
+#==============================================================================
+# PURPOSE:
+#   Orchestrates comprehensive security scanning across multiple dimensions:
+#   PHP dependencies, container images (Trivy), and code quality. Provides
+#   environment-aware configuration for CI/CD and local development.
+#
+# SCAN LEVELS:
+#   OFF     - Skip all security scanning
+#   BASIC   - PHP security audit only (composer audit)
+#   MEDIUM  - BASIC + PHP compatibility checks
+#   FULL    - MEDIUM + container image scanning (Trivy)
+#
+# EXIT ON SEVERITY:
+#   CRITICAL - Exit only on critical vulnerabilities
+#   HIGH     - Exit on high or critical (default)
+#   MEDIUM   - Exit on medium, high, or critical
+#   LOW      - Exit on any vulnerability
+#   NEVER    - Always succeed (report only)
+#
+# CONFIGURATION:
+#   SECURITY_SCAN_ENABLED    - YES/NO (default: YES)
+#   SECURITY_SCAN_LEVEL      - OFF/BASIC/MEDIUM/FULL (default: BASIC)
+#   SECURITY_SCAN_EXIT_ON    - CRITICAL/HIGH/MEDIUM/LOW/NEVER (default: HIGH)
+#   SECURITY_SCAN_CONTAINERS - YES/NO scan container images (default: NO)
+#   SECURITY_SCAN_CACHE      - YES/NO use vulnerability cache (default: YES)
+#
+# ARCHITECTURE:
+#   1. Read configuration from environment (set in build.yml)
+#   2. Call validate-php-security.sh for Composer audit
+#   3. Call validate-php-compatibility.sh for version checks
+#   4. Run Trivy container scanning if FULL level
+#   5. Aggregate results and determine exit code based on EXIT_ON setting
+#
+# USAGE:
+#   # Run with defaults (BASIC level, exit on HIGH)
+#   ./openshift/scripts/comprehensive-security-scan.sh
+#
+#   # Run FULL scan with container images
+#   export SECURITY_SCAN_LEVEL=FULL
+#   export SECURITY_SCAN_CONTAINERS=YES
+#   ./openshift/scripts/comprehensive-security-scan.sh
+#
+# CI/CD INTEGRATION:
+#   Called by: .github/workflows/build.yml (scan job)
+#   Configuration: Environment variables set in workflow
+#   Artifacts: All security reports uploaded to GitHub Actions
+#
+# RELATED DOCS:
+#   - PHP Security: ./validate-php-security.sh
+#   - PHP Compatibility: ./validate-php-compatibility.sh
+#   - Security Utilities: ./utils/security.sh
+#   - CI/CD: ../../.github/workflows/build.yml
+#==============================================================================
 
 set -euo pipefail
 

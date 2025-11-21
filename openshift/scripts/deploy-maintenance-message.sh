@@ -1,4 +1,53 @@
 #!/bin/bash
+#==============================================================================
+# deploy-maintenance-message.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy standalone maintenance message page during extended outages or
+#   major upgrades. Replaces main application with lightweight NGINX serving
+#   static HTML maintenance page.
+#
+# USE CASES:
+#   - Extended maintenance windows (> 30 minutes)
+#   - Major version upgrades requiring extensive downtime
+#   - Infrastructure changes affecting multiple services
+#   - Planned outages requiring user notification
+#
+# ARCHITECTURE:
+#   - Deploys dedicated NGINX deployment (maintenance-message)
+#   - Serves static HTML from ConfigMap (maintenance-page)
+#   - Uses minimal resources (no PHP, no database)
+#   - Routes traffic via existing moodle-web route
+#
+# DEPLOYMENT FLOW:
+#   1. Create ConfigMaps (maintenance-page, maintenance-config)
+#   2. Scale down existing deployment if present
+#   3. Delete old deployment and service
+#   4. Deploy maintenance.yml template
+#   5. Wait for rollout completion
+#
+# CONFIGURATION:
+#   BUILD_NAME               - Deployment name (default: maintenance-message)
+#   DEPLOY_NAMESPACE         - Target namespace
+#   WEB_IMAGE                - NGINX image to use
+#   ARTIFACTORY_PULL_SECRET  - Image pull secret
+#
+# USAGE:
+#   # Deploy maintenance page
+#   export BUILD_NAME="maintenance-message"
+#   export WEB_IMAGE="nginx:alpine"
+#   ./openshift/scripts/deploy-maintenance-message.sh
+#
+#   # Remove maintenance page (restore application)
+#   oc delete deployment/maintenance-message
+#   oc delete svc/maintenance-message
+#   # Then deploy main application
+#
+# RELATED DOCS:
+#   - Template: ../maintenance.yml
+#   - HTML: ../../config/maintenance/index.html
+#   - NGINX Config: ../../config/nginx/maintenance.conf
+#==============================================================================
 
 DEPLOYMENT_SELECTOR="deployment/$BUILD_NAME"
 ROUTE_NAME="moodle-web"
