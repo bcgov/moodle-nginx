@@ -135,7 +135,9 @@ jobs:
       - name: 📤 Checkout Target Branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
+          # For pull requests, checkout the PR merge commit (github.sha)
+          # For push events, checkout the pushed branch (github.ref)
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # 🔧 Install Trivy (lightweight, fast install - caching not needed)
       - name: �️ Install Trivy
