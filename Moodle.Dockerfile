@@ -15,7 +15,7 @@ ENV GIT_SSL_NO_VERIFY=0
 # Version control for Moodle and plugins
 ARG MOODLE_URL="https://github.com/moodle/moodle"
 ARG MOODLE_BRANCH_VERSION=MOODLE_401_STABLE
-ARG PSAELMSYNC_URL="https://github.com/bcgov/psaelmsync"
+ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
@@ -26,7 +26,7 @@ ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
 ARG COURSESEARCH_BRANCH_VERSION=main
 ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
 
-ARG THEME_URL="https://github.com/bcgov/bcgovpsa-moodle"
+ARG THEME_URL="https://github.com/PSA-Corporate-Learning-Branch/bcgovpsa-moodle"
 ARG THEME_BRANCH_VERSION=main
 ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
 ARG HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
