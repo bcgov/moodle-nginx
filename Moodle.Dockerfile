@@ -28,7 +28,6 @@ ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
 ARG COURSESEARCH_BRANCH_VERSION=main
 ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
 
-# note: adding this as a test.
 ARG GITHUBSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/moodle-local_githubsync/"
 ARG GITHUBSYNC_BRANCH_VERSION=main
 ENV GITHUBSYNC_DIR=$MOODLE_APP_DIR/local/githubsync
