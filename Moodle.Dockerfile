@@ -16,6 +16,7 @@ ENV GIT_SSL_NO_VERIFY=1
 ARG MOODLE_URL="https://github.com/moodle/moodle"
 ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
+# ELM enrolment bridge sync
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
