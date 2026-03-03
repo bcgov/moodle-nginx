@@ -16,8 +16,9 @@ ENV GIT_SSL_NO_VERIFY=1
 ARG MOODLE_URL="https://github.com/moodle/moodle"
 ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
+# The "bridge" plugin that processes enrolment from ELM and sends it back too.
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
-ARG PSAELMSYNC_BRANCH_VERSION=main
+ARG PSAELMSYNC_BRANCH_VERSION=production
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
 ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
