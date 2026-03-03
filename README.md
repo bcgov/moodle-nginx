@@ -50,3 +50,5 @@ Deployment to OpenShift is handled using GitHub Actions. The workflow is defined
 ### Note: Act must be installed locally, or run in a container
 
 act -s GITHUB_TOKEN="$(gh auth token)" --env-file example.env --secret-file example.secrets -W './.github/workflows/build-push-php-image.yml'
+
+I'm mostly putting this here to kick off a redeployment to pull in new plugin code. I was going to try to fix the issue we have where our MariaDB cluster replicants are only getting 6gb PVC size applied but chickened out. I'm pretty sure the fix it [is this line of code in the openshift/mariadb.yml file](https://github.com/bcgov/moodle-nginx/blob/cc95f86b138c4e5bdf7a0cbf2655900a1cdd43c0/openshift/mariadb.yml#L17). But I'll get a consult on that before actually changing that value here.
