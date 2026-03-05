@@ -105,6 +105,9 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 # Add favicon
 COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
+# Cache-bust: changing this value forces Docker to re-clone all plugins below
+ARG PLUGIN_CACHE_BUST=0
+
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN mkdir -p $PCURATOR_DIR
 RUN mkdir -p $COURSESEARCH_DIR
