@@ -18,14 +18,14 @@ ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
 # ELM enrolment bridge sync
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
-ARG PSAELMSYNC_BRANCH_VERSION=main
+ARG PSAELMSYNC_BRANCH_VERSION=production
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
 ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
 ARG PCURATOR_BRANCH_VERSION=main
 ENV PCURATOR_DIR=$MOODLE_APP_DIR/mod/pathcurator
 
-ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
+ARG COURSESEARCH_URL="https://github.com/PSA-Corporate-Learning-Branch/moodle-course-search/"
 ARG COURSESEARCH_BRANCH_VERSION=main
 ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
 
@@ -107,6 +107,7 @@ COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
 # Cache-bust: changing this value forces Docker to re-clone all plugins below
 ARG PLUGIN_CACHE_BUST=0
+RUN echo "Plugin cache bust: $PLUGIN_CACHE_BUST"
 
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN mkdir -p $PCURATOR_DIR
