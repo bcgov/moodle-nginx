@@ -18,7 +18,8 @@ ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
 # ELM enrolment bridge sync
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
-ARG PSAELMSYNC_BRANCH_VERSION=production
+# "production" is the branch we deploy to production, "main" is the branch we do development work in
+ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
 ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
