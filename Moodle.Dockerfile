@@ -110,6 +110,10 @@ RUN mkdir -p $COURSESEARCH_DIR
 RUN mkdir -p $GITHUBSYNC_DIR
 RUN mkdir -p $THEME_DIR
 
+# Cache-bust: changing this value forces Docker to re-clone all plugins below
+ARG PLUGIN_CACHE_BUST=0
+RUN echo "Plugin cache bust: $PLUGIN_CACHE_BUST"
+
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $PCURATOR_BRANCH_VERSION --single-branch $PCURATOR_URL $PCURATOR_DIR && \
