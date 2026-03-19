@@ -78,6 +78,10 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
 
 RUN echo "Building to directory: $MOODLE_APP_DIR"
 
+# Cache-bust: changing this value forces Docker to re-clone Moodle core below
+ARG MOODLE_CACHE_BUST=0
+RUN echo "Moodle cache bust: $MOODLE_CACHE_BUST"
+
 RUN mkdir -p $MOODLE_APP_DIR
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
@@ -107,7 +111,15 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     git clone --recurse-submodules --jobs 8 --branch $PCURATOR_BRANCH_VERSION --single-branch $PCURATOR_URL $PCURATOR_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $COURSESEARCH_BRANCH_VERSION --single-branch $COURSESEARCH_URL $COURSESEARCH_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
-    git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
+  git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR && \
+  echo "PSAELMSYNC commit: $(git -C $PSAELMSYNC_DIR rev-parse HEAD)" && \
+  echo "PSAELMSYNC version.php: $(grep -E 'version|release' $PSAELMSYNC_DIR/version.php)" && \
+  echo "THEME commit: $(git -C $THEME_DIR rev-parse HEAD)" && \
+  echo "PCURATOR commit: $(git -C $PCURATOR_DIR rev-parse HEAD)" && \
+  echo "COURSESEARCH commit: $(git -C $COURSESEARCH_DIR rev-parse HEAD)" && \
+  echo "GITHUBSYNC commit: $(git -C $GITHUBSYNC_DIR rev-parse HEAD)" && \
+  echo "HVP commit: $(git -C $HVP_DIR rev-parse HEAD)" && \
+  echo "REPORT_ALL_BACKUPS commit: $(git -C $REPORT_ALL_BACKUPS_DIR rev-parse HEAD)"
 
 # Install Composer (if not already present)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \

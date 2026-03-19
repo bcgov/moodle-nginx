@@ -41,8 +41,12 @@ env:
   FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
 
 on:
+  # Runs every Saturday at 03:00 UTC — picks up the latest Moodle patches,
+  # external plugin updates, and base OS/PHP security updates automatically.
+  # Edit the cron expression or remove this block to disable scheduled builds.
   schedule:
     - cron: "0 3 * * 6"
+
   push:
     branches:
       - 950003-dev
@@ -53,6 +57,28 @@ on:
       - 950003-dev
       - 950003-test
       - 950003-prod
+
+  # Manual trigger: use this to force a full rebuild and redeploy without
+  # requiring a code change. Useful when external repos (plugins, base images)
+  # have been updated and you want to pull the latest versions into the image.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual rebuild (logged for audit purposes)'
+        required: false
+        default: 'Manual rebuild to refresh external dependencies'
+      skip_deploy:
+        description: 'Build images only, skip OpenShift deployment (YES/NO)'
+        type: choice
+        options:
+          - 'NO'
+          - 'YES'
+        required: false
+        default: 'NO'
+      confirm_production:
+        description: 'For 950003-prod only, type PROD to confirm maintenance window and downtime'
+        required: false
+        default: ''
 
   workflow_call:
     secrets:
@@ -126,7 +152,7 @@ jobs:
       BACKUP_HELM_CHART: ${{ env.BACKUP_HELM_CHART }}
       CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
       SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
-      SKIP_DEPLOY: ${{ env.SKIP_DEPLOY }}
+      SKIP_DEPLOY: ${{ inputs.skip_deploy || env.SKIP_DEPLOY }}
       SECURITY_STATUS: ${{ steps.security-scan.outputs.SECURITY_STATUS }}
       SECURITY_RESULT: ${{ steps.security-scan.outputs.SECURITY_RESULT }}
       SECURITY_SUMMARY: ${{ steps.security-scan.outputs.SECURITY_SUMMARY }}
@@ -343,6 +369,36 @@ jobs:
             tmp/php-compatibility-report.json
             tmp/php-compatibility-summary.md
           retention-days: 30
+
+      - name: Log manual trigger reason
+        if: github.event_name == 'workflow_dispatch'
+        run: 'echo "Manual rebuild triggered by ${{ github.actor }}: ${{ inputs.reason }}"'
+
+      - name: Validate manual dispatch target branch and production confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "${{ github.ref_name }}" in
+            950003-dev|950003-test|950003-prod)
+              echo "Manual dispatch target branch is valid: ${{ github.ref_name }}"
+              ;;
+            *)
+              echo "Invalid branch for deployment workflow_dispatch: ${{ github.ref_name }}"
+              echo "Use one of: 950003-dev, 950003-test, 950003-prod"
+              exit 1
+              ;;
+          esac
+
+          if [ "${{ github.ref_name }}" = "950003-prod" ] && [ "${{ inputs.confirm_production }}" != "PROD" ]; then
+            echo "Production deployment confirmation missing."
+            echo "Set workflow_dispatch input confirm_production=PROD to continue."
+            exit 1
+          fi
+
+      - name: Display deployment notice
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_deploy != 'YES'
+        run: |
+          echo "NOTICE: This deployment can take approximately 30 minutes."
+          echo "NOTICE: Moodle will be placed into maintenance mode during the deployment window."
 
       - name: Setup Env Vars
         id: dotenv
