@@ -107,6 +107,28 @@ on:
         required: false
         default: ''
 
+  # Manual trigger: use this to force a full rebuild and redeploy without
+  # requiring a code change. Useful when external repos (plugins, base images)
+  # have been updated and you want to pull the latest versions into the image.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual rebuild (logged for audit purposes)'
+        required: false
+        default: 'Manual rebuild to refresh external dependencies'
+      skip_deploy:
+        description: 'Build images only, skip OpenShift deployment (YES/NO)'
+        type: choice
+        options:
+          - 'NO'
+          - 'YES'
+        required: false
+        default: 'NO'
+      confirm_production:
+        description: 'For 950003-prod only, type PROD to confirm maintenance window and downtime'
+        required: false
+        default: ''
+
   workflow_call:
     secrets:
       DB_NAME:
@@ -399,7 +421,7 @@ jobs:
 
       - name: Log manual trigger reason
         if: github.event_name == 'workflow_dispatch'
-        run: echo "Manual rebuild triggered by ${{ github.actor }}: ${{ inputs.reason }}"
+        run: 'echo "Manual rebuild triggered by ${{ github.actor }}: ${{ inputs.reason }}"'
 
       - name: Validate manual dispatch target branch and production confirmation
         if: github.event_name == 'workflow_dispatch'
