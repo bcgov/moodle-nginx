@@ -138,7 +138,7 @@ jobs:
 
       - name: Log manual trigger reason
         if: github.event_name == 'workflow_dispatch'
-        run: echo "Manual rebuild triggered by ${{ github.actor }}: ${{ inputs.reason }}"
+        run: echo "Manual rebuild triggered by ${{ github.actor }} > ${{ inputs.reason }}"
 
       - name: Validate manual dispatch target branch and production confirmation
         if: github.event_name == 'workflow_dispatch'
