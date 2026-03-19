@@ -141,6 +141,8 @@ jobs:
             --build-arg PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }} \
             --build-arg REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }} \
             --build-arg REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }} \
+            --build-arg MOODLE_CACHE_BUST=${{ github.run_id }} \
+            --build-arg PLUGIN_CACHE_BUST=${{ github.run_id }} \
             --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
             --output=type=docker \
@@ -151,7 +153,7 @@ jobs:
       - name: 🔒 Security Scan Built Image
         run: |
           source openshift/scripts/utils/docker-security.sh
-          
+
           # Determine severity level from SECURITY_SCAN_LEVEL (inherited from build.yml env)
           SEVERITY="CRITICAL,HIGH"
           if [ "${{ env.SECURITY_SCAN_LEVEL }}" = "FULL" ]; then
@@ -161,7 +163,7 @@ jobs:
           elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "MINIMAL" ]; then
             SEVERITY="CRITICAL"
           fi
-          
+
           # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
           EXIT_ON_CRITICAL="false"
           if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ]; then
@@ -173,12 +175,12 @@ jobs:
           elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
             EXIT_ON_CRITICAL="true"
           fi
-          
+
           echo "🔒 Moodle Image Security Scan Configuration:"
           echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
           echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
           echo ""
-          
+
           # Scan the built image (now available locally)
           scan_built_image_for_github_actions \
             "${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}" \

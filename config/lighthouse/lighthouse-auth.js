@@ -65,11 +65,40 @@ async function getDynamicPaths(page, baseUrl, maxPages = 5) {
   // 1. Go to "my/courses.php"
   await retryNavigation(page, `${baseUrl}/my/courses.php`);
 
+  // Wait for course cards/list to render. Moodle themes vary in markup and can
+  // load sections after initial navigation settles.
+  await page.waitForSelector('body', { timeout: 30000 });
+  await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelectorAll('a[href*="/course/view.php?id="]').length > 0 ||
+        document.body.innerText.includes('No courses') ||
+        document.body.innerText.includes('No courses found'),
+      { timeout: 20000 }
+    )
+    .catch(() => null);
+
   // 2. Find the first course link
-  const courseLinks = await page.$$eval('.course-info-container a', links =>
-    links.map(a => a.getAttribute('href')).filter(Boolean)
-  );
-  if (courseLinks.length === 0) throw new Error('No courses found for user.');
+  const courseLinks = await page.evaluate(() => {
+    const selectors = [
+      '.course-info-container a[href*="/course/view.php?id="]',
+      '.coursename a[href*="/course/view.php?id="]',
+      '.coursebox a[href*="/course/view.php?id="]',
+      'a.aalink.coursename[href*="/course/view.php?id="]',
+      'a[href*="/course/view.php?id="]'
+    ];
+    const hrefs = selectors
+      .flatMap(selector => Array.from(document.querySelectorAll(selector)))
+      .map(a => a.getAttribute('href'))
+      .filter(Boolean);
+
+    return Array.from(new Set(hrefs));
+  });
+  if (courseLinks.length === 0) {
+    const pageText = await page.evaluate(() => document.body.innerText.slice(0, 600));
+    throw new Error(`No courses found for user. Debug page text: ${pageText}`);
+  }
 
   // Use the first course
   const courseUrl = courseLinks[0].startsWith('http') ? courseLinks[0] : baseUrl + courseLinks[0];
