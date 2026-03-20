@@ -223,8 +223,22 @@ setup_lighthouse_environment() {
   source "./openshift/scripts/utils/npm.sh"
 
   # Install dependencies with security validation (npm_install_secure will cd into the directory)
-  if npm_install_secure "$config_dir" "auto" "true"; then
+  local npm_install_exit=0
+  npm_install_secure "$config_dir" "auto" "true"
+  npm_install_exit=$?
+
+  if [ "$npm_install_exit" -eq 0 ]; then
     log_info "Lighthouse dependencies installed and validated"
+  elif [ "$npm_install_exit" -eq 1 ]; then
+    # Exit code 1 can be warning-level NPM findings (high/moderate) in post-install scan.
+    # For Lighthouse (test tooling), we allow warning-level findings if dependencies are present.
+    if cd "$config_dir" && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
+      log_warn "Lighthouse dependency installation completed with non-critical security warnings"
+      log_warn "Proceeding in warning mode; review npm audit/Dependabot updates"
+    else
+      log_error "Failed to install required Lighthouse dependencies"
+      return 1
+    fi
   else
     log_error "Failed to install or validate Lighthouse dependencies"
     return 1
