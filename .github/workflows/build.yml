@@ -253,14 +253,42 @@ jobs:
           sudo apt-get install -y trivy
           trivy --version
 
-      # 🗄️ Cache Trivy vulnerability database (refreshed daily)
-      - name: 🗄️ Cache Trivy Database
-        uses: actions/cache@v4
+      # 🗄️ Restore Trivy cache using stable branch prefix
+      - name: 🗄️ Restore Trivy Database Cache
+        id: trivy-cache-restore-checkenv
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
           restore-keys: |
+            ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-
             ${{ runner.os }}-trivy-db-
+
+      - name: 🔄 Refresh Trivy DB and derive cache key
+        id: trivy-db-meta-checkenv
+        run: |
+          trivy image --download-db-only --no-progress
+
+          TRIVY_VERSION=$(trivy --version | awk '/Version:/ {print $2}' | head -n 1)
+          DB_UPDATED_AT=$(grep -oE '"UpdatedAt"\s*:\s*"[^"]+"' ~/.cache/trivy/db/metadata.json | sed -E 's/.*"([^"]+)"/\1/' | cut -d'T' -f1)
+
+          if [ -z "$TRIVY_VERSION" ]; then
+            TRIVY_VERSION="unknown"
+          fi
+
+          if [ -z "$DB_UPDATED_AT" ]; then
+            DB_UPDATED_AT=$(date -u +%Y-%m-%d)
+          fi
+
+          echo "trivy_version=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "db_updated_at=$DB_UPDATED_AT" >> "$GITHUB_OUTPUT"
+          echo "Resolved Trivy cache key suffix: v$TRIVY_VERSION-db$DB_UPDATED_AT"
+
+      - name: 💾 Save Trivy Database Cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-checkenv.outputs.trivy_version }}-db${{ steps.trivy-db-meta-checkenv.outputs.db_updated_at }}
 
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -663,14 +691,42 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      # 🗄️ Cache Trivy vulnerability database (refreshed daily)
-      - name: 🗄️ Cache Trivy Database
-        uses: actions/cache@v4
+      # 🗄️ Restore Trivy cache using stable branch prefix
+      - name: 🗄️ Restore Trivy Database Cache
+        id: trivy-cache-restore-lighthouse
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
           restore-keys: |
+            ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-
             ${{ runner.os }}-trivy-db-
+
+      - name: 🔄 Refresh Trivy DB and derive cache key
+        id: trivy-db-meta-lighthouse
+        run: |
+          trivy image --download-db-only --no-progress
+
+          TRIVY_VERSION=$(trivy --version | awk '/Version:/ {print $2}' | head -n 1)
+          DB_UPDATED_AT=$(grep -oE '"UpdatedAt"\s*:\s*"[^"]+"' ~/.cache/trivy/db/metadata.json | sed -E 's/.*"([^"]+)"/\1/' | cut -d'T' -f1)
+
+          if [ -z "$TRIVY_VERSION" ]; then
+            TRIVY_VERSION="unknown"
+          fi
+
+          if [ -z "$DB_UPDATED_AT" ]; then
+            DB_UPDATED_AT=$(date -u +%Y-%m-%d)
+          fi
+
+          echo "trivy_version=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "db_updated_at=$DB_UPDATED_AT" >> "$GITHUB_OUTPUT"
+          echo "Resolved Trivy cache key suffix: v$TRIVY_VERSION-db$DB_UPDATED_AT"
+
+      - name: 💾 Save Trivy Database Cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-lighthouse.outputs.trivy_version }}-db${{ steps.trivy-db-meta-lighthouse.outputs.db_updated_at }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
