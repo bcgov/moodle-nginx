@@ -128,6 +128,9 @@ on:
       BACKUP_IMAGE:
         required: true
         type: string
+      TARGET_GITHUB_ENVIRONMENT:
+        required: true
+        type: string
       MONITOR_IMAGE:
         required: true
         type: string
@@ -143,6 +146,7 @@ jobs:
   deploy:
     name: OpenShift (${{ github.ref_name }})
     runs-on: ubuntu-22.04
+    environment: ${{ inputs.TARGET_GITHUB_ENVIRONMENT }}
     if: github.event.workflow_run.conclusion != 'failure'
     steps:
       - name: 📤 Checkout Target Branch
