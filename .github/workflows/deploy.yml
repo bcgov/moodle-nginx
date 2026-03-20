@@ -14,9 +14,8 @@ on:
         type: string
         default: "INFO"
       ARTIFACTORY_PULL_SECRET:
-        required: false
+        required: true
         type: string
-        default: "artifactory-m950-learning"
       CLUSTER_HEALTH_MONITORING:
         required: false
         type: string
@@ -127,6 +126,12 @@ on:
         required: true
         type: string
       BACKUP_IMAGE:
+        required: true
+        type: string
+      MONITOR_IMAGE:
+        required: true
+        type: string
+      MONITOR_SERVICE_ACCOUNT:
         required: true
         type: string
 permissions:
@@ -287,6 +292,9 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
+          MONITOR_IMAGE: ${{ inputs.MONITOR_IMAGE }}
+          SERVICE_ACCOUNT: ${{ inputs.MONITOR_SERVICE_ACCOUNT }}
           ROCKETCHAT_WEBHOOK_URL: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           DEPLOYMENT_TYPE: "continuous"
 

@@ -21,15 +21,15 @@ parameters:
   - name: MONITORING_INTERVAL
     description: Interval between health checks in seconds
     value: "60"
-  - name: IMAGE_REGISTRY
-    description: Container image registry
-    value: "image-registry.openshift-image-registry.svc:5000"
-  - name: IMAGE_NAME
-    description: Container image name (should include oc CLI)
-    value: "moodle-cron"
-  - name: IMAGE_TAG
-    description: Container image tag
-    value: "latest"
+  - name: MONITOR_IMAGE
+    description: Full container image reference for the pod health monitor
+    required: true
+  - name: ARTIFACTORY_PULL_SECRET
+    description: Image pull secret used for Artifactory image access
+    required: true
+  - name: SERVICE_ACCOUNT
+    description: Service account used by the monitoring pod
+    required: true
 objects:
   - apiVersion: v1
     kind: Secret
@@ -60,11 +60,14 @@ objects:
           labels:
             app: pod-health-monitor
         spec:
-          serviceAccountName: ${OPENSHIFT_SA_TOKEN_NAME}
+          serviceAccountName: ${SERVICE_ACCOUNT}
+          serviceAccount: ${SERVICE_ACCOUNT}
+          imagePullSecrets:
+          - name: ${ARTIFACTORY_PULL_SECRET}
           containers:
           - name: health-monitor
-            image: ${IMAGE_REGISTRY}/${DEPLOY_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
-            command: ["/bin/bash", "/scripts/monitor-pods.sh"]
+            image: ${MONITOR_IMAGE}
+            command: ["/bin/bash", "/opt/monitor/monitor-pods.sh"]
             resources:
               requests:
                 cpu: 25m
@@ -94,7 +97,7 @@ objects:
             - name: script-volume
               mountPath: /scripts
             - name: monitor-script
-              mountPath: /scripts/monitor-pods.sh
+              mountPath: /opt/monitor/monitor-pods.sh
               subPath: monitor-pods.sh
             - name: migrate-courses
               mountPath: /var/www/html/migrate-courses
