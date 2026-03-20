@@ -53,8 +53,25 @@ SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-}"
 ARTIFACTORY_PULL_SECRET="${ARTIFACTORY_PULL_SECRET:-}"
 
 # Validation
-if [[ -z "$DEPLOY_NAMESPACE" || -z "$OPENSHIFT_SERVER" || -z "$OPENSHIFT_SA_TOKEN_NAME" || -z "$MONITOR_IMAGE" || -z "$SERVICE_ACCOUNT" || -z "$ARTIFACTORY_PULL_SECRET" ]]; then
+required_vars=(
+  "DEPLOY_NAMESPACE"
+  "OPENSHIFT_SERVER"
+  "OPENSHIFT_SA_TOKEN_NAME"
+  "MONITOR_IMAGE"
+  "SERVICE_ACCOUNT"
+  "ARTIFACTORY_PULL_SECRET"
+)
+
+missing_vars=()
+for var_name in "${required_vars[@]}"; do
+  if [[ -z "${!var_name:-}" ]]; then
+    missing_vars+=("$var_name")
+  fi
+done
+
+if [[ ${#missing_vars[@]} -gt 0 ]]; then
   echo "Error: Required environment variables not set"
+  echo "Missing: ${missing_vars[*]}"
   echo "Required: DEPLOY_NAMESPACE, OPENSHIFT_SERVER, OPENSHIFT_SA_TOKEN_NAME, MONITOR_IMAGE, SERVICE_ACCOUNT, ARTIFACTORY_PULL_SECRET"
   exit 1
 fi
