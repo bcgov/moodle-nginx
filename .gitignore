@@ -21,6 +21,9 @@ openshift/dependencies/
 .github/security-tools.json
 config/moodle/git-dependencies.json
 
+# Generated runtime reports
+tmp/
+
 # Internal documentation (do not publish)
 .docs/internal/
 .docs/DOCUMENTATION-REVIEW.md

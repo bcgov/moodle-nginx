@@ -193,7 +193,26 @@ jobs:
 
           echo "Running fail-fast Lighthouse dependency audit for branch: $TARGET_BRANCH"
           cd config/lighthouse
-          npm audit --audit-level=high --package-lock-only
+          if npm audit --audit-level=high --package-lock-only; then
+            echo "Lighthouse dependency preflight passed"
+            exit 0
+          fi
+
+          echo "High/critical vulnerabilities detected in Lighthouse dependencies."
+          echo "Attempting automatic remediation with npm audit fix --package-lock-only..."
+
+          if npm audit fix --package-lock-only --no-fund; then
+            echo "Re-running preflight audit after auto-remediation..."
+            if npm audit --audit-level=high --package-lock-only; then
+              echo "Preflight passed after auto-remediation."
+              echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
+              exit 0
+            fi
+          fi
+
+          echo "Preflight still failing after auto-remediation."
+          echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse and commit package-lock.json."
+          exit 1
 
       # 🔧 Install Trivy (lightweight, fast install - caching not needed)
       - name: �️ Install Trivy

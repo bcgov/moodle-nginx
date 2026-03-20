@@ -8,7 +8,7 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 
 | Script | Purpose | Documentation |
 |--------|---------|---------------|
-| [`check-pod-logs.sh`](./check-pod-logs.sh) | Pod health monitoring with Galera auto-healing | [Architecture](../../docs/galera-monitoring-solution.md) |
+| [`check-pod-logs.sh`](./check-pod-logs.sh) | Pod health monitoring with Galera auto-healing | [Architecture](../../.docs/galera-monitoring-solution.md) |
 | [`monitor-pods.sh`](./monitor-pods.sh) | Continuous monitoring wrapper | See inline header |
 | [`log-aggregator.sh`](./log-aggregator.sh) | Event aggregation and forwarding | See inline header |
 | [`deploy-health-monitor.sh`](./deploy-health-monitor.sh) | Deploy monitoring infrastructure | See inline header |
@@ -18,7 +18,7 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 | Script | Purpose | Documentation |
 |--------|---------|---------------|
 | [`deploy-template.sh`](./deploy-template.sh) | Main deployment orchestration | See inline header |
-| [`deploy-mariadb-galera.sh`](./deploy-mariadb-galera.sh) | MariaDB Galera cluster deployment | [Architecture](../../docs/galera-monitoring-solution.md), [Troubleshooting](../../docs/manual-galera-troubleshooting.md) |
+| [`deploy-mariadb-galera.sh`](./deploy-mariadb-galera.sh) | MariaDB Galera cluster deployment | [Architecture](../../.docs/galera-monitoring-solution.md), [Troubleshooting](../../.docs/manual-galera-troubleshooting.md) |
 | [`deploy-redis-sentinel.sh`](./deploy-redis-sentinel.sh) | Redis Sentinel cluster deployment | See inline header |
 | [`right-sizing.sh`](./right-sizing.sh) | Resource allocation management | See inline header |
 
@@ -37,7 +37,7 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 | Script | Purpose | Documentation |
 |--------|---------|---------------|
 | [`deploy-database-backups.sh`](./deploy-database-backups.sh) | Automated backup deployment (Helm) | See inline header |
-| [`mariadb-prestop.sh`](./mariadb-prestop.sh) | Graceful Galera shutdown hook | [Architecture](../../docs/galera-monitoring-solution.md) |
+| [`mariadb-prestop.sh`](./mariadb-prestop.sh) | Graceful Galera shutdown hook | [Architecture](../../.docs/galera-monitoring-solution.md) |
 
 ### Build & CI/CD
 
@@ -140,8 +140,8 @@ All scripts include comprehensive headers with:
 - Links to related documentation
 
 ### External Documentation
-- **Architecture**: [`docs/galera-monitoring-solution.md`](../../docs/galera-monitoring-solution.md)
-- **Manual Troubleshooting**: [`docs/manual-galera-troubleshooting.md`](../../docs/manual-galera-troubleshooting.md)
+- **Architecture**: [`.docs/galera-monitoring-solution.md`](../../.docs/galera-monitoring-solution.md)
+- **Manual Troubleshooting**: [`.docs/manual-galera-troubleshooting.md`](../../.docs/manual-galera-troubleshooting.md)
 - **Main README**: [Repository root](../../README.md)
 
 ### Template Documentation
@@ -211,7 +211,7 @@ When creating new deployment scripts:
 ### Documentation Guidelines
 
 **DO:**
-- ✅ Use relative paths (`../../docs/...`)
+- ✅ Use relative paths (`../../.docs/...`)
 - ✅ Link for architecture/design decisions
 - ✅ Keep critical config inline
 - ✅ Use section headers for navigation
@@ -248,8 +248,8 @@ When creating new deployment scripts:
 ### Galera Not Auto-Healing
 
 See comprehensive troubleshooting guide:
-- [Manual Galera Troubleshooting](../../docs/manual-galera-troubleshooting.md)
-- [Galera Monitoring Solution](../../docs/galera-monitoring-solution.md)
+- [Manual Galera Troubleshooting](../../.docs/manual-galera-troubleshooting.md)
+- [Galera Monitoring Solution](../../.docs/galera-monitoring-solution.md)
 
 ### Log Aggregation Not Forwarding
 
@@ -275,7 +275,7 @@ See comprehensive troubleshooting guide:
 - **GitHub Actions**: [`.github/workflows/`](../../.github/workflows/)
 - **OpenShift Templates**: [`../`](../)
 - **Configuration Files**: [`../../config/`](../../config/)
-- **Main Documentation**: [`../../docs/`](../../docs/)
+- **Main Documentation**: [`../../.docs/`](../../.docs/)
 
 ## 🤝 Contributing
 
