@@ -131,4 +131,30 @@ jobs:
             echo "🔄 Optimization: All images were updated"
           fi
           echo "=============================================="
-          docker buildx build --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ./Redis.Proxy.Dockerfile .
+
+      # Build Redis Proxy Image
+      - name: 🛠️ Build Redis Proxy Image
+        run: |
+          export BUILDKIT_PROGRESS=plain
+          docker buildx build \
+            --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} \
+            --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} \
+            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }} \
+            --load \
+            -f ./Redis.Proxy.Dockerfile .
+
+      # Push Redis Proxy Image to Artifactory (with retry for transient registry errors)
+      - name: 📤 Push Redis Proxy Image to Artifactory
+        run: |
+          IMAGE="${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }}"
+          for attempt in 1 2 3; do
+            echo "🔄 Push attempt $attempt/3"
+            if docker push "$IMAGE"; then
+              echo "✅ Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "⚠️ Push failed on attempt $attempt"
+            [ "$attempt" -lt 3 ] && echo "⏳ Waiting 15s before retry..." && sleep 15
+          done
+          echo "❌ Push failed after 3 attempts"
+          exit 1

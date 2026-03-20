@@ -93,9 +93,8 @@ jobs:
           fi
           echo "======================================"
 
-      # Build PHP Image and push to Artifactory
-      - name: 🛠️ Build PHP Image and push to Artifactory
-        # run: docker buildx build --cache-from type=local --cache-to type=local,dest=/tmp/.buildx-cache,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+      # Build PHP Image
+      - name: 🛠️ Build PHP Image
         run: |
           export BUILDKIT_PROGRESS=plain
           docker buildx build \
@@ -103,6 +102,21 @@ jobs:
             --cache-to type=gha,scope=php,mode=max \
             --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
             --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
-            --output=type=image,push=true \
-            --push \
+            --load \
             -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+
+      # Push PHP Image to Artifactory (with retry for transient registry errors)
+      - name: 📤 Push PHP Image to Artifactory
+        run: |
+          IMAGE="${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }}"
+          for attempt in 1 2 3; do
+            echo "🔄 Push attempt $attempt/3"
+            if docker push "$IMAGE"; then
+              echo "✅ Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "⚠️ Push failed on attempt $attempt"
+            [ "$attempt" -lt 3 ] && echo "⏳ Waiting 15s before retry..." && sleep 15
+          done
+          echo "❌ Push failed after 3 attempts"
+          exit 1
