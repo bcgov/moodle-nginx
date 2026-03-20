@@ -165,6 +165,36 @@ jobs:
           # For push events, checkout the pushed branch (github.ref)
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Setup Node.js for Lighthouse preflight
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'npm'
+          cache-dependency-path: 'config/lighthouse/package-lock.json'
+
+      - name: Fail-fast Lighthouse dependency audit (dev/test/prod)
+        run: |
+          TARGET_BRANCH="${{ github.base_ref || github.ref_name }}"
+          EVENT_NAME="${{ github.event_name }}"
+
+          if [ "$TARGET_BRANCH" != "950003-dev" ] && [ "$TARGET_BRANCH" != "950003-test" ] && [ "$TARGET_BRANCH" != "950003-prod" ]; then
+            echo "Skipping Lighthouse preflight audit for branch: $TARGET_BRANCH"
+            exit 0
+          fi
+
+          case "$EVENT_NAME" in
+            pull_request|push|schedule|workflow_dispatch)
+              ;;
+            *)
+              echo "Skipping Lighthouse preflight audit for event: $EVENT_NAME"
+              exit 0
+              ;;
+          esac
+
+          echo "Running fail-fast Lighthouse dependency audit for branch: $TARGET_BRANCH"
+          cd config/lighthouse
+          npm audit --audit-level=high --package-lock-only
+
       # 🔧 Install Trivy (lightweight, fast install - caching not needed)
       - name: �️ Install Trivy
         run: |
