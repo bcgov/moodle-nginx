@@ -201,23 +201,29 @@ setup_lighthouse_environment() {
     log_debug "Changed to workspace root: $GITHUB_WORKSPACE"
   fi
 
+  # Resolve to an absolute path so cwd changes do not break subsequent checks
+  local full_config_path="$workspace_root/$config_dir"
+  if [[ "$config_dir" = /* ]]; then
+    full_config_path="$config_dir"
+  fi
+
   # Verify the directory exists before attempting to install
-  if [ ! -d "$config_dir" ]; then
-    log_error "Lighthouse config directory not found: $config_dir"
+  if [ ! -d "$full_config_path" ]; then
+    log_error "Lighthouse config directory not found: $full_config_path"
     log_error "Current directory: $(pwd)"
     log_error "Directory listing: $(ls -la | head -5)"
     return 1
   fi
 
   # Verify package.json exists
-  if [ ! -f "$config_dir/package.json" ]; then
-    log_error "package.json not found in: $config_dir"
-    log_error "Expected file: $config_dir/package.json"
-    log_error "Directory contents: $(ls -la $config_dir/ 2>/dev/null || echo 'directory not accessible')"
+  if [ ! -f "$full_config_path/package.json" ]; then
+    log_error "package.json not found in: $full_config_path"
+    log_error "Expected file: $full_config_path/package.json"
+    log_error "Directory contents: $(ls -la "$full_config_path"/ 2>/dev/null || echo 'directory not accessible')"
     return 1
   fi
 
-  log_debug "Found package.json in $config_dir"
+  log_debug "Found package.json in $full_config_path"
 
   # Source npm utilities from workspace root (don't cd first)
   source "./openshift/scripts/utils/npm.sh"
@@ -232,7 +238,7 @@ setup_lighthouse_environment() {
   elif [ "$npm_install_exit" -eq 1 ]; then
     # Exit code 1 can be warning-level NPM findings (high/moderate) in post-install scan.
     # For Lighthouse (test tooling), we allow warning-level findings if dependencies are present.
-    if cd "$config_dir" && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
+    if cd "$full_config_path" && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
       log_warn "Lighthouse dependency installation completed with non-critical security warnings"
       log_warn "Proceeding in warning mode; review npm audit/Dependabot updates"
     else
@@ -251,8 +257,8 @@ setup_lighthouse_environment() {
   }
 
   # Verify required packages (now cd from workspace root)
-  cd "$config_dir" || {
-    log_error "Failed to change to config directory for verification: $config_dir"
+  cd "$full_config_path" || {
+    log_error "Failed to change to config directory for verification: $full_config_path"
     return 1
   }
 
