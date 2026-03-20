@@ -104,6 +104,7 @@ jobs:
               --cache-to type=gha,scope=php,mode=max \
               --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
               --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+              --provenance=false \
               --output=type=image,push=true \
               --push \
               -f ${{ env.PHP_DOCKER_FILE_PATH }} .
