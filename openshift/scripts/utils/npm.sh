@@ -263,6 +263,20 @@ npm_install_secure() {
   local project_dir="${1:-.}"
   local use_ci="${2:-auto}"
   local security_check="${3:-true}"
+  local auto_fix_mode="${4:-auto}"
+  local auto_fix="false"
+
+  # Auto-remediation policy:
+  # - auto: enabled only in GitHub Actions
+  # - true: always attempt npm audit fix on pre-install critical findings
+  # - false: fail immediately on pre-install critical findings
+  if [ "$auto_fix_mode" = "auto" ]; then
+    if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
+      auto_fix="true"
+    fi
+  elif [ "$auto_fix_mode" = "true" ]; then
+    auto_fix="true"
+  fi
 
   log_info "Installing NPM dependencies with security validation..."
   log_info "Security: NPM Audit + Dependabot protection active"
@@ -278,9 +292,35 @@ npm_install_secure() {
       # Pass "." since we've already changed to project_dir
       npm_audit_scan "." "high" "PREINSTALL_RESULT"
       if [ $? -eq 2 ]; then
-        log_error "Pre-install security check failed!"
-        log_error "Run 'npm audit fix' or check Dependabot for updates"
-        return 2
+        log_error "Pre-install security check found critical vulnerabilities"
+
+        if [ "$auto_fix" = "true" ]; then
+          log_warn "Attempting automatic remediation: npm audit fix"
+          log_info "This updates lockfile-resolved dependencies when safe (no --force)"
+
+          if npm audit fix --no-fund; then
+            log_info "Automatic remediation completed. Re-running pre-install security validation..."
+
+            npm_audit_scan "." "high" "PREINSTALL_RESULT"
+            if [ $? -eq 2 ]; then
+              log_error "Critical vulnerabilities remain after automatic remediation"
+              log_error "Action required: run 'npm audit fix' locally in $project_dir, review changes, and commit updated lockfile"
+              log_error "If fixes require breaking changes, evaluate dependency updates before using '--force'"
+              return 2
+            fi
+
+            log_info "Pre-install security validation passed after automatic remediation"
+          else
+            log_error "Automatic remediation failed (npm audit fix returned non-zero)"
+            log_error "Action required: run 'npm audit fix' locally in $project_dir and commit updated lockfile"
+            log_error "If unresolved, inspect 'npm audit' output and review Dependabot advisories"
+            return 2
+          fi
+        else
+          log_error "Pre-install security check failed"
+          log_error "Run 'npm audit fix' or check Dependabot for updates"
+          return 2
+        fi
       fi
     fi
   fi
