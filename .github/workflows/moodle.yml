@@ -122,10 +122,11 @@ jobs:
           export BUILDKIT_PROGRESS=plain
 
           # Build image but don't push yet
+          # Cache reads from both registry and GHA (gracefully skips missing caches)
+          # Cache writes to GHA only — registry cache is warmed in a separate non-blocking step
           docker buildx build \
             --cache-from type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache \
             --cache-from type=gha,scope=moodle-${{ github.ref_name }} \
-            --cache-to type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache,mode=max \
             --cache-to type=gha,scope=moodle-${{ github.ref_name }},mode=min \
             --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} \
             --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
@@ -190,3 +191,16 @@ jobs:
         run: |
           echo "Pushing validated image to Artifactory..."
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}
+
+      # Warm registry buildcache separately so a cache push failure never blocks the build
+      - name: 🗄️ Warm Registry Build Cache
+        continue-on-error: true
+        run: |
+          echo "Pushing build cache to Artifactory registry (non-blocking)..."
+          docker buildx build \
+            --cache-from type=gha,scope=moodle-${{ github.ref_name }} \
+            --cache-to type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache,mode=max \
+            --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+            --output=type=cacheonly \
+            -f ${{ env.MOODLE_DOCKER_FILE_PATH }} \
+            . || echo "Warning: Registry build cache push failed — GHA cache is still available for next run"
