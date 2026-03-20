@@ -290,6 +290,8 @@ jobs:
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
 
       - name: Deploy Pod Health Monitor
+        id: deploy_pod_health_monitor
+        continue-on-error: true
         if: success()
         run: bash ./openshift/scripts/deploy-health-monitor.sh
         env:
@@ -301,4 +303,9 @@ jobs:
           SERVICE_ACCOUNT: ${{ inputs.MONITOR_SERVICE_ACCOUNT }}
           ROCKETCHAT_WEBHOOK_URL: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           DEPLOYMENT_TYPE: "continuous"
+
+      - name: Warn if Pod Health Monitor deployment fails
+        if: steps.deploy_pod_health_monitor.outcome == 'failure'
+        run: |
+          echo "Warning: Health monitor deployment failed, continuing with deployment..."
 

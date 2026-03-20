@@ -161,16 +161,6 @@ sleep 10
 # Right-sizing cluster, according to environment
 bash ./openshift/scripts/right-sizing.sh
 
-# Deploy pod health monitoring (replaces old CronJob)
-echo "Deploying continuous pod health monitoring..."
-bash ./openshift/scripts/deploy-health-monitor.sh
-monitor_status=$?
-
-if [[ $monitor_status -ne 0 ]]; then
-  echo "Warning: Health monitor deployment failed, continuing with deployment..."
-  # Don't exit - deployment should continue even if monitoring fails
-fi
-
 sleep 60
 
 # Clear Moodle cache across all PHP pods after successful deployment
