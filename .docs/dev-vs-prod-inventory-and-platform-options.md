@@ -53,6 +53,14 @@ Business value:
 - Better auditability for approvals and compliance
 - Less dependence on manual security reviews
 
+Current workflow behavior snapshot:
+- A fail-fast Lighthouse dependency preflight gate runs in `checkEnv` for `dev`, `test`, and `prod` on PR/push/schedule/manual runs.
+- The gate attempts automatic lockfile-only remediation, then re-audits before deciding pass/fail.
+- The deployment pipeline proceeds only when high/critical Lighthouse dependency issues are resolved or remediated.
+- This reduces late-stage failures and prevents deploying with known vulnerable test-tool dependency states.
+- Deploy concurrency is guarded with cancel-in-progress to prevent overlapping release races on the same ref.
+- Health-check and cluster monitoring controls are part of the deployment path to improve resilience during rollout.
+
 ### 3) Dependency and Version Governance
 
 What it means:
@@ -200,4 +208,5 @@ Examples from dev not in prod include:
 
 - `.github/workflows/build.yml` and related workflows
   - Significant preflight/security/guardrail expansion
+  - Branch-aware fail-fast dependency preflight with remediation and re-validation
 

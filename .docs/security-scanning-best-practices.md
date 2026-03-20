@@ -2,8 +2,8 @@
 
 ## 📋 Executive Summary
 
-**Current State:** Security scans run in multiple places (pre-build, post-deployment) with some redundancy
-**Recommended State:** Shift security left with fail-fast pre-build validation
+**Current State:** Shift-left controls are active in `checkEnv` with pre-build validation and branch-aware preflight dependency gating.
+**Recommended State:** Continue hardening with targeted post-build and observability improvements.
 **Benefits:**
 - ⚡ Faster feedback (don't build if supply chain is compromised)
 - 💰 Cost savings (avoid building vulnerable images)
@@ -238,11 +238,11 @@ jobs:
 ## 🛠️ Implementation Checklist
 
 ### Immediate Actions:
-- [ ] Move Trivy installation to `checkEnv` job (before builds)
-- [ ] Add pre-build security scan function call in `checkEnv`
-- [ ] Configure scan to exit with code 1 on CRITICAL
-- [ ] Add post-build image scans after each Docker build
-- [ ] Remove redundant container scans from `lighthouse-check`
+- [x] Move Trivy installation to `checkEnv` job (before builds)
+- [x] Add pre-build security scan function call in `checkEnv`
+- [x] Configure scan to enforce branch-aware fail-fast behavior
+- [ ] Add explicit post-build image scan assertions after each Docker build
+- [ ] Remove redundant container scans from `lighthouse-check` where applicable
 
 ### Future Enhancements:
 - [ ] Cache Trivy vulnerability database

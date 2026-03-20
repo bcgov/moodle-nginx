@@ -8,9 +8,19 @@ Automated security scanning runs on every build to detect vulnerabilities before
 
 | Branch | Scan Level | Blocks Build On | Duration |
 |--------|------------|-----------------|----------|
-| **950003-dev** | BASIC | Never (warnings only) | ~3 min |
+| **950003-dev** | BASIC | Core scan: warnings only. Preflight: unresolved High/Critical Lighthouse deps | ~3 min + preflight |
 | **950003-test** | FULL | High/Critical issues | ~8 min |
 | **950003-prod** | FULL | Critical issues only | ~8 min |
+
+### Preflight Gate (All Environments)
+
+Before the main security scan, `checkEnv` runs a Lighthouse dependency preflight for `950003-dev`, `950003-test`, and `950003-prod` on `pull_request`, `push`, `schedule`, and `workflow_dispatch`.
+
+- Runs `npm audit --audit-level=high --package-lock-only`
+- Attempts auto-remediation with `npm audit fix --package-lock-only --no-fund`
+- Fails the job only if high/critical issues remain after remediation
+
+This protects the pipeline from known vulnerable Lighthouse dependency states before image builds and deployment.
 
 ---
 
@@ -57,6 +67,11 @@ env:
 
 ### 1. Check Build Logs
 Look for `❌ CRITICAL security issues found` in the workflow output.
+
+Also check for preflight messages in `checkEnv`:
+- `Running fail-fast Lighthouse dependency audit`
+- `Attempting automatic remediation`
+- `Preflight still failing after auto-remediation`
 
 ### 2. Review Findings
 Security scan will show:

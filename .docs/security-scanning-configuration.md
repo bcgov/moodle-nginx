@@ -27,6 +27,13 @@ SECURITY_SCAN_CONTAINERS: "NO"        # Include container scanning (expensive)
 SECURITY_SCAN_CACHE: "YES"            # Cache scan databases (faster)
 ```
 
+Additional preflight gate in `checkEnv`:
+
+- Lighthouse dependency audit runs before main scans on `pull_request`, `push`, `schedule`, and `workflow_dispatch`.
+- Target branches: `950003-dev`, `950003-test`, `950003-prod`.
+- Auto-remediation is attempted with `npm audit fix --package-lock-only --no-fund`.
+- Build fails only when high/critical vulnerabilities remain after remediation.
+
 ---
 
 ## Scan Levels
@@ -62,7 +69,7 @@ SECURITY_SCAN_LEVEL: "BASIC"       # Fast, standard checks
 SECURITY_SCAN_EXIT_ON: "WARN"      # Never block builds
 SECURITY_SCAN_CONTAINERS: "NO"     # Skip expensive scans
 ```
-**Result**: ~2-3 min, never fails, developers see warnings
+**Result**: Core security scan is warning-only (~2-3 min). Preflight can still fail on unresolved high/critical Lighthouse dependencies.
 
 ---
 

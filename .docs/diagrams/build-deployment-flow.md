@@ -3,7 +3,7 @@
 ## Complete CI/CD Pipeline Architecture
 
 ```mermaid
-flowchart TD
+graph TD
     Start([🎯 GitHub Push/Schedule]) --> Trigger{Event Type?}
 
     Trigger -->|Push to Branch| Branch[📌 Branch Detection<br/>950003-dev/test/prod]
@@ -86,7 +86,7 @@ flowchart TD
 
     Database --> Cache[💾 Cache Layer<br/>- Redis Sentinel<br/>- 3 replicas<br/>- Failover support<br/>- Proxy tunneling]
 
-    Cache --> App[🎓 Application Layer<br/>- Moodle pods<br/>- PHP-FPM processing<br/>- Session handling<br/>- File storage (PVC)]
+    Cache --> App[🎓 Application Layer<br/>- Moodle pods<br/>- PHP-FPM processing<br/>- Session handling<br/>- PVC file storage]
 
     App --> WebTier[🌐 Web Tier<br/>- Nginx pods<br/>- SSL termination<br/>- Load balancing<br/>- Static content]
 
@@ -112,7 +112,7 @@ flowchart TD
 
     DeploySuccess --> PostDeploy[📊 POST-DEPLOYMENT PHASE]
 
-    PostDeploy --> NPMAudit[🔒 NPM Security Audit<br/>~30 seconds<br/>**BEFORE** Lighthouse<br/>Supply chain protection]
+    PostDeploy --> NPMAudit[🔒 NPM Security Audit<br/>~30 seconds<br/>Before Lighthouse<br/>Supply chain protection]
 
     NPMAudit --> NPMResult{NPM Vulns?}
 
@@ -167,13 +167,13 @@ flowchart TD
 ## Environment-Specific Configuration
 
 ```mermaid
-flowchart LR
+graph LR
     subgraph "🟢 Development (950003-dev)"
         DevConfig["🔧 Configuration<br/>────────────<br/>Security: BASIC + WARN<br/>Scan Time: ~2-3 min<br/>Containers: NO<br/>────────────<br/>Builds: Usually SKIP<br/>Deploy: Fast iteration<br/>Migration: Auto<br/>────────────<br/>Monitoring: Basic"]
 
         DevFlow["📊 Flow<br/>────────────<br/>1. Quick security check<br/>2. Use cached images<br/>3. Deploy immediately<br/>4. Light testing<br/>────────────<br/>Total: ~5-10 min"]
 
-        DevResult["✅ Result<br/>────────────<br/>Speed: ⚡ FAST<br/>Security: ⚠️ WARN only<br/>Testing: 🔍 Minimal<br/>────────────<br/>Best for rapid dev"]
+        DevResult["✅ Result<br/>────────────<br/>Speed: ⚡ FAST<br/>Security: ⚠️ Core scan warn-only<br/>Preflight: may fail unresolved High/Critical<br/>────────────<br/>Best for rapid dev"]
     end
 
     subgraph "🟡 Test (950003-test)"
@@ -253,7 +253,7 @@ gantt
 ## Image Build Architecture
 
 ```mermaid
-flowchart TD
+graph TD
     subgraph "Base Images (External)"
         PHPBase[🐘 php:8.1-fpm<br/>Official PHP]
         NginxBase[🌐 nginx:1.25-alpine<br/>Official Nginx]
@@ -305,7 +305,7 @@ flowchart TD
 ## Security Integration Points
 
 ```mermaid
-flowchart TD
+graph TD
     Start([CI/CD Pipeline Start]) --> P1[🔒 Phase 1: Pre-Build Security<br/>~2-8 min]
 
     P1 --> S1[📋 Security Config Check]

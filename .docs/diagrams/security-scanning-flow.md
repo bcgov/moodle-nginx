@@ -3,7 +3,7 @@
 ## Complete Security Scanning Architecture
 
 ```mermaid
-flowchart TD
+graph TD
     Start([GitHub Action Triggered]) --> CheckEnv[🔍 checkEnv Job]
 
     CheckEnv --> Config[📋 Read Security Config<br/>SCAN_LEVEL, EXIT_ON, etc.]
@@ -98,7 +98,7 @@ flowchart TD
 ## Configuration Impact Flow
 
 ```mermaid
-flowchart LR
+graph LR
     subgraph Environment Variables
         ENABLED[SECURITY_SCAN_ENABLED]
         LEVEL[SECURITY_SCAN_LEVEL]
@@ -109,7 +109,7 @@ flowchart LR
 
     subgraph "Dev Environment"
         DevConfig["LEVEL: BASIC<br/>EXIT: WARN<br/>CONTAINERS: NO"]
-        DevResult["⚡ ~2-3 min<br/>🟢 Never Fails<br/>📊 Reports Only"]
+        DevResult["⚡ ~2-3 min<br/>🟢 Core scan warn-only<br/>⚠️ Preflight may fail unresolved High/Critical"]
     end
 
     subgraph "Test Environment"
@@ -148,7 +148,7 @@ flowchart LR
 ## Security Scanning Decision Tree
 
 ```mermaid
-flowchart TD
+graph TD
     Start([Security Scan Triggered]) --> Q1{Environment?}
 
     Q1 -->|Dev| DevPath[BASIC + WARN + NO Containers]
@@ -239,7 +239,7 @@ sequenceDiagram
 ## Vulnerability Severity Exit Strategy
 
 ```mermaid
-flowchart TD
+graph TD
     Vuln[Vulnerabilities Detected] --> Parse[Parse Severity Counts<br/>Critical, High, Medium, Low]
 
     Parse --> Strategy{EXIT_ON<br/>Strategy?}
