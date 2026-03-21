@@ -93,18 +93,20 @@ jobs:
           fi
           echo "======================================"
 
-      # Build and push PHP Image to Artifactory (with retry)
-      - name: 🛠️ Build and Push PHP Image
+      # Build PHP Image locally, then push separately
+      - name: 🛠️ Build PHP Image
+        run: |
+          export BUILDKIT_PROGRESS=plain
+          docker buildx build \
+            --cache-from type=gha,scope=php \
+            --cache-to type=gha,scope=php,mode=max \
+            --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
+            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
+            --provenance=false \
+            --output=type=docker \
+            -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+
+      - name: 📤 Push PHP Image to Artifactory
         run: |
           source openshift/scripts/utils/docker.sh
-          export BUILDKIT_PROGRESS=plain
-          build_and_push "php:${{ github.ref_name }}" \
-            docker buildx build \
-              --cache-from type=gha,scope=php \
-              --cache-to type=gha,scope=php,mode=max \
-              --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }} \
-              --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
-              --provenance=false \
-              --output=type=image,push=true \
-              --push \
-              -f ${{ env.PHP_DOCKER_FILE_PATH }} .
+          push_to_artifactory "${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }}"
