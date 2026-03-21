@@ -26,6 +26,7 @@ jobs:
             example.env
             example.versions.env
             openshift/scripts
+            Redis.Proxy.Dockerfile
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
@@ -132,19 +133,18 @@ jobs:
           fi
           echo "=============================================="
 
-      # Build Redis Proxy Image locally, then push separately
-      - name: 🛠️ Build Redis Proxy Image
-        run: |
-          export BUILDKIT_PROGRESS=plain
-          docker buildx build \
-            --build-arg GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }} \
-            --build-arg UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }} \
-            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }} \
-            --provenance=false \
-            --output=type=docker \
-            -f ./Redis.Proxy.Dockerfile .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: 📤 Push Redis Proxy Image to Artifactory
-        run: |
-          source openshift/scripts/utils/docker.sh
-          push_to_artifactory "${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }}"
+      # Build and push Redis Proxy Image to Artifactory
+      - name: 🛠️ Build and Push Redis Proxy Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Redis.Proxy.Dockerfile
+          provenance: false
+          outputs: type=image,push=true,oci-mediatypes=false
+          tags: ${{ secrets.ARTIFACTORY_URL }}/${{ env.REDIS_PROXY_NAME }}:${{ github.ref_name }}
+          build-args: |
+            GOLANG_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.GOLANG_IMAGE }}
+            UBUNTU_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.UBUNTU_IMAGE }}

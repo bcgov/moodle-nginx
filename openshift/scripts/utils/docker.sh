@@ -3,6 +3,10 @@
 # Docker Build & Push Utilities
 # Standardized functions for building and pushing Docker images to Artifactory
 #
+# IMPORTANT: All builds MUST use oci-mediatypes=false to produce Docker V2
+# Schema 2 manifests. OCI manifests prevent layer deduplication in Artifactory,
+# wasting storage from the 40GB quota. See: .docs/ci-cd.md
+#
 # Usage:
 #   source openshift/scripts/utils/docker.sh
 #   push_to_artifactory "registry.example.com/my-image:tag"

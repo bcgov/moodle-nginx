@@ -680,3 +680,26 @@ EOF
         log_info "📋 Layer Reuse: $layers_existed existing layers, $layers_pushed new layers pushed"
     fi
 }
+
+# Main execution
+main() {
+    parse_args "$@"
+    check_docker
+
+    # Export variables for sub-functions
+    export SOURCE_IMAGE ARTIFACTORY_URL TIMEOUT RETRY_COUNT FORCE_PUSH QUIET
+
+    if optimize_image_push; then
+        generate_report
+        log_success "🎉 Image optimization completed successfully"
+        exit 0
+    else
+        log_error "❌ Image optimization failed"
+        exit 1
+    fi
+}
+
+# Run if called directly (allows sourcing as library without executing)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
