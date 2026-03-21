@@ -291,9 +291,7 @@ jobs:
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-checkenv.outputs.trivy_version }}-db${{ steps.trivy-db-meta-checkenv.outputs.db_updated_at }}
 
       - name: 🐳 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          driver-opts: image=moby/buildkit:latest
+        uses: docker/setup-buildx-action@v4
 
       # Auto-populate dependency manifests from centralized versions
       - name: 🔄 Auto-populate dependency manifests
@@ -729,9 +727,7 @@ jobs:
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-lighthouse.outputs.trivy_version }}-db${{ steps.trivy-db-meta-lighthouse.outputs.db_updated_at }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          driver-opts: image=moby/buildkit:latest
+        uses: docker/setup-buildx-action@v4
 
       # 🐧 Cache APT packages for Lighthouse dependencies
       - name: 🐧 Cache APT packages

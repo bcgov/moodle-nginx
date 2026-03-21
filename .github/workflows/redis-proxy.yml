@@ -134,7 +134,7 @@ jobs:
           echo "=============================================="
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Build and push Redis Proxy Image to Artifactory
       - name: 🛠️ Build and Push Redis Proxy Image

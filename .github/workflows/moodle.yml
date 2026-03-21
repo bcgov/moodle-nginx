@@ -90,9 +90,8 @@ jobs:
           keys-case: upper
 
       - name: Set up Docker Buildx (container driver)
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
-          install: true
           driver-opts: network=host
           buildkitd-flags: --debug
 
