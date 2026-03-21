@@ -134,9 +134,6 @@ on:
       MONITOR_IMAGE:
         required: true
         type: string
-      MONITOR_SERVICE_ACCOUNT:
-        required: true
-        type: string
 permissions:
   contents: read
   id-token: write
@@ -298,9 +295,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
           OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
-          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
           MONITOR_IMAGE: ${{ inputs.MONITOR_IMAGE }}
-          SERVICE_ACCOUNT: ${{ inputs.MONITOR_SERVICE_ACCOUNT }}
           ROCKETCHAT_WEBHOOK_URL: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
           DEPLOYMENT_TYPE: "continuous"
 

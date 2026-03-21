@@ -24,12 +24,6 @@ parameters:
   - name: MONITOR_IMAGE
     description: Full container image reference for the pod health monitor
     required: true
-  - name: ARTIFACTORY_PULL_SECRET
-    description: Image pull secret used for Artifactory image access
-    required: true
-  - name: SERVICE_ACCOUNT
-    description: Service account used by the monitoring pod
-    required: true
 objects:
   - apiVersion: v1
     kind: Secret
@@ -60,10 +54,6 @@ objects:
           labels:
             app: pod-health-monitor
         spec:
-          serviceAccountName: ${SERVICE_ACCOUNT}
-          serviceAccount: ${SERVICE_ACCOUNT}
-          imagePullSecrets:
-          - name: ${ARTIFACTORY_PULL_SECRET}
           containers:
           - name: health-monitor
             image: ${MONITOR_IMAGE}
@@ -92,6 +82,25 @@ objects:
                 secretKeyRef:
                   name: notification-webhooks
                   key: rocketchat-webhook-url
+                  optional: true
+            # Database credentials for Galera health checks
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: moodle-secrets
+                  key: database-password
+                  optional: true
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: moodle-secrets
+                  key: database-user
+                  optional: true
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: moodle-secrets
+                  key: database-name
                   optional: true
             volumeMounts:
             - name: script-volume

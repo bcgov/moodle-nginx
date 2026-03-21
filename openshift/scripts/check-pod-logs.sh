@@ -182,26 +182,9 @@ for selector in "${!DEPLOYMENTS[@]}"; do
 
   pods_before=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | wc -w)
 
-  # Special handling for mariadb-galera: check cluster health and auto-heal
+  # Special handling for mariadb-galera: already checked above, skip duplicate
   if [[ "$selector" == "app.kubernetes.io/name=mariadb-galera" ]]; then
-    echo "🔍 Checking Galera cluster with selector: $selector"
-    check_and_heal_galera_cluster "$selector" "$DEPLOY_NAMESPACE" 5 true
-    galera_status=$?
-    case $galera_status in
-      0)
-        echo "    ✅ Galera cluster is healthy, proceeding with log checks"
-        ;;
-      2)
-        echo "    🔄 Galera auto-heal completed, counting as restart"
-        # Auto-heal performed, count all pods as 'restarted'
-        total_checked=$((total_checked + pods_before))
-        total_restarted=$((total_restarted + pods_before))
-        continue
-        ;;
-      *)
-        echo "    ⚠️  Galera issues detected but continuing with log checks"
-        ;;
-    esac
+    echo "🔍 Galera cluster: already checked above, running log check only"
   fi
 
   check_and_restart_pod "$selector" "$error_patterns"

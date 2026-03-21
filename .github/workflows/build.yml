@@ -107,7 +107,6 @@ jobs:
       ARTIFACTORY_PULL_SECRET: ${{ env.ARTIFACTORY_PULL_SECRET }}
       TARGET_GITHUB_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.base_ref || github.ref_name }}
       MONITOR_IMAGE: ${{ vars.MONITOR_IMAGE }}
-      MONITOR_SERVICE_ACCOUNT: ${{ vars.MONITOR_SERVICE_ACCOUNT }}
       CLUSTER_HEALTH_MONITORING: ${{ env.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ env.FORCE_MIGRATE }}
       MOODLE_URL: ${{ env.MOODLE_URL }}
@@ -176,17 +175,11 @@ jobs:
       - name: Validate environment-scoped deployment variables
         env:
           MONITOR_IMAGE: ${{ vars.MONITOR_IMAGE }}
-          MONITOR_SERVICE_ACCOUNT: ${{ vars.MONITOR_SERVICE_ACCOUNT }}
         run: |
           echo "Resolved GitHub Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.base_ref || github.ref_name }}"
 
           if [ -z "$MONITOR_IMAGE" ]; then
             echo "Missing required GitHub Environment variable: MONITOR_IMAGE"
-            exit 1
-          fi
-
-          if [ -z "$MONITOR_SERVICE_ACCOUNT" ]; then
-            echo "Missing required GitHub Environment variable: MONITOR_SERVICE_ACCOUNT"
             exit 1
           fi
 
@@ -634,7 +627,6 @@ jobs:
       BACKUP_HELM_CHART: ${{ needs.checkEnv.outputs.BACKUP_HELM_CHART }}
       TARGET_GITHUB_ENVIRONMENT: ${{ needs.checkEnv.outputs.TARGET_GITHUB_ENVIRONMENT }}
       MONITOR_IMAGE: ${{ needs.checkEnv.outputs.MONITOR_IMAGE }}
-      MONITOR_SERVICE_ACCOUNT: ${{ needs.checkEnv.outputs.MONITOR_SERVICE_ACCOUNT }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_NAME: ${{ needs.checkEnv.outputs.CRON_NAME }}
       REDIS_HELM_CHART: ${{ needs.checkEnv.outputs.REDIS_HELM_CHART }}

@@ -134,8 +134,20 @@ while true; do
   # Comprehensive Galera check at longer interval
   if [[ $((current_time - last_galera_check)) -ge $GALERA_CHECK_INTERVAL ]]; then
     echo "$(date): Performing comprehensive Galera health check..."
-    check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" 5 true
-    galera_status=$?
+
+    # Auto-detect expected cluster size from StatefulSet spec
+    local galera_expected_size=""
+    if oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" &> /dev/null; then
+      galera_expected_size=$(oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" -o jsonpath='{.spec.replicas}')
+    fi
+
+    if [[ -n "$galera_expected_size" ]]; then
+      check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" "$galera_expected_size" true
+      galera_status=$?
+    else
+      echo "$(date): No MariaDB Galera StatefulSet found — skipping Galera check"
+      galera_status=0
+    fi
 
     if [[ $galera_status -eq 2 ]]; then
       total_issues=$((total_issues + 5))  # Count as major issue

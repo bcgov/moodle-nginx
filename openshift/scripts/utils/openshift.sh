@@ -266,21 +266,19 @@ get_replicas() {
   fi
 
   # Determine resource type and get current replicas
-  local resource_type=""
   local original_replicas=""
 
   if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="statefulset"
     original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
   elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="deployment"
     original_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
   else
-    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - No Resource" "Could not find StatefulSet or Deployment for selector: $selector (resource: $resource_name)" "error" "$namespace"
+    echo "0"
     return 1
   fi
 
-  return $original_replicas;
+  echo "${original_replicas:-0}"
+  return 0
 }
 
 # Function to check if StatefulSet/Deployment has all replicas available and ready
@@ -1440,15 +1438,26 @@ check_deployment_logs() {
   return 0
 }
 
-# Enhanced logging function for critical events
+# Enhanced logging function for structured events
 log_critical_event() {
   local event_type="$1"
   local message="$2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local severity="${4:-warning}"
   local timestamp=$(date '+%Y-%m-%d %H:%M:%S UTC')
 
+  # Use severity-appropriate label for log aggregation
+  local label="EVENT"
+  case "$severity" in
+    "error"|"failure") label="CRITICAL_EVENT" ;;
+    "warning")         label="WARNING_EVENT" ;;
+    "healing"|"repair") label="HEALING_EVENT" ;;
+    "success")         label="INFO_EVENT" ;;
+    *)                 label="INFO_EVENT" ;;
+  esac
+
   # Log to stdout with structured format for OpenShift log aggregation
-  echo "CRITICAL_EVENT|${timestamp}|${namespace}|${event_type}|${message}"
+  echo "${label}|${timestamp}|${namespace}|${event_type}|${message}"
 
   # Also log to OpenShift events for visibility in cluster
   if command -v oc >/dev/null 2>&1; then
@@ -1523,8 +1532,10 @@ EOF
       -d "$webhook_payload" > /dev/null 2>&1 || true
   fi
 
-  # Always log the critical event for aggregation
-  log_critical_event "$event_type" "$message" "$namespace"
+  # Log events for aggregation (only for actionable severities)
+  if [[ "$severity" =~ ^(error|failure|warning|healing)$ ]]; then
+    log_critical_event "$event_type" "$message" "$namespace" "$severity"
+  fi
 }
 
 # Function to check logs for errors and restart if needed

@@ -49,8 +49,6 @@ OPENSHIFT_SA_TOKEN_NAME="${OPENSHIFT_SA_TOKEN_NAME:-}"
 ROCKETCHAT_WEBHOOK_URL="${ROCKETCHAT_WEBHOOK_URL:-}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:-continuous}"  # "continuous" or "cronjob"
 MONITOR_IMAGE="${MONITOR_IMAGE:-}"
-SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-}"
-ARTIFACTORY_PULL_SECRET="${ARTIFACTORY_PULL_SECRET:-}"
 
 # Validation
 required_vars=(
@@ -58,8 +56,6 @@ required_vars=(
   "OPENSHIFT_SERVER"
   "OPENSHIFT_SA_TOKEN_NAME"
   "MONITOR_IMAGE"
-  "SERVICE_ACCOUNT"
-  "ARTIFACTORY_PULL_SECRET"
 )
 
 missing_vars=()
@@ -72,7 +68,7 @@ done
 if [[ ${#missing_vars[@]} -gt 0 ]]; then
   echo "Error: Required environment variables not set"
   echo "Missing: ${missing_vars[*]}"
-  echo "Required: DEPLOY_NAMESPACE, OPENSHIFT_SERVER, OPENSHIFT_SA_TOKEN_NAME, MONITOR_IMAGE, SERVICE_ACCOUNT, ARTIFACTORY_PULL_SECRET"
+  echo "Required: DEPLOY_NAMESPACE, OPENSHIFT_SERVER, OPENSHIFT_SA_TOKEN_NAME, MONITOR_IMAGE"
   exit 1
 fi
 
@@ -80,20 +76,7 @@ echo "🔧 Configuring pod health monitoring deployment..."
 echo "Namespace: $DEPLOY_NAMESPACE"
 echo "Deployment type: $DEPLOYMENT_TYPE"
 echo "Monitor image: $MONITOR_IMAGE"
-echo "Service account: $SERVICE_ACCOUNT"
-echo "Artifactory pull secret: $ARTIFACTORY_PULL_SECRET"
 echo "Webhook configured: $([ -n "$ROCKETCHAT_WEBHOOK_URL" ] && echo "Yes" || echo "No")"
-
-# Validate OpenShift resources required for pod startup
-if ! oc get serviceaccount "$SERVICE_ACCOUNT" -n "$DEPLOY_NAMESPACE" >/dev/null 2>&1; then
-  echo "Error: Service account '$SERVICE_ACCOUNT' not found in namespace '$DEPLOY_NAMESPACE'"
-  exit 1
-fi
-
-if ! oc get secret "$ARTIFACTORY_PULL_SECRET" -n "$DEPLOY_NAMESPACE" >/dev/null 2>&1; then
-  echo "Error: Image pull secret '$ARTIFACTORY_PULL_SECRET' not found in namespace '$DEPLOY_NAMESPACE'"
-  exit 1
-fi
 
 # Function to deploy webhook secret
 deploy_webhook_secret() {
@@ -138,22 +121,13 @@ deploy_continuous_monitoring() {
     "OPENSHIFT_SA_TOKEN_NAME=$OPENSHIFT_SA_TOKEN_NAME" \
     "ROCKETCHAT_WEBHOOK_URL=$ROCKETCHAT_WEBHOOK_URL" \
     "MONITORING_INTERVAL=60" \
-    "MONITOR_IMAGE=$MONITOR_IMAGE" \
-    "SERVICE_ACCOUNT=$SERVICE_ACCOUNT" \
-    "ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET"
+    "MONITOR_IMAGE=$MONITOR_IMAGE"
 
   # Label the deployment for tracking
   oc label deployment pod-health-monitor -n "$DEPLOY_NAMESPACE" \
     app.kubernetes.io/managed-by=github-workflow \
     app.kubernetes.io/version="$(date +%Y%m%d%H%M%S)" \
     --overwrite >/dev/null 2>&1
-
-  log_info "Verifying Artifactory access for monitoring deployment..."
-  if ensure_image_pull_secrets "deployment" "pod-health-monitor" "$DEPLOY_NAMESPACE"; then
-    log_info "✅ Pod health monitor deployment has Artifactory access confirmed"
-  else
-    log_warn "⚠️ Pod health monitor deployment may have imagePullSecrets issues"
-  fi
 
   echo "✅ Continuous monitoring deployed"
 }
@@ -174,9 +148,7 @@ deploy_cronjob_monitoring() {
     "OPENSHIFT_SERVER=$OPENSHIFT_SERVER" \
     "OPENSHIFT_SA_TOKEN_NAME=$OPENSHIFT_SA_TOKEN_NAME" \
     "ROCKETCHAT_WEBHOOK_URL=$ROCKETCHAT_WEBHOOK_URL" \
-    "MONITOR_IMAGE=$MONITOR_IMAGE" \
-    "SERVICE_ACCOUNT=$SERVICE_ACCOUNT" \
-    "ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET"
+    "MONITOR_IMAGE=$MONITOR_IMAGE"
 
   echo "✅ CronJob monitoring deployed"
 }
