@@ -51,6 +51,9 @@ source ./openshift/scripts/_utils.sh
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
 
+# Track failures across the pipe subshell
+rm -f /tmp/right-sizing-failures.txt
+
 # Read the CSV file line by line to set deployment resources
 # based on those values
 tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue
@@ -65,7 +68,11 @@ do
   if [[ $PodCount -eq 0 ]]; then
     echo "Skipping optional / temporary resource... no pods required to be running."
   else
-    scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"
+    if ! scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"; then
+      echo "❌ $Type/$Deployment failed to stabilize after scaling"
+      # Signal failure to parent shell via temp file (pipe subshell can't set vars)
+      echo "FAILED:$Type/$Deployment" >> /tmp/right-sizing-failures.txt
+    fi
 
     # Check if MaxPods is greater than PodCount before creating the HPA
     if [[ $MaxPods -gt $PodCount ]]; then
@@ -75,3 +82,18 @@ do
     fi
   fi
 done
+
+# Check for any failures that occurred in the pipe subshell
+if [[ -f /tmp/right-sizing-failures.txt ]]; then
+  echo ""
+  echo "❌ RIGHT-SIZING FAILURES DETECTED:"
+  cat /tmp/right-sizing-failures.txt
+  echo ""
+  echo "⚠️  Some resources failed to stabilize after scaling."
+  echo "   The site should NOT exit maintenance mode until these are resolved."
+  rm -f /tmp/right-sizing-failures.txt
+  exit 1
+fi
+
+rm -f /tmp/right-sizing-failures.txt
+echo "✅ Right-sizing completed successfully."

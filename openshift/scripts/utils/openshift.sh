@@ -1326,6 +1326,7 @@ check_pod_logs() {
   local error_search_strings=${3:-"error"}
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
+  local tail_lines=${5:-100}  # Only check recent logs to avoid startup noise
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
@@ -1341,7 +1342,7 @@ check_pod_logs() {
   IFS=' ' read -r -a container_array <<< "$CONTAINERS"
 
   for container in "${container_array[@]}"; do
-    LOGS=$(oc logs $pod -n $namespace -c $container)
+    LOGS=$(oc logs "$pod" -n "$namespace" -c "$container" --tail="$tail_lines")
 
     for error_search_string in "${error_strings[@]}"; do
       if echo "$LOGS" | grep -q "$error_search_string"; then

@@ -32,8 +32,14 @@ lighthouse_security_scan() {
   local overall_status="PASS"
 
   # Run NPM audit (primary security check)
-  npm_audit_scan "$project_dir" "$audit_level" "audit_result"
-  local audit_exit=$?
+  # Use if/else as it's the only reliable set -e suppression pattern in bash 5.x.
+  # The cmd || var=$? pattern has edge cases with nested function returns.
+  local audit_exit=0
+  if npm_audit_scan "$project_dir" "$audit_level" "audit_result"; then
+    audit_exit=0
+  else
+    audit_exit=$?
+  fi
 
   # Determine status but always continue (warning-only)
   if [ "$audit_result" = "CRITICAL" ]; then
@@ -163,8 +169,13 @@ npm_security_scan() {
   local overall_status="PASS"
 
   # Run NPM audit (now our primary security check)
-  npm_audit_scan "$project_dir" "$audit_level" "audit_result"
-  local audit_exit=$?
+  # Use if/else — the only reliable set -e suppression pattern in bash 5.x.
+  local audit_exit=0
+  if npm_audit_scan "$project_dir" "$audit_level" "audit_result"; then
+    audit_exit=0
+  else
+    audit_exit=$?
+  fi
 
   # Determine overall status based on audit results
   if [ "$audit_result" = "CRITICAL" ]; then

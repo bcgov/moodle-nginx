@@ -776,7 +776,9 @@ jobs:
           source ../../openshift/scripts/utils/npm.sh
 
           # Lighthouse security scan (warnings only - dependencies now installed)
-          lighthouse_security_scan "." "moderate"
+          if ! lighthouse_security_scan "." "moderate"; then
+            echo "⚠️ Lighthouse security scan reported warnings (non-blocking)"
+          fi
 
           cd ../../
           echo ""
