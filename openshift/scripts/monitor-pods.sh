@@ -49,11 +49,15 @@ source /scripts/_utils.sh
 export KUBECONFIG="/tmp/.kube/config"
 mkdir -p "$(dirname "$KUBECONFIG")"
 if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
-  oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
+  oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true 2>&1 | grep -v "^Warning:"
   oc project "$DEPLOY_NAMESPACE" 2>/dev/null || true
 else
   echo "WARNING: OPENSHIFT_TOKEN or OPENSHIFT_SERVER not set — oc commands will use pod SA token"
 fi
+
+# Suppress repetitive oc CLI warnings (legacy token, insecure TLS) from polluting health check logs
+export KUBECTL_WARN_EXTERNAL_UNKNOWN=false
+oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
 # Function for lightweight pod health check
 quick_health_check() {
