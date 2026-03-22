@@ -246,7 +246,9 @@ jobs:
           echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse and commit package-lock.json."
           exit 1
 
-      # � Front-load Lighthouse node_modules so the Audit job skips npm install
+      # 📦 Front-load ALL Lighthouse dependencies so the Audit job is cache-hit only.
+      # Why: Security scanning runs here (fail-fast before builds/deploy), and the Audit
+      # job skips npm install + security scan entirely — it just restores and runs Lighthouse.
       - name: 📦 Cache Lighthouse node_modules
         id: lighthouse-modules
         uses: actions/cache@v4
@@ -254,15 +256,47 @@ jobs:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
 
-      - name: 📦 Seed Lighthouse dependency cache
+      - name: 📦 Install and scan Lighthouse dependencies
         if: steps.lighthouse-modules.outputs.cache-hit != 'true'
         run: |
+          echo "=== 📦 Installing Lighthouse dependencies (first run or lockfile changed) ==="
           cd config/lighthouse
-          npm ci --ignore-scripts --no-fund
-          echo "✅ Lighthouse node_modules cached for Audit job"
+          npm ci --no-fund
+          echo "✅ Lighthouse node_modules installed and cached for Audit job"
 
-      # �🔧 Install Trivy (lightweight, fast install - caching not needed)
-      - name: �️ Install Trivy
+      - name: 🔒 Lighthouse NPM security scan (fail-fast)
+        run: |
+          echo "=== 🔒 Lighthouse Dependency Security Scan ==="
+          source openshift/scripts/utils/npm.sh
+          cd config/lighthouse
+
+          # Full security audit — catch issues BEFORE builds and deployment
+          npm_audit_scan "." "high" "LH_SECURITY_RESULT"
+          scan_exit=$?
+
+          if [ $scan_exit -eq 2 ]; then
+            echo "❌ CRITICAL: Lighthouse dependencies have critical vulnerabilities!"
+            echo "  These must be resolved before deployment proceeds."
+            echo "  Run: cd config/lighthouse && npm audit fix && commit package-lock.json"
+            # Non-blocking for now — Lighthouse is test tooling, not deployed code.
+            # Change 'exit 0' to 'exit 2' to make this a hard blocker.
+            exit 0
+          elif [ $scan_exit -eq 1 ]; then
+            echo "⚠️  HIGH: High-severity vulnerabilities detected in Lighthouse deps (non-blocking)"
+          else
+            echo "✅ Lighthouse dependency security scan passed"
+          fi
+
+      # 🐧 Seed Lighthouse APT package cache (Chrome headless dependencies)
+      # Running this in checkEnv means the Audit job gets a cache hit instead of a cold install.
+      - name: 🐧 Seed Lighthouse APT cache
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+          version: 1.0
+
+      # 🔧 Install Trivy (lightweight, fast install - caching not needed)
+      - name: 🛡️ Install Trivy
         run: |
           # Trivy installation is fast (~5-10s), no need to cache
           sudo apt-get update
@@ -698,7 +732,8 @@ jobs:
 
       - run: mkdir -p tmp/artifacts
 
-      # � Restore pre-built Lighthouse node_modules (seeded by checkEnv job)
+      # All caches below were seeded by the checkEnv job.
+      # 📦 Restore Lighthouse node_modules (installed + scanned by checkEnv)
       - name: 📦 Restore Lighthouse node_modules
         id: lighthouse-modules
         uses: actions/cache/restore@v4
@@ -706,8 +741,8 @@ jobs:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
 
-      # �🐧 Cache APT packages for Lighthouse dependencies
-      - name: 🐧 Cache APT packages
+      # 🐧 Restore Chrome APT dependencies (seeded by checkEnv)
+      - name: 🐧 Restore APT packages
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
@@ -718,22 +753,19 @@ jobs:
         with:
           install-dependencies: false
 
-      # 🏗️ Lighthouse Environment Setup
-      # NOTE: Full security scan (Trivy, PHP, containers) already completed in checkEnv job.
-      #       node_modules pre-built by checkEnv and restored from cache above.
+      # 🏗️ Validate cache-restored deps or install on miss (fallback)
       - name: 🏗️ Lighthouse Environment Setup
         run: |
-          source openshift/scripts/utils/lighthouse.sh
-
           echo "=== 🏗️ Lighthouse Environment Setup ==="
 
-          # Fast path: validate cache-restored node_modules
           if [ -d "config/lighthouse/node_modules/lighthouse" ] && \
              cd config/lighthouse && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
-            echo "✅ Lighthouse dependencies restored from cache (skipping install)"
+            echo "✅ Cache hit — Lighthouse deps restored (skipping install)"
             cd ../..
           else
-            echo "⚠️ Cache miss — running full Lighthouse environment setup..."
+            echo "⚠️ Cache miss — installing Lighthouse dependencies..."
+            cd config/lighthouse 2>/dev/null && cd ../.. || true
+            source openshift/scripts/utils/lighthouse.sh
             source openshift/scripts/utils/npm.sh
             if ! setup_lighthouse_environment "config/lighthouse" "true"; then
               echo "❌ Lighthouse environment setup failed"
