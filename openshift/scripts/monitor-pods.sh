@@ -61,7 +61,7 @@ oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
 # Unified pod health check function
 # $1: selector  $2: error_patterns  $3: restart_enabled (true/false)
-# Sets global pods_checked counter as side-effect for status reporting
+# Appends to global issue_details[] array and increments pods_checked counter
 check_pod_health() {
   local selector="$1"
   local error_patterns="$2"
@@ -79,6 +79,7 @@ check_pod_health() {
     local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
 
     if [[ -z "$recent_logs" ]]; then
+      pods_checked=$((pods_checked + 1))
       continue
     fi
 
@@ -90,11 +91,12 @@ check_pod_health() {
       if [[ -n "$pattern" && "$recent_logs" == *"$pattern"* ]]; then
         error_counts["$pod"]=$((${error_counts["$pod"]:-0} + 1))
         pod_has_errors=true
-        if [[ "$restart_enabled" == "true" ]]; then
-          echo "$(date): Error detected in $pod (count: ${error_counts["$pod"]}): $pattern"
-        else
-          echo "$(date): ⚠️ $pod: error pattern '$pattern' detected (observe only)"
-        fi
+
+        local consecutive=${error_counts["$pod"]}
+        local mode="observe"
+        [[ "$restart_enabled" == "true" ]] && mode="restart-eligible"
+
+        issue_details+=("  ⚠️  $pod [$mode] — pattern '$pattern' (consecutive: $consecutive/$ERROR_THRESHOLD)")
         break
       fi
     done
@@ -107,11 +109,27 @@ check_pod_health() {
 
     # Restart only for restart-eligible pods at error threshold
     if [[ "$restart_enabled" == "true" && ${error_counts["$pod"]:-0} -ge $ERROR_THRESHOLD ]]; then
-      echo "$(date): Restarting $pod after $ERROR_THRESHOLD consecutive errors"
+      issue_details+=("  🔄 RESTARTING $pod — $ERROR_THRESHOLD consecutive errors reached")
+
       if oc delete pod "$pod" --wait=false; then
         send_notification "POD_RESTART_THRESHOLD" "Pod Restarted - Error Threshold" "Pod $pod restarted after $ERROR_THRESHOLD consecutive errors. Selector: $selector" "warning" "$DEPLOY_NAMESPACE"
         error_counts["$pod"]=0
         issues_found=$((issues_found + 1))
+
+        # Post-restart verification — wait briefly, then check if replacement pod starts
+        issue_details+=("  ⏳ Waiting 15s for replacement pod...")
+        sleep 15
+        local new_pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        if [[ -n "$new_pods" ]]; then
+          issue_details+=("  ✅ Replacement pod(s) running: $new_pods")
+        else
+          local pending_pods=$(oc get pods -l "$selector" -o jsonpath='{range .items[*]}{.metadata.name}={.status.phase} {end}' 2>/dev/null)
+          issue_details+=("  ❌ No running replacement yet — pod status: ${pending_pods:-unknown}")
+          issue_details+=("     Check: oc get pods -l $selector -n $DEPLOY_NAMESPACE")
+        fi
+      else
+        issue_details+=("  ❌ Failed to delete $pod — oc delete returned non-zero")
+        issue_details+=("     Check: oc describe pod $pod -n $DEPLOY_NAMESPACE")
       fi
     fi
   done
@@ -153,6 +171,7 @@ while true; do
   # Perform health checks — restart-eligible services
   total_issues=0
   pods_checked=0
+  issue_details=()
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
     check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true"
     total_issues=$((total_issues + $?))
@@ -193,9 +212,14 @@ while true; do
     last_galera_check=$current_time
   fi
 
-  # Status report — always log issues, periodic summary when healthy
-  if [[ $total_issues -gt 0 ]]; then
-    echo "$(date): Health check #$check_cycle — $total_issues issue(s) found ($pods_checked pods scanned)"
+  # Status report — detailed when issues found, periodic summary when healthy
+  if [[ $total_issues -gt 0 || ${#issue_details[@]} -gt 0 ]]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$(date): Health check #$check_cycle — ${#issue_details[@]} finding(s), $total_issues action(s) taken ($pods_checked pods scanned)"
+    for detail in "${issue_details[@]}"; do
+      echo "$detail"
+    done
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   elif [[ $((current_time - last_status_report)) -ge $STATUS_REPORT_INTERVAL ]]; then
     echo "$(date): Health check #$check_cycle — all nominal ($pods_checked pods scanned, ${#error_counts[@]} tracked)"
     last_status_report=$current_time
