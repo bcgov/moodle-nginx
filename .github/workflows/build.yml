@@ -267,6 +267,15 @@ jobs:
       - name: 🔒 Lighthouse NPM security scan (fail-fast)
         run: |
           echo "=== 🔒 Lighthouse Dependency Security Scan ==="
+
+          # npm.sh uses log_info/log_warn/etc. from openshift.sh — define stubs for CI context
+          log_error() { echo "❌ $*" >&2; }
+          log_warn()  { echo "⚠️  $*"; }
+          log_info()  { echo "ℹ️  $*"; }
+          log_debug() { [[ "${DEBUG_LEVEL}" == "DEBUG" || "${DEBUG_LEVEL}" == "TRACE" ]] && echo "🔍 $*" || true; }
+          log_success() { echo "✅ $*"; }
+          export -f log_error log_warn log_info log_debug log_success
+
           source openshift/scripts/utils/npm.sh
           cd config/lighthouse
 
