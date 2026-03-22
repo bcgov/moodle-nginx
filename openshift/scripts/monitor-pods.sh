@@ -45,6 +45,9 @@ echo "Error threshold: ${ERROR_THRESHOLD}"
 source /scripts/_utils.sh
 
 # Authenticate with OpenShift API (same as check-pod-logs.sh)
+# Set writable kubeconfig path — container filesystem root is read-only
+export KUBECONFIG="/tmp/.kube/config"
+mkdir -p "$(dirname "$KUBECONFIG")"
 if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
   oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
   oc project "$DEPLOY_NAMESPACE" 2>/dev/null || true
