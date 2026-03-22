@@ -61,12 +61,13 @@ oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
 # Unified pod health check function
 # $1: selector  $2: error_patterns  $3: restart_enabled (true/false)
+# Sets global pods_checked counter as side-effect for status reporting
 check_pod_health() {
   local selector="$1"
   local error_patterns="$2"
   local restart_enabled="${3:-false}"
 
-  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
+  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
 
   if [[ -z "$pods" ]]; then
     return 0
@@ -102,6 +103,8 @@ check_pod_health() {
       error_counts["$pod"]=0
     fi
 
+    pods_checked=$((pods_checked + 1))
+
     # Restart only for restart-eligible pods at error threshold
     if [[ "$restart_enabled" == "true" && ${error_counts["$pod"]:-0} -ge $ERROR_THRESHOLD ]]; then
       echo "$(date): Restarting $pod after $ERROR_THRESHOLD consecutive errors"
@@ -118,6 +121,9 @@ check_pod_health() {
 
 # Main monitoring loop
 last_galera_check=0
+last_status_report=0
+check_cycle=0
+STATUS_REPORT_INTERVAL=${STATUS_REPORT_INTERVAL:-600}  # Status summary every 10 minutes
 
 # Send startup notification
 send_notification "MONITORING_START" "Pod Health Monitor Started" "Continuous monitoring active with ${MONITORING_INTERVAL}s intervals. Galera checks every ${GALERA_CHECK_INTERVAL}s." "white_check_mark" "$DEPLOY_NAMESPACE"
@@ -146,6 +152,7 @@ while true; do
 
   # Perform health checks — restart-eligible services
   total_issues=0
+  pods_checked=0
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
     check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true"
     total_issues=$((total_issues + $?))
@@ -156,6 +163,8 @@ while true; do
     check_pod_health "$selector" "${OBSERVE_DEPLOYMENTS[$selector]}" "false"
     total_issues=$((total_issues + $?))
   done
+
+  check_cycle=$((check_cycle + 1))
 
   # Comprehensive Galera check at longer interval
   if [[ $((current_time - last_galera_check)) -ge $GALERA_CHECK_INTERVAL ]]; then
@@ -184,11 +193,12 @@ while true; do
     last_galera_check=$current_time
   fi
 
-  # Brief status report (don't spam logs)
+  # Status report — always log issues, periodic summary when healthy
   if [[ $total_issues -gt 0 ]]; then
-    echo "$(date): Health check completed - $total_issues issue(s) found and addressed"
-  elif [[ $((current_time % 3600)) -eq 0 ]]; then  # Hourly "alive" message
-    echo "$(date): Health monitoring active - all systems nominal"
+    echo "$(date): Health check #$check_cycle — $total_issues issue(s) found ($pods_checked pods scanned)"
+  elif [[ $((current_time - last_status_report)) -ge $STATUS_REPORT_INTERVAL ]]; then
+    echo "$(date): Health check #$check_cycle — all nominal ($pods_checked pods scanned, ${#error_counts[@]} tracked)"
+    last_status_report=$current_time
   fi
 
   # Wait for next check
