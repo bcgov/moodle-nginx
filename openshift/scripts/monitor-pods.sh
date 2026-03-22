@@ -44,6 +44,14 @@ echo "Error threshold: ${ERROR_THRESHOLD}"
 # Source utilities (same pattern as other scripts)
 source /scripts/_utils.sh
 
+# Authenticate with OpenShift API (same as check-pod-logs.sh)
+if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
+  oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
+  oc project "$DEPLOY_NAMESPACE" 2>/dev/null || true
+else
+  echo "WARNING: OPENSHIFT_TOKEN or OPENSHIFT_SERVER not set — oc commands will use pod SA token"
+fi
+
 # Function for lightweight pod health check
 quick_health_check() {
   local selector="$1"
@@ -136,7 +144,7 @@ while true; do
     echo "$(date): Performing comprehensive Galera health check..."
 
     # Auto-detect expected cluster size from StatefulSet spec
-    local galera_expected_size=""
+    galera_expected_size=""
     if oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" &> /dev/null; then
       galera_expected_size=$(oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" -o jsonpath='{.spec.replicas}')
     fi
