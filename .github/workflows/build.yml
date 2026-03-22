@@ -26,6 +26,18 @@ env:
   # Test: LEVEL=FULL,  EXIT_ON=HIGH,     CONTAINERS=YES (~6-8 min, blocks High/Critical)
   # Prod: LEVEL=FULL,  EXIT_ON=CRITICAL, CONTAINERS=YES (~6-8 min, blocks Critical only)
 
+  # Audit Failure Response — Automatic maintenance mode on critical issues
+  # Controls whether the site enters maintenance mode when the Lighthouse audit detects failures.
+  # Modes (independently togglable per branch):
+  #   MOODLE    — Moodle's built-in maintenance mode (PHP CLI, users see Moodle maintenance banner)
+  #   OPENSHIFT — Redirects route to static maintenance page (users see clean HTML message)
+  # Recommended per environment:
+  #   Dev:  MOODLE=NO,  OPENSHIFT=NO   — let errors persist for debugging
+  #   Test: MOODLE=YES, OPENSHIFT=NO   — prevent DB corruption from test/training users
+  #   Prod: MOODLE=NO,  OPENSHIFT=YES  — show users a clean maintenance page
+  AUDIT_FAILURE_MOODLE_MAINTENANCE: "NO"
+  AUDIT_FAILURE_OPENSHIFT_MAINTENANCE: "NO"
+
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
   SKIP_DEPLOY: "NO"
@@ -234,7 +246,22 @@ jobs:
           echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse and commit package-lock.json."
           exit 1
 
-      # 🔧 Install Trivy (lightweight, fast install - caching not needed)
+      # � Front-load Lighthouse node_modules so the Audit job skips npm install
+      - name: 📦 Cache Lighthouse node_modules
+        id: lighthouse-modules
+        uses: actions/cache@v4
+        with:
+          path: config/lighthouse/node_modules
+          key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
+
+      - name: 📦 Seed Lighthouse dependency cache
+        if: steps.lighthouse-modules.outputs.cache-hit != 'true'
+        run: |
+          cd config/lighthouse
+          npm ci --ignore-scripts --no-fund
+          echo "✅ Lighthouse node_modules cached for Audit job"
+
+      # �🔧 Install Trivy (lightweight, fast install - caching not needed)
       - name: �️ Install Trivy
         run: |
           # Trivy installation is fast (~5-10s), no need to cache
@@ -671,57 +698,15 @@ jobs:
 
       - run: mkdir -p tmp/artifacts
 
-      # �️ Install Trivy (fast install, no caching needed)
-      - name: 🛡️ Install Trivy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy
-
-      # 🗄️ Restore Trivy cache using stable branch prefix
-      - name: 🗄️ Restore Trivy Database Cache
-        id: trivy-cache-restore-lighthouse
+      # � Restore pre-built Lighthouse node_modules (seeded by checkEnv job)
+      - name: 📦 Restore Lighthouse node_modules
+        id: lighthouse-modules
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
-          restore-keys: |
-            ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-
-            ${{ runner.os }}-trivy-db-
+          path: config/lighthouse/node_modules
+          key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
 
-      - name: 🔄 Refresh Trivy DB and derive cache key
-        id: trivy-db-meta-lighthouse
-        run: |
-          trivy image --download-db-only --no-progress
-
-          TRIVY_VERSION=$(trivy --version | awk '/Version:/ {print $2}' | head -n 1)
-          DB_UPDATED_AT=$(grep -oE '"UpdatedAt"\s*:\s*"[^"]+"' ~/.cache/trivy/db/metadata.json | sed -E 's/.*"([^"]+)"/\1/' | cut -d'T' -f1)
-
-          if [ -z "$TRIVY_VERSION" ]; then
-            TRIVY_VERSION="unknown"
-          fi
-
-          if [ -z "$DB_UPDATED_AT" ]; then
-            DB_UPDATED_AT=$(date -u +%Y-%m-%d)
-          fi
-
-          echo "trivy_version=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "db_updated_at=$DB_UPDATED_AT" >> "$GITHUB_OUTPUT"
-          echo "Resolved Trivy cache key suffix: v$TRIVY_VERSION-db$DB_UPDATED_AT"
-
-      - name: 💾 Save Trivy Database Cache
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-lighthouse.outputs.trivy_version }}-db${{ steps.trivy-db-meta-lighthouse.outputs.db_updated_at }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # 🐧 Cache APT packages for Lighthouse dependencies
+      # �🐧 Cache APT packages for Lighthouse dependencies
       - name: 🐧 Cache APT packages
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -733,48 +718,30 @@ jobs:
         with:
           install-dependencies: false
 
-      # �🔒 Security Validation
-      - name: 🔒 Comprehensive Security Validation
+      # 🏗️ Lighthouse Environment Setup
+      # NOTE: Full security scan (Trivy, PHP, containers) already completed in checkEnv job.
+      #       node_modules pre-built by checkEnv and restored from cache above.
+      - name: 🏗️ Lighthouse Environment Setup
         run: |
-          # Source utility functions
-          source openshift/scripts/utils/github-actions.sh
           source openshift/scripts/utils/lighthouse.sh
-          source openshift/scripts/utils/version-management.sh
-
-          echo "=== 🔒 Security Validation ==="
-
-          # Run comprehensive security scan covering all attack surfaces
-          if ! run_comprehensive_security_scan "." "moderate" "false" "true"; then
-            echo "❌ Comprehensive security scan failed - blocking deployment"
-            exit 1
-          fi
-
-          echo "✅ Security validation passed"
-          echo ""
 
           echo "=== 🏗️ Lighthouse Environment Setup ==="
 
-          # Setup Lighthouse environment FIRST (installs dependencies)
-          if ! setup_lighthouse_environment "config/lighthouse" "true"; then
-            echo "❌ Lighthouse environment setup failed"
-            exit 1
+          # Fast path: validate cache-restored node_modules
+          if [ -d "config/lighthouse/node_modules/lighthouse" ] && \
+             cd config/lighthouse && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
+            echo "✅ Lighthouse dependencies restored from cache (skipping install)"
+            cd ../..
+          else
+            echo "⚠️ Cache miss — running full Lighthouse environment setup..."
+            source openshift/scripts/utils/npm.sh
+            if ! setup_lighthouse_environment "config/lighthouse" "true"; then
+              echo "❌ Lighthouse environment setup failed"
+              exit 1
+            fi
           fi
 
           echo "✅ Lighthouse environment ready"
-          echo ""
-
-          echo "=== 🔒 Lighthouse Security Scan (Warning Mode) ==="
-          cd config/lighthouse
-          source ../../openshift/scripts/utils/npm.sh
-
-          # Lighthouse security scan (warnings only - dependencies now installed)
-          if ! lighthouse_security_scan "." "moderate"; then
-            echo "⚠️ Lighthouse security scan reported warnings (non-blocking)"
-          fi
-
-          cd ../../
-          echo ""
-          echo "✅ NPM security validation passed"
 
       - name: 📊 Display Setup Information
         run: |
@@ -845,7 +812,95 @@ jobs:
             exit $LIGHTHOUSE_EXIT_CODE
           fi
 
-      # 📦 Artifact Collection (using utility)
+      # � Emergency maintenance mode — triggered when Lighthouse detects critical failures
+      # Configurable per environment via AUDIT_FAILURE_MOODLE_MAINTENANCE / AUDIT_FAILURE_OPENSHIFT_MAINTENANCE
+      - name: 🚧 Audit Failure — Enable Maintenance Mode
+        if: >
+          always() &&
+          steps.lighthouse.outcome == 'failure' &&
+          (env.AUDIT_FAILURE_MOODLE_MAINTENANCE == 'YES' || env.AUDIT_FAILURE_OPENSHIFT_MAINTENANCE == 'YES')
+        env:
+          DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+        run: |
+          echo "🚨 Lighthouse audit FAILED — evaluating maintenance mode response"
+          echo "  Environment: $DEPLOY_NAMESPACE"
+          echo "  Moodle maintenance:    $AUDIT_FAILURE_MOODLE_MAINTENANCE"
+          echo "  OpenShift maintenance: $AUDIT_FAILURE_OPENSHIFT_MAINTENANCE"
+          echo ""
+
+          # Install oc CLI
+          curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar xz
+          sudo mv oc kubectl /usr/local/bin/ 2>/dev/null || sudo mv oc /usr/local/bin/
+          echo "oc version: $(oc version --client 2>/dev/null || echo 'installed')"
+
+          # Login to OpenShift
+          oc login --token=${{ secrets.AUTH_TOKEN_950003 }} \
+            --server=https://api.silver.devops.gov.bc.ca:6443 \
+            --insecure-skip-tls-verify=true 2>&1 | grep -v '^Warning:'
+          oc project "$DEPLOY_NAMESPACE"
+
+          # ── Moodle maintenance mode (PHP CLI in cron pod) ──
+          if [ "$AUDIT_FAILURE_MOODLE_MAINTENANCE" = "YES" ]; then
+            echo ""
+            echo "🔧 Enabling Moodle maintenance mode..."
+            CRON_POD=$(oc get pods -l app=${{ needs.checkEnv.outputs.CRON_NAME }} \
+              --field-selector=status.phase=Running \
+              -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+
+            if [ -n "$CRON_POD" ]; then
+              if oc exec -n "$DEPLOY_NAMESPACE" "$CRON_POD" -- \
+                   php /var/www/html/admin/cli/maintenance.php --enable 2>&1; then
+                echo "✅ Moodle maintenance mode enabled"
+              else
+                echo "⚠️ Failed to enable Moodle maintenance mode (non-fatal)"
+              fi
+            else
+              echo "⚠️ No running cron pod found — cannot enable Moodle maintenance mode"
+            fi
+          fi
+
+          # ── OpenShift maintenance mode (route redirect to static page) ──
+          if [ "$AUDIT_FAILURE_OPENSHIFT_MAINTENANCE" = "YES" ]; then
+            echo ""
+            echo "🚧 Enabling OpenShift maintenance mode..."
+
+            if oc get deployment maintenance-message -n "$DEPLOY_NAMESPACE" &>/dev/null; then
+              # Scale up maintenance page
+              oc scale deployment/maintenance-message -n "$DEPLOY_NAMESPACE" --replicas=1
+              oc rollout status deployment/maintenance-message -n "$DEPLOY_NAMESPACE" --timeout=120s 2>/dev/null || true
+
+              # Redirect all routes to maintenance page
+              ROUTES=$(oc get routes -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
+              for route in $ROUTES; do
+                if oc patch route "$route" -n "$DEPLOY_NAMESPACE" \
+                     -p '{"spec":{"to":{"name":"maintenance-message"}}}' 2>/dev/null; then
+                  echo "  ✅ Patched route: $route → maintenance-message"
+                else
+                  echo "  ⚠️ Failed to patch route: $route"
+                fi
+              done
+
+              echo "✅ OpenShift maintenance mode enabled — traffic redirected to maintenance page"
+            else
+              echo "⚠️ maintenance-message deployment not found — skipping OpenShift maintenance mode"
+              echo "  Ensure deploy-maintenance-message.sh has been run for this environment"
+            fi
+          fi
+
+          echo ""
+          echo "══════════════════════════════════════════════════"
+          echo "🚨 MANUAL ACTION REQUIRED"
+          echo "══════════════════════════════════════════════════"
+          echo "Investigate and resolve the Lighthouse audit failure, then disable maintenance mode:"
+          if [ "$AUDIT_FAILURE_MOODLE_MAINTENANCE" = "YES" ]; then
+            echo "  Moodle:    oc exec <cron-pod> -- php /var/www/html/admin/cli/maintenance.php --disable"
+          fi
+          if [ "$AUDIT_FAILURE_OPENSHIFT_MAINTENANCE" = "YES" ]; then
+            echo "  OpenShift: Redeploy, or manually patch routes back to 'web' service:"
+            echo "             oc patch route <route-name> -p '{\"spec\":{\"to\":{\"name\":\"web\"}}}'"
+          fi
+
+      # �📦 Artifact Collection (using utility)
       - name: 📦 Collect Lighthouse Artifacts
         if: always()
         run: |
