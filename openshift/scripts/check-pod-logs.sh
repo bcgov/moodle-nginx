@@ -89,15 +89,23 @@ run_with_logging() {
   echo "Checking pod logs for errors..."
 }
 
-# Define the list of deployments and their corresponding error messages and handling functions
-declare -A DEPLOYMENTS
-DEPLOYMENTS=(
+# Deployments eligible for error-based restart
+# mariadb-galera: handled by dedicated Galera health check above
+declare -A RESTART_DEPLOYMENTS
+RESTART_DEPLOYMENTS=(
   ["deployment=php"]="error,critical"
   ["app=redis-proxy"]="err:"
-  ["app.kubernetes.io/name=mariadb-galera"]="Aborted,bogus"
-  # ["app.kubernetes.io/name=redis"]="lost"
-  # ["deployment=web"]="error"
-  # ["app=cron"]="error"
+)
+
+# Deployments to observe only (log errors, no restart)
+# - cron: transient DB/Redis errors during startup, auto-recovers
+# - redis-node: restart can cascade-disconnect redis-proxy
+# - web: nginx auto-recovers, restart won't help
+declare -A OBSERVE_DEPLOYMENTS
+OBSERVE_DEPLOYMENTS=(
+  ["app=cron"]="error,critical"
+  ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
+  ["deployment=web"]="emerg,crit"
 )
 
 # Initialize logging
@@ -174,18 +182,13 @@ echo "🔍 Checking pod logs for errors..."
 total_checked=0
 total_restarted=0
 
-for selector in "${!DEPLOYMENTS[@]}"; do
-  error_patterns="${DEPLOYMENTS[$selector]}"
+for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
+  error_patterns="${RESTART_DEPLOYMENTS[$selector]}"
 
   echo ""
   echo "════════════════════════════════════════"
 
   pods_before=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | wc -w)
-
-  # Special handling for mariadb-galera: already checked above, skip duplicate
-  if [[ "$selector" == "app.kubernetes.io/name=mariadb-galera" ]]; then
-    echo "🔍 Galera cluster: already checked above, running log check only"
-  fi
 
   check_and_restart_pod "$selector" "$error_patterns"
 
@@ -194,6 +197,31 @@ for selector in "${!DEPLOYMENTS[@]}"; do
 
   total_checked=$((total_checked + pods_before))
   total_restarted=$((total_restarted + restarted))
+done
+
+# Observe-only checks (log errors but never restart)
+for selector in "${!OBSERVE_DEPLOYMENTS[@]}"; do
+  error_patterns="${OBSERVE_DEPLOYMENTS[$selector]}"
+
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "🔍 Observing $selector (no restart)"
+
+  pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
+  if [[ -n "$pods" ]]; then
+    IFS=',' read -ra patterns <<< "$error_patterns"
+    for pod in $pods; do
+      logs=$(oc logs "$pod" --tail=50 2>/dev/null)
+      for pattern in "${patterns[@]}"; do
+        pattern=$(echo "$pattern" | xargs)
+        if [[ -n "$pattern" ]] && echo "$logs" | grep -q "$pattern"; then
+          echo "  ⚠️  $pod: error pattern '$pattern' detected (observe only)"
+          break
+        fi
+      done
+      total_checked=$((total_checked + 1))
+    done
+  fi
 done
 
 echo ""

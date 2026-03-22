@@ -115,6 +115,39 @@ quick_health_check() {
   return $issues_found
 }
 
+# Observe-only health check — logs errors but never restarts pods
+observe_health_check() {
+  local selector="$1"
+  local error_patterns="$2"
+
+  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
+
+  if [[ -z "$pods" ]]; then
+    return 0
+  fi
+
+  local issues_found=0
+
+  for pod in $pods; do
+    local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
+    if [[ -z "$recent_logs" ]]; then
+      continue
+    fi
+
+    IFS=',' read -ra patterns <<< "$error_patterns"
+    for pattern in "${patterns[@]}"; do
+      pattern=$(echo "$pattern" | xargs)
+      if [[ -n "$pattern" && "$recent_logs" == *"$pattern"* ]]; then
+        echo "$(date): ⚠️ $pod: error pattern '$pattern' detected (observe only)"
+        issues_found=$((issues_found + 1))
+        break
+      fi
+    done
+  done
+
+  return $issues_found
+}
+
 # Main monitoring loop
 last_galera_check=0
 
@@ -124,25 +157,37 @@ send_notification "MONITORING_START" "Pod Health Monitor Started" "Continuous mo
 while true; do
   current_time=$(date +%s)
 
-  # Define deployments to monitor (same as CronJob)
-  declare -A DEPLOYMENTS
-  DEPLOYMENTS=(
+  # Deployments eligible for threshold-based restart
+  declare -A RESTART_DEPLOYMENTS
+  RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
     ["app=redis-proxy"]="err:"
-    ["app.kubernetes.io/name=mariadb-galera"]="Aborted,bogus"
   )
 
-  # Perform quick health checks
+  # Deployments to observe only (log errors, no restart)
+  # - cron: transient DB/Redis errors during startup, auto-recovers
+  # - redis-node: restart can cascade-disconnect redis-proxy
+  # - web: nginx auto-recovers, restart won't help
+  # - mariadb-galera: handled by dedicated Galera check at GALERA_CHECK_INTERVAL
+  declare -A OBSERVE_DEPLOYMENTS
+  OBSERVE_DEPLOYMENTS=(
+    ["app=cron"]="error,critical"
+    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
+    ["deployment=web"]="emerg,crit"
+  )
+
+  # Perform quick health checks (restart-eligible)
   total_issues=0
-  for selector in "${!DEPLOYMENTS[@]}"; do
-    error_patterns="${DEPLOYMENTS[$selector]}"
-
-    # Skip Galera for quick checks (it has its own interval)
-    if [[ "$selector" == "app.kubernetes.io/name=mariadb-galera" ]]; then
-      continue
-    fi
-
+  for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
+    error_patterns="${RESTART_DEPLOYMENTS[$selector]}"
     quick_health_check "$selector" "$error_patterns" "QuickCheck"
+    total_issues=$((total_issues + $?))
+  done
+
+  # Observe-only checks (log errors but never restart)
+  for selector in "${!OBSERVE_DEPLOYMENTS[@]}"; do
+    error_patterns="${OBSERVE_DEPLOYMENTS[$selector]}"
+    observe_health_check "$selector" "$error_patterns"
     total_issues=$((total_issues + $?))
   done
 
