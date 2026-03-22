@@ -59,11 +59,12 @@ fi
 export KUBECTL_WARN_EXTERNAL_UNKNOWN=false
 oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
-# Function for lightweight pod health check
-quick_health_check() {
+# Unified pod health check function
+# $1: selector  $2: error_patterns  $3: restart_enabled (true/false)
+check_pod_health() {
   local selector="$1"
   local error_patterns="$2"
-  local check_name="$3"
+  local restart_enabled="${3:-false}"
 
   local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
 
@@ -74,35 +75,35 @@ quick_health_check() {
   local issues_found=0
 
   for pod in $pods; do
-    # Quick log check (last 10 lines only for efficiency)
     local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
 
     if [[ -z "$recent_logs" ]]; then
       continue
     fi
 
-    # Convert patterns to array and check
     IFS=',' read -ra patterns <<< "$error_patterns"
     local pod_has_errors=false
 
     for pattern in "${patterns[@]}"; do
       pattern=$(echo "$pattern" | xargs)
       if [[ -n "$pattern" && "$recent_logs" == *"$pattern"* ]]; then
-        # Increment error count for this pod
         error_counts["$pod"]=$((${error_counts["$pod"]:-0} + 1))
         pod_has_errors=true
-        echo "$(date): Error detected in $pod (count: ${error_counts["$pod"]}): $pattern"
+        if [[ "$restart_enabled" == "true" ]]; then
+          echo "$(date): Error detected in $pod (count: ${error_counts["$pod"]}): $pattern"
+        else
+          echo "$(date): ⚠️ $pod: error pattern '$pattern' detected (observe only)"
+        fi
         break
       fi
     done
 
-    # Reset error count if no errors found
     if [[ "$pod_has_errors" == "false" ]]; then
       error_counts["$pod"]=0
     fi
 
-    # Restart pod if error threshold reached
-    if [[ ${error_counts["$pod"]:-0} -ge $ERROR_THRESHOLD ]]; then
+    # Restart only for restart-eligible pods at error threshold
+    if [[ "$restart_enabled" == "true" && ${error_counts["$pod"]:-0} -ge $ERROR_THRESHOLD ]]; then
       echo "$(date): Restarting $pod after $ERROR_THRESHOLD consecutive errors"
       if oc delete pod "$pod" --wait=false; then
         send_notification "POD_RESTART_THRESHOLD" "Pod Restarted - Error Threshold" "Pod $pod restarted after $ERROR_THRESHOLD consecutive errors. Selector: $selector" "warning" "$DEPLOY_NAMESPACE"
@@ -110,39 +111,6 @@ quick_health_check() {
         issues_found=$((issues_found + 1))
       fi
     fi
-  done
-
-  return $issues_found
-}
-
-# Observe-only health check — logs errors but never restarts pods
-observe_health_check() {
-  local selector="$1"
-  local error_patterns="$2"
-
-  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
-
-  if [[ -z "$pods" ]]; then
-    return 0
-  fi
-
-  local issues_found=0
-
-  for pod in $pods; do
-    local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
-    if [[ -z "$recent_logs" ]]; then
-      continue
-    fi
-
-    IFS=',' read -ra patterns <<< "$error_patterns"
-    for pattern in "${patterns[@]}"; do
-      pattern=$(echo "$pattern" | xargs)
-      if [[ -n "$pattern" && "$recent_logs" == *"$pattern"* ]]; then
-        echo "$(date): ⚠️ $pod: error pattern '$pattern' detected (observe only)"
-        issues_found=$((issues_found + 1))
-        break
-      fi
-    done
   done
 
   return $issues_found
@@ -176,18 +144,16 @@ while true; do
     ["deployment=web"]="emerg,crit"
   )
 
-  # Perform quick health checks (restart-eligible)
+  # Perform health checks — restart-eligible services
   total_issues=0
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
-    error_patterns="${RESTART_DEPLOYMENTS[$selector]}"
-    quick_health_check "$selector" "$error_patterns" "QuickCheck"
+    check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true"
     total_issues=$((total_issues + $?))
   done
 
-  # Observe-only checks (log errors but never restart)
+  # Observe-only services (log errors, never restart)
   for selector in "${!OBSERVE_DEPLOYMENTS[@]}"; do
-    error_patterns="${OBSERVE_DEPLOYMENTS[$selector]}"
-    observe_health_check "$selector" "$error_patterns"
+    check_pod_health "$selector" "${OBSERVE_DEPLOYMENTS[$selector]}" "false"
     total_issues=$((total_issues + $?))
   done
 

@@ -461,17 +461,6 @@ replace_db_characters_from_csv() {
   echo "✅ Character replacement completed"
 }
 
-# Function to read CSV file content
-read_csv_file() {
-  local csv_file="$1"
-
-  if [[ -f "$csv_file" ]]; then
-    cat "$csv_file"
-  else
-    echo "❌ CSV file not found: $csv_file"
-    return 1
-  fi
-}
 
 # Function to process Moodle content columns
 process_moodle_content_columns() {

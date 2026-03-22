@@ -98,11 +98,6 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 check-pod-logs.sh → stdout → log-aggregator.sh pipe → webhooks
 ```
 
-**Separate Mode** (optional):
-```
-galera-log-aggregator deployment → oc logs -f → log-aggregator.sh → webhooks
-```
-
 ## 🚀 Quick Start
 
 ### Deploy Monitoring
@@ -148,7 +143,6 @@ All scripts include comprehensive headers with:
 OpenShift templates include parameter descriptions:
 - [`pod-health-monitor.yml`](../pod-health-monitor.yml)
 - [`check-pod-logs.yml`](../check-pod-logs.yml)
-- [`galera-log-aggregator.yml`](../galera-log-aggregator.yml)
 
 ## 🔧 Configuration
 

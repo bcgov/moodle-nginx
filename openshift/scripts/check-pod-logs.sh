@@ -53,7 +53,6 @@ fi
 #
 # Architecture:
 #   - Inline: Zero-latency piping via process substitution (current default)
-#   - Separate: Deploy ../galera-log-aggregator.yml (optional)
 #   - When to use separate: Multiple CronJobs, external syslog, fault isolation
 #
 # How Inline Works:
@@ -69,7 +68,6 @@ fi
 #
 # Related Documentation:
 #   - Log aggregator script: ./log-aggregator.sh (inline comments)
-#   - Separate deployment: ../galera-log-aggregator.yml (template with docs)
 #   - Webhook configuration: ./deploy-health-monitor.sh
 # =============================================================================
 USE_LOG_AGGREGATOR=${USE_LOG_AGGREGATOR:-"true"}

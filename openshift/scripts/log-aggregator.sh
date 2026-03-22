@@ -9,7 +9,7 @@
 #   1. INLINE (default): Piped from check-pod-logs.sh via process substitution
 #      $ exec 1> >(bash log-aggregator.sh pipe)
 #
-#   2. SEPARATE: Deployed via galera-log-aggregator.yml, follows CronJob logs
+#   2. FOLLOW: Follows CronJob logs for external aggregation
 #      $ bash log-aggregator.sh follow check-pod-logs namespace
 #
 #   3. COLLECT: One-time collection from recent CronJob executions
@@ -31,7 +31,6 @@
 #
 # Related Documentation:
 #   - Architecture: See LOG AGGREGATION CONFIGURATION in check-pod-logs.sh
-#   - Separate deployment: ../galera-log-aggregator.yml
 #   - Webhook setup: ./deploy-health-monitor.sh
 # =============================================================================
 
