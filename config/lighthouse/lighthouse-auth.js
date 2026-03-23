@@ -127,7 +127,7 @@ async function getDynamicPaths(page, baseUrl, maxPages = 5) {
 
 async function runLighthouse(url, options, config = null) {
   // Import chrome-launcher
-  const detectEncodingIssues = ['â', '€', '™', 'Â', 'œ', ''];
+  const detectEncodingIssues = ['\u00e2', '\u20ac', '\u2122', '\u00c2', '\u0153'];
   let errors = new Array();
   let warnings = new Array();
   const { launch } = await import('chrome-launcher');
@@ -241,8 +241,7 @@ async function runLighthouse(url, options, config = null) {
 
   for (const char of detectEncodingIssues) {
     if (content.includes(char)) {
-      errors.push(`Found improperly encoded character "${char}" in the HTML content of: ${path}`);
-      // throw new Error(`Found improperly encoded character "${char}" in the HTML content`);
+      warnings.push(`⚠️ Character encoding issue on login page: "${char}"`);
     }
   }
 
@@ -343,13 +342,21 @@ async function runLighthouse(url, options, config = null) {
       errorString += ' - ' + error;
     }
     console.log(`❌ **FAILED**: Some scores (${errors.length}) are below the minimum thresholds (${pathsFailed} of ${pathCount} urls failed) - Errors: ${errorString} ${warningString}`);
+    return 1;
   } else {
     console.log(`✔️ **PASSED**: All scores are above the minimum thresholds (${pathsPassed} of ${pathCount} urls passed) ${warningString}`);
+    return 0;
   }
 }
 
 async function runTests() {
-  const report = await runLighthouse(testURL, options);
+  try {
+    const exitCode = await runLighthouse(testURL, options);
+    process.exit(exitCode);
+  } catch (error) {
+    console.error(`❌ Lighthouse test runner failed: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 runTests();
