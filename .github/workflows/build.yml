@@ -198,6 +198,21 @@ jobs:
 
           echo "Environment-scoped monitor configuration is present."
 
+      - name: 🔁 Preflight — Verify Artifactory connectivity
+        run: |
+          echo "Testing Artifactory registry connectivity..."
+          for attempt in 1 2 3; do
+            if curl -sSf --connect-timeout 10 --max-time 20 \
+              "https://${{ secrets.ARTIFACTORY_URL }}/v2/" -o /dev/null 2>&1; then
+              echo "✅ Artifactory reachable (attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️ Attempt $attempt/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "❌ Artifactory unreachable after 3 attempts — aborting pipeline"
+          exit 1
+
       - name: Setup Node.js for Lighthouse preflight
         uses: actions/setup-node@v5
         with:
