@@ -21,6 +21,10 @@ openshift/dependencies/
 .github/security-tools.json
 config/moodle/git-dependencies.json
 
+# Python bytecache
+__pycache__/
+*.pyc
+
 # Generated runtime reports
 tmp/
 
