@@ -18,13 +18,13 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
 
       # Login to Artifactory
       - name: 🔑 Login to Artifactory
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ secrets.ARTIFACTORY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
@@ -94,7 +94,7 @@ jobs:
 
       # Build and push PHP Image to Artifactory
       - name: 🛠️ Build and Push PHP Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ env.PHP_DOCKER_FILE_PATH }}

@@ -179,7 +179,7 @@ jobs:
       PHP_COMPAT_STATUS: ${{ steps.php-compat.outputs.PHP_COMPAT_STATUS }}
     steps:
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # For pull requests, checkout the PR merge commit (github.sha)
           # For push events, checkout the pushed branch (github.ref)
@@ -199,7 +199,7 @@ jobs:
           echo "Environment-scoped monitor configuration is present."
 
       - name: Setup Node.js for Lighthouse preflight
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '25'
           cache: 'npm'
@@ -252,7 +252,7 @@ jobs:
       # job skips npm install + security scan entirely — it just restores and runs Lighthouse.
       - name: 📦 Cache Lighthouse node_modules
         id: lighthouse-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
@@ -320,7 +320,7 @@ jobs:
       # 🗄️ Restore Trivy cache using stable branch prefix
       - name: 🗄️ Restore Trivy Database Cache
         id: trivy-cache-restore-checkenv
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
@@ -352,7 +352,7 @@ jobs:
         # continue-on-error: cache/save fails harmlessly when the key already exists
         # (restore found the same versioned key via prefix match — DB unchanged)
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-checkenv.outputs.trivy_version }}-db${{ steps.trivy-db-meta-checkenv.outputs.db_updated_at }}
@@ -374,7 +374,7 @@ jobs:
 
       # 🔒 Cache security scan results based on dependency versions
       - name: 🔒 Cache Security Scan Results
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             tmp/comprehensive-security-summary.json
@@ -390,7 +390,7 @@ jobs:
 
       # 🐘 Cache Composer vendor directory for faster PHP scans
       - name: 🐘 Cache Composer Dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.composer/cache
@@ -519,7 +519,7 @@ jobs:
       # Upload comprehensive security reports as artifacts
       - name: 📤 Upload Security Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: comprehensive-security-reports
           path: |
@@ -730,11 +730,11 @@ jobs:
       always() &&
       needs.checkEnv.result == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Setup Node.js 25 for Lighthouse (requires Node 22.19+)
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '25'
           cache: 'npm'
@@ -746,7 +746,7 @@ jobs:
       # 📦 Restore Lighthouse node_modules (installed + scanned by checkEnv)
       - name: 📦 Restore Lighthouse node_modules
         id: lighthouse-modules
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
@@ -883,7 +883,7 @@ jobs:
           collect_lighthouse_artifacts "config/lighthouse" "tmp/artifacts" "."
 
       - name: 📤 Archive artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: lighthouse-artifacts
@@ -909,10 +909,10 @@ jobs:
     if: always()
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download artifacts
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: lighthouse-artifacts
           path: artifacts
