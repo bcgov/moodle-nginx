@@ -61,21 +61,27 @@ oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
 # Unified pod health check function
 # $1: selector  $2: error_patterns  $3: restart_enabled (true/false)
-# Appends to global issue_details[] array and increments pods_checked counter
+# Appends to global issue_details[] array, increments pods_checked counter,
+# and appends to service_summary[] for per-service visibility.
 check_pod_health() {
   local selector="$1"
   local error_patterns="$2"
   local restart_enabled="${3:-false}"
 
   local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  local pod_count=0
+  local mode_label="observe"
+  [[ "$restart_enabled" == "true" ]] && mode_label="restart"
 
   if [[ -z "$pods" ]]; then
+    service_summary+=("  ⚪ $selector — no running pods [$mode_label]")
     return 0
   fi
 
   local issues_found=0
 
   for pod in $pods; do
+    pod_count=$((pod_count + 1))
     local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
 
     if [[ -z "$recent_logs" ]]; then
@@ -134,6 +140,13 @@ check_pod_health() {
     fi
   done
 
+  # Per-service summary line for visibility
+  if [[ $issues_found -gt 0 ]]; then
+    service_summary+=("  🔴 $selector — $pod_count pod(s), $issues_found issue(s) [$mode_label]")
+  else
+    service_summary+=("  ✅ $selector — $pod_count pod(s) healthy [$mode_label]")
+  fi
+
   return $issues_found
 }
 
@@ -172,6 +185,7 @@ while true; do
   total_issues=0
   pods_checked=0
   issue_details=()
+  service_summary=()
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
     check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true"
     total_issues=$((total_issues + $?))
@@ -185,8 +199,34 @@ while true; do
 
   check_cycle=$((check_cycle + 1))
 
-  # Comprehensive Galera check at longer interval
+  # Comprehensive infrastructure checks at longer interval (Galera + Redis Proxy)
   if [[ $((current_time - last_galera_check)) -ge $GALERA_CHECK_INTERVAL ]]; then
+
+    # ── Redis Proxy readiness check ──
+    # The proxy can get "stuck" with stale connections after Galera/Redis changes.
+    # Log-based checks only catch written errors; this validates actual pod readiness.
+    local proxy_pod=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [[ -n "$proxy_pod" ]]; then
+      local ready=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+      local restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
+      restarts=${restarts:-0}
+
+      if [[ "$ready" == "True" ]]; then
+        service_summary+=("  ✅ redis-proxy — $proxy_pod ready (restarts: $restarts)")
+      else
+        service_summary+=("  🔴 redis-proxy — $proxy_pod NOT READY (restarts: $restarts)")
+        issue_details+=("  ⚠️  redis-proxy $proxy_pod is Running but NOT Ready — may have stale connections")
+        issue_details+=("     Last 5 log lines:")
+        while IFS= read -r line; do
+          issue_details+=("       $line")
+        done < <(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=5 2>/dev/null)
+        total_issues=$((total_issues + 1))
+      fi
+    else
+      service_summary+=("  ⚪ redis-proxy — no running pods")
+    fi
+
+    # ── Galera health check ──
     echo "$(date): Performing comprehensive Galera health check..."
 
     # Auto-detect expected cluster size from StatefulSet spec
@@ -216,12 +256,18 @@ while true; do
   if [[ $total_issues -gt 0 || ${#issue_details[@]} -gt 0 ]]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "$(date): Health check #$check_cycle — ${#issue_details[@]} finding(s), $total_issues action(s) taken ($pods_checked pods scanned)"
+    for detail in "${service_summary[@]}"; do
+      echo "$detail"
+    done
     for detail in "${issue_details[@]}"; do
       echo "$detail"
     done
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   elif [[ $((current_time - last_status_report)) -ge $STATUS_REPORT_INTERVAL ]]; then
     echo "$(date): Health check #$check_cycle — all nominal ($pods_checked pods scanned, ${#error_counts[@]} tracked)"
+    for detail in "${service_summary[@]}"; do
+      echo "$detail"
+    done
     last_status_report=$current_time
   fi
 
