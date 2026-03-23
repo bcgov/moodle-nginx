@@ -5,6 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 
@@ -715,19 +716,16 @@ jobs:
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
-  lighthouse-check:
-    name: 🚦 Audit
+  lighthouse-monitor:
+    name: "🚦 Lighthouse Monitor"
     runs-on: ubuntu-22.04
-    needs: [checkEnv, call-deploy-workflow]
+    needs: [checkEnv]
+    timeout-minutes: 40
     outputs:
       LHSTATUS: ${{ steps.lighthouse.outputs.LHSTATUS }}
     if: |
       always() &&
-      (
-        needs.call-deploy-workflow.result == 'success' ||
-        needs.checkEnv.outputs.SKIP_DEPLOY == 'YES'
-      ) &&
-      !contains(needs.*.result, 'failure')
+      needs.checkEnv.result == 'success'
     steps:
       - uses: actions/checkout@v4
 
@@ -789,13 +787,209 @@ jobs:
           source openshift/scripts/utils/lighthouse.sh
           display_cache_information "config/lighthouse" "10GB" "${{ github.repository }}"
 
+      # =================================================================
+      # 🔭 DEPLOYMENT MONITORING
+      # Runs in parallel with builds/deploy. Polls the live site to detect
+      # the maintenance-mode transition and waits for the site to stabilize.
+      # Skipped entirely when SKIP_DEPLOY=YES (site is already live).
+      #
+      # State machine: BASELINE → DEPLOYING → READY
+      #   BASELINE:  Site is live, waiting for deploy to start
+      #   DEPLOYING: Non-200 or maintenance detected, deploy in progress
+      #   READY:     Site recovered after deploy, ready for audit
+      # =================================================================
+      - name: 🔭 Monitor Site During Deployment
+        if: needs.checkEnv.outputs.SKIP_DEPLOY != 'YES'
+        id: monitor
+        env:
+          TARGET_URL: https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
+        run: |
+          # ── Configuration ──
+          POLL_INTERVAL=15       # seconds between checks
+          BASELINE_TIMEOUT=1200  # 20 min — max wait for deploy to start
+          DEPLOY_TIMEOUT=600     # 10 min — max wait for site to recover
+          STABILIZE_WAIT=15      # seconds to wait after site returns
+
+          echo "================================================"
+          echo "🔭 DEPLOYMENT MONITOR"
+          echo "================================================"
+          echo "Target: $TARGET_URL"
+          echo "Poll: ${POLL_INTERVAL}s | Baseline timeout: ${BASELINE_TIMEOUT}s | Deploy timeout: ${DEPLOY_TIMEOUT}s"
+          echo ""
+
+          # ── State machine ──
+          STATE="BASELINE"
+          start_time=$(date +%s)
+          phase_start=$start_time
+          last_status=""
+          last_site_state=""
+          transition_count=0
+          baseline_checks=0
+
+          while true; do
+            now=$(date +%s)
+            elapsed=$(( now - start_time ))
+            phase_elapsed=$(( now - phase_start ))
+
+            # ── Phase-specific timeout checks ──
+            if [ "$STATE" = "BASELINE" ] && [ $phase_elapsed -ge $BASELINE_TIMEOUT ]; then
+              echo ""
+              echo "⏰ Baseline timeout (${BASELINE_TIMEOUT}s) — deployment not detected"
+              echo "   Proceeding with audit against current site"
+              break
+            fi
+
+            if [ "$STATE" = "DEPLOYING" ] && [ $phase_elapsed -ge $DEPLOY_TIMEOUT ]; then
+              echo ""
+              echo "⏰ Deploy timeout (${DEPLOY_TIMEOUT}s) — site has not recovered"
+              echo "MONITOR_RESULT=timeout_deploying" >> $GITHUB_OUTPUT
+              echo "   Skipping audit (site not ready)"
+              exit 0
+            fi
+
+            # ── Check site status ──
+            http_status=$(curl -sSL -o /tmp/lh_site_check.html -w '%{http_code}' \
+              --max-time 10 "$TARGET_URL" 2>/dev/null || echo "000")
+
+            # Detect maintenance content (covers OpenShift maintenance page returning 200)
+            site_state="up"
+            if [ "$http_status" != "200" ]; then
+              site_state="down"
+            elif grep -qi "maintenance" /tmp/lh_site_check.html 2>/dev/null; then
+              site_state="maintenance"
+            fi
+
+            # ── Log state transitions ──
+            if [ "$http_status" != "$last_status" ] || [ "$site_state" != "$last_site_state" ]; then
+              timestamp=$(date '+%H:%M:%S')
+              case "$site_state" in
+                up)          echo "[$timestamp] (+${elapsed}s) ✅ Site live: HTTP $http_status" ;;
+                maintenance) echo "[$timestamp] (+${elapsed}s) 🔧 Maintenance page detected: HTTP $http_status" ;;
+                down)        echo "[$timestamp] (+${elapsed}s) 🔴 Site unavailable: HTTP $http_status" ;;
+              esac
+              last_status="$http_status"
+              last_site_state="$site_state"
+              transition_count=$((transition_count + 1))
+            fi
+
+            # ── State transitions ──
+            case "$STATE" in
+              BASELINE)
+                baseline_checks=$((baseline_checks + 1))
+                if [ "$site_state" != "up" ]; then
+                  STATE="DEPLOYING"
+                  phase_start=$(date +%s)
+                  echo "   📡 Deployment detected — entering monitoring phase"
+                fi
+                ;;
+              DEPLOYING)
+                if [ "$site_state" = "up" ]; then
+                  STATE="READY"
+                  echo "   🎯 Site recovered — deployment appears complete (${elapsed}s total)"
+                  echo "   ⏳ Stabilization wait (${STABILIZE_WAIT}s)..."
+                  sleep "$STABILIZE_WAIT"
+                  break
+                fi
+                ;;
+            esac
+
+            sleep "$POLL_INTERVAL"
+          done
+
+          echo ""
+          echo "================================================"
+          echo "📊 MONITORING SUMMARY"
+          echo "================================================"
+          echo "  State transitions: $transition_count"
+          echo "  Final state: $STATE"
+          echo "  Total monitoring time: ${elapsed}s"
+          echo "  Baseline checks: $baseline_checks"
+          echo ""
+          echo "MONITOR_RESULT=$STATE" >> $GITHUB_OUTPUT
+
+      # =================================================================
+      # 📋 DEPLOYMENT JOB LOG CAPTURE
+      # After the site recovers, fetch logs from the critical OpenShift
+      # jobs (migrate-build-files, moodle-upgrade) that ran during deploy.
+      # Provides visibility into PVC file migration and DB upgrade output
+      # directly in the CI log without needing to check OpenShift console.
+      # =================================================================
+      - name: 📋 Capture Deployment Job Logs
+        if: |
+          always() &&
+          needs.checkEnv.outputs.SKIP_DEPLOY != 'YES' &&
+          steps.monitor.outcome == 'success'
+        env:
+          DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+        run: |
+          echo "================================================"
+          echo "📋 DEPLOYMENT JOB LOG CAPTURE"
+          echo "================================================"
+          echo ""
+
+          # Install oc CLI (lightweight — just the binary)
+          curl -sSL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar xz
+          sudo mv oc /usr/local/bin/
+          oc version --client 2>/dev/null || true
+
+          # Login to OpenShift
+          oc login --token=${{ secrets.AUTH_TOKEN_950003 }} \
+            --server=https://api.silver.devops.gov.bc.ca:6443 \
+            --insecure-skip-tls-verify=true 2>&1 | grep -v '^Warning:'
+          oc project "$DEPLOY_NAMESPACE"
+
+          mkdir -p tmp/artifacts
+
+          # ── migrate-build-files job logs ──
+          echo ""
+          echo "────────────────────────────────────────────────"
+          echo "📂 migrate-build-files"
+          echo "────────────────────────────────────────────────"
+          MBF_POD=$(oc get pods --selector=job-name=migrate-build-files \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [ -n "$MBF_POD" ]; then
+            MBF_STATUS=$(oc get pod "$MBF_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            echo "Pod: $MBF_POD (Status: $MBF_STATUS)"
+            echo ""
+            oc logs "$MBF_POD" 2>/dev/null | tee tmp/artifacts/migrate-build-files.log || \
+              echo "⚠️ Could not retrieve logs (pod may have been cleaned up)"
+          else
+            echo "ℹ️ No migrate-build-files pod found (job may not have run or was cleaned up)"
+          fi
+
+          # - moodle-upgrade job logs -
+          echo ""
+          echo "────────────────────────────────────────────────"
+          echo "🔄 moodle-upgrade"
+          echo "────────────────────────────────────────────────"
+          MU_POD=$(oc get pods --selector=job-name=moodle-upgrade \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [ -n "$MU_POD" ]; then
+            MU_STATUS=$(oc get pod "$MU_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            echo "Pod: $MU_POD (Status: $MU_STATUS)"
+            echo ""
+            oc logs "$MU_POD" 2>/dev/null | tee tmp/artifacts/moodle-upgrade.log || \
+              echo "⚠️ Could not retrieve logs (pod may have been cleaned up)"
+          else
+            echo "ℹ️ No moodle-upgrade pod found (job may not have run or was cleaned up)"
+          fi
+
+          echo ""
+          echo "════════════════════════════════════════════════"
+          echo "📋 Job log capture complete"
+          echo "════════════════════════════════════════════════"
+
       - name: 🚦 Lighthouse Performance Audit
         id: lighthouse
+        if: |
+          always() &&
+          (steps.monitor.outcome == 'success' || steps.monitor.outcome == 'skipped') &&
+          steps.monitor.outputs.MONITOR_RESULT != 'timeout_deploying'
         run: |
           # Enable command tracing only when TRACE level debugging
           if [ "${{ needs.checkEnv.outputs.DEBUG_LEVEL }}" = "TRACE" ]; then
             set -x
-            echo "� TRACE mode enabled - full command tracing active"
+            echo "🔬 TRACE mode enabled - full command tracing active"
           fi
 
           echo "================================================"
@@ -853,7 +1047,7 @@ jobs:
             exit $LIGHTHOUSE_EXIT_CODE
           fi
 
-      # � Emergency maintenance mode — triggered when Lighthouse detects critical failures
+      # 🚧 Emergency maintenance mode — triggered when Lighthouse detects critical failures
       # Configurable per environment via AUDIT_FAILURE_MOODLE_MAINTENANCE / AUDIT_FAILURE_OPENSHIFT_MAINTENANCE
       - name: 🚧 Audit Failure — Enable Maintenance Mode
         if: >
@@ -869,9 +1063,11 @@ jobs:
           echo "  OpenShift maintenance: $AUDIT_FAILURE_OPENSHIFT_MAINTENANCE"
           echo ""
 
-          # Install oc CLI
-          curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar xz
-          sudo mv oc kubectl /usr/local/bin/ 2>/dev/null || sudo mv oc /usr/local/bin/
+          # Install oc CLI (skip if already installed by job-logs step)
+          if ! command -v oc &>/dev/null; then
+            curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar xz
+            sudo mv oc kubectl /usr/local/bin/ 2>/dev/null || sudo mv oc /usr/local/bin/
+          fi
           echo "oc version: $(oc version --client 2>/dev/null || echo 'installed')"
 
           # Login to OpenShift
@@ -941,7 +1137,7 @@ jobs:
             echo "             oc patch route <route-name> -p '{\"spec\":{\"to\":{\"name\":\"web\"}}}'"
           fi
 
-      # �📦 Artifact Collection (using utility)
+      # 📦 Artifact Collection (using utility)
       - name: 📦 Collect Lighthouse Artifacts
         if: always()
         run: |
@@ -970,7 +1166,7 @@ jobs:
         helm-images,
         call-cleanup-workflow,
         call-deploy-workflow,
-        lighthouse-check
+        lighthouse-monitor
       ]
     if: always()
     runs-on: ubuntu-22.04
@@ -1022,7 +1218,7 @@ jobs:
                   "title": "Deploy to OpenShift: ${{ needs.call-deploy-workflow.result }}"
                 },{
                   "title": "Lighthouse Test Results:",
-                  "value": "${{ needs.lighthouse-check.outputs.LHSTATUS }}"
+                  "value": "${{ needs.lighthouse-monitor.outputs.LHSTATUS }}"
                 },{
                   "title": "Security Scan:",
                   "value": "${{ needs.checkEnv.outputs.SECURITY_STATUS }} - ${{ needs.checkEnv.outputs.SECURITY_SUMMARY }}"

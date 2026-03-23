@@ -3,6 +3,7 @@
 name: 🚀 Deploy
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 

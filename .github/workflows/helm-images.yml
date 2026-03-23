@@ -5,6 +5,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: helm-images
   USER: ${{ github.actor }}
 

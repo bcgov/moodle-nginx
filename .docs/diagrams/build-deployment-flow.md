@@ -6,7 +6,7 @@
 graph TD
     Start([🎯 GitHub Push/Schedule]) --> Trigger{Event Type?}
 
-    Trigger -->|Push to Branch| Branch[📌 Branch Detection<br/>950003-dev/test/prod]
+    Trigger -->|Push to Branch| Branch[📌 Branch Detection<br/>dev/test/prod]
     Trigger -->|Schedule| Schedule[⏰ Cron: Saturday 3AM]
 
     Branch --> CheckEnv
@@ -92,53 +92,53 @@ graph TD
 
     WebTier --> Background[⏰ Background Tasks<br/>- Cron pod<br/>- Scheduled jobs<br/>- Maintenance]
 
-    Background --> Migration{FORCE_MIGRATE<br/>= YES?}
+    Background --> PVCMigrate{FORCE_MIGRATE<br/>= YES?}
 
-    Migration -->|YES| RunMigrate[🔄 Database Migration<br/>- Moodle upgrade<br/>- Plugin updates<br/>- Schema changes]
-    Migration -->|NO| SkipMigrate[⏭️ Skip Migration]
+    PVCMigrate -->|YES| RunMigrate[📂 Migrate Build Files<br/>~10 min<br/>- Copy /app/public → PVC<br/>- Delete 30k+ files<br/>- Recopy + verify<br/>- /var/www/html]
+    PVCMigrate -->|NO| SkipMigrate[⏭️ Skip File Migration]
 
-    RunMigrate --> HealthCheck
-    SkipMigrate --> HealthCheck
+    RunMigrate --> Upgrade
+    SkipMigrate --> Upgrade
 
-    HealthCheck[🏥 Health Checks<br/>~2-3 min<br/>- Pod readiness<br/>- Database connectivity<br/>- Redis availability]
+    Upgrade[🔄 Moodle Upgrade<br/>~5 min<br/>- Database migration<br/>- Plugin updates<br/>- Schema changes<br/>- Redis error retry]
 
-    HealthCheck --> HealthOK{All Services<br/>Healthy?}
+    Upgrade --> ScaleUp[📈 Scale Up<br/>- PHP pods<br/>- Right-sizing<br/>- Cache clear]
 
-    HealthOK -->|YES| DeploySuccess[✅ Deployment Successful]
-    HealthOK -->|NO| DeployRetry{Retry?}
+    ScaleUp --> DisableMaint[🔓 Disable Maintenance<br/>- Patch routes to web<br/>- Verify site health]
 
-    DeployRetry -->|YES| HealthCheck
-    DeployRetry -->|NO| DeployFail[❌ Deployment Failed]
+    DisableMaint --> DeploySuccess[✅ Deployment Successful]
 
-    DeploySuccess --> PostDeploy[📊 POST-DEPLOYMENT PHASE]
+    DeployFail --> NotifyFail[🔔 Failure Notification]
+    NotifyFail --> End
 
-    PostDeploy --> NPMAudit[🔒 NPM Security Audit<br/>~30 seconds<br/>Before Lighthouse<br/>Supply chain protection]
+    DeploySuccess --> Notify
 
-    NPMAudit --> NPMResult{NPM Vulns?}
+    %% ── Lighthouse Monitor (runs in PARALLEL with builds/deploy) ──
+    CheckEnv --> LHMonitor[🔭 LIGHTHOUSE MONITOR<br/>Parallel with builds/deploy]
 
-    NPMResult -->|YES| NPMWarn[⚠️ WARN: Lighthouse may use<br/>compromised packages]
-    NPMResult -->|NO| NPMSafe[✅ NPM Dependencies Safe]
+    LHMonitor --> LHSetup[🏗️ LH Setup<br/>~2 min<br/>- Node.js 25 + Chrome<br/>- APT deps from cache<br/>- NPM modules from cache]
 
-    NPMWarn --> Lighthouse
-    NPMSafe --> Lighthouse
+    LHSetup --> LHPoll[🔭 Site Monitoring<br/>~variable<br/>- Poll every 15s<br/>- Detect maintenance mode<br/>- Track state transitions]
 
-    Lighthouse[🚦 Lighthouse CI Audit<br/>~3-5 min<br/>- Performance metrics<br/>- Accessibility checks<br/>- Security headers<br/>- SEO analysis<br/>- Best practices]
+    LHPoll --> LHAudit[🚦 Lighthouse Audit<br/>~5 min<br/>- Performance metrics<br/>- Accessibility checks<br/>- Security headers<br/>- SEO analysis<br/>- Best practices]
 
-    Lighthouse --> LHResult{Lighthouse<br/>Score?}
+    LHAudit --> LHResult{Lighthouse<br/>Score?}
 
     LHResult -->|Pass| LHPass[✅ Quality Gates Passed]
-    LHResult -->|Fail| LHWarn[⚠️ Quality Issues Detected<br/>Continue Anyway]
+    LHResult -->|Fail| LHFail{Failsafe<br/>Enabled?}
+
+    LHFail -->|YES| MaintenanceMode[🚧 Enable Maintenance<br/>Moodle and/or OpenShift]
+    LHFail -->|NO| LHWarn[⚠️ Quality Issues Detected]
 
     LHPass --> Artifacts
     LHWarn --> Artifacts
+    MaintenanceMode --> Artifacts
 
     Artifacts[📤 Upload Artifacts<br/>- Security reports<br/>- Lighthouse results<br/>- Build logs<br/>- Test results]
 
-    Artifacts --> Notify[🔔 Notification<br/>Rocket.Chat webhook<br/>- Build status<br/>- Deployment URL<br/>- Test results]
+    Artifacts --> Notify[🔔 Notification<br/>Rocket.Chat webhook<br/>- Build status<br/>- Deployment URL<br/>- Lighthouse results]
 
     Notify --> Complete[🎉 Pipeline Complete]
-
-    DeployFail --> NotifyFail[🔔 Failure Notification]
 
     NotifyFail --> End([🏁 Workflow End])
     Complete --> End
@@ -156,7 +156,11 @@ graph TD
     style Cache fill:#fce4ec
     style App fill:#fff9c4
     style WebTier fill:#e0f2f1
-    style Lighthouse fill:#e8eaf6
+    style RunMigrate fill:#fff3e0
+    style Upgrade fill:#fff3e0
+    style LHMonitor fill:#e8eaf6
+    style LHAudit fill:#e8eaf6
+    style LHPoll fill:#ede7f6
     style DeploySuccess fill:#c8e6c9
     style DeployFail fill:#ffcdd2,color:#c62828
     style Complete fill:#a5d6a7
@@ -168,7 +172,7 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph "🟢 Development (950003-dev)"
+    subgraph "🟢 Development"
         DevConfig["🔧 Configuration<br/>────────────<br/>Security: BASIC + WARN<br/>Scan Time: ~2-3 min<br/>Containers: NO<br/>────────────<br/>Builds: Usually SKIP<br/>Deploy: Fast iteration<br/>Migration: Auto<br/>────────────<br/>Monitoring: Basic"]
 
         DevFlow["📊 Flow<br/>────────────<br/>1. Quick security check<br/>2. Use cached images<br/>3. Deploy immediately<br/>4. Light testing<br/>────────────<br/>Total: ~5-10 min"]
@@ -176,7 +180,7 @@ graph LR
         DevResult["✅ Result<br/>────────────<br/>Speed: ⚡ FAST<br/>Security: ⚠️ Core scan warn-only<br/>Preflight: may fail unresolved High/Critical<br/>────────────<br/>Best for rapid dev"]
     end
 
-    subgraph "🟡 Test (950003-test)"
+    subgraph "🟡 Test"
         TestConfig["🔧 Configuration<br/>────────────<br/>Security: FULL + HIGH<br/>Scan Time: ~6-8 min<br/>Containers: YES<br/>────────────<br/>Builds: Full rebuild<br/>Deploy: Comprehensive<br/>Migration: Validated<br/>────────────<br/>Monitoring: Enhanced"]
 
         TestFlow["📊 Flow<br/>────────────<br/>1. Full security scan<br/>2. Build all images<br/>3. Deploy to test env<br/>4. Full Lighthouse audit<br/>────────────<br/>Total: ~25-35 min"]
@@ -184,7 +188,7 @@ graph LR
         TestResult["✅ Result<br/>────────────<br/>Speed: ⏱️ MODERATE<br/>Security: 🛡️ STRICT<br/>Testing: ✅ COMPREHENSIVE<br/>────────────<br/>Pre-prod validation"]
     end
 
-    subgraph "🔴 Production (950003-prod)"
+    subgraph "🔴 Production"
         ProdConfig["🔧 Configuration<br/>────────────<br/>Security: FULL + CRITICAL<br/>Scan Time: ~6-8 min<br/>Containers: YES<br/>────────────<br/>Builds: Full rebuild<br/>Deploy: Controlled<br/>Migration: Manual trigger<br/>────────────<br/>Monitoring: Maximum"]
 
         ProdFlow["📊 Flow<br/>────────────<br/>1. Full security scan<br/>2. Build all images<br/>3. Health-aware deploy<br/>4. Production monitoring<br/>5. Full audit trail<br/>────────────<br/>Total: ~30-40 min"]
@@ -235,17 +239,24 @@ gantt
     section Deployment
     Database Layer              :25:00, 03:00
     Cache Layer (Redis)         :28:00, 02:00
-    Application Pods            :crit, 30:00, 05:00
-    Web Tier (Nginx)            :35:00, 02:00
-    Background (Cron)           :35:00, 01:30
-    Database Migration          :36:30, 02:30
-    Health Checks               :39:00, 02:00
+    Moodle Template + Pods      :crit, 30:00, 03:00
+    Migrate Build Files (PVC)   :crit, 33:00, 10:00
+    Moodle Upgrade (DB)         :crit, 43:00, 05:00
+    Scale PHP + Right-sizing    :48:00, 02:00
+    Web Tier (Nginx)            :50:00, 02:00
+    Background (Cron)           :50:00, 01:30
+    Cache Clear + Verification  :52:00, 01:30
+    Disable Maintenance Mode    :53:30, 00:30
 
-    section Post-Deploy
-    NPM Security Audit          :41:00, 00:30
-    Lighthouse Audit            :41:30, 04:00
-    Upload Artifacts            :45:30, 01:00
-    Send Notifications          :46:30, 00:30
+    section Lighthouse Monitor (Parallel)
+    LH: Node.js + Chrome Setup  :08:30, 02:00
+    LH: Baseline Polling        :10:30, 19:30
+    LH: Deploy Monitoring       :active, 30:00, 24:00
+    LH: Performance Audit       :crit, 54:00, 05:00
+
+    section Finalize
+    Upload Artifacts            :59:00, 01:00
+    Send Notifications          :60:00, 00:30
 ```
 
 ---
@@ -335,11 +346,11 @@ graph TD
 
     Deploy --> Live[✅ Live Application]
 
-    Live --> P3[🔒 Phase 3: Post-Deploy Security<br/>~5 min<br/>WARN ONLY]
+    Live --> P3[🔒 Phase 3: Lighthouse Monitor<br/>Parallel with builds/deploy<br/>WARN ONLY]
 
-    P3 --> S8[🔍 NPM Audit FIRST<br/>Before Lighthouse<br/>Supply chain protection]
+    P3 --> S8[🔭 Site Monitoring<br/>Polls every 15s<br/>Detects deploy transitions]
     S8 --> S9[🚦 Lighthouse Security Audit<br/>- Security headers<br/>- HTTPS checks<br/>- Content Security Policy]
-    S9 --> S10[📊 Runtime Monitoring Setup]
+    S9 --> S10[📊 Maintenance Failsafe<br/>on critical audit failure]
 
     S10 --> Report[📈 Security Report<br/>Upload artifacts<br/>Notify team]
 
@@ -365,6 +376,7 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant GH as GitHub Actions
+    participant LH as Lighthouse Monitor
     participant OS as OpenShift
     participant DB as MariaDB Galera
     participant Redis as Redis Sentinel
@@ -372,8 +384,12 @@ sequenceDiagram
     participant Web as Nginx
 
     GH->>OS: 🚀 Deploy Request
+    GH->>LH: 🔭 Start Lighthouse Monitor (parallel)
+    LH->>LH: Setup Node.js + Chrome
 
     OS->>DB: 1. Deploy Database Cluster
+    LH-->>Web: Poll site (BASELINE)
+    Web-->>LH: ✅ HTTP 200
     DB->>DB: Initialize Galera
     DB->>DB: Restore from backup (if new)
     DB-->>OS: ✅ 3/3 nodes ready
@@ -383,51 +399,52 @@ sequenceDiagram
     Redis->>Redis: Configure replication
     Redis-->>OS: ✅ 3/3 nodes ready
 
-    OS->>App: 3. Deploy Moodle Pods
+    OS->>OS: 3. Enable Maintenance Mode
+    OS->>Web: Scale down (0 replicas)
+    LH-->>Web: Poll site (BASELINE → DEPLOYING)
+    Web-->>LH: 🔧 Maintenance page
+
+    OS->>App: 4. Deploy Moodle Template
     App->>DB: Test connection
     DB-->>App: ✅ Connected
-    App->>Redis: Test cache
-    Redis-->>App: ✅ Cache available
 
-    alt FORCE_MIGRATE = YES
-        App->>DB: 🔄 Run migrations
-        DB->>DB: Update schema
-        DB->>DB: Upgrade plugins
-        DB-->>App: ✅ Migration complete
-    else Skip Migration
-        App->>App: ⏭️ Use existing schema
-    end
+    OS->>OS: 5. Migrate Build Files (PVC)
+    Note over OS: Job: migrate-build-files<br/>~10 min<br/>Delete 30k+ files<br/>Copy /app/public → /var/www/html<br/>Verify file counts
+
+    LH-->>Web: Poll (DEPLOYING)
+    Web-->>LH: 🔧 Still in maintenance
+
+    OS->>OS: 6. Moodle Upgrade (DB)
+    Note over OS,DB: Job: moodle-upgrade<br/>~5 min<br/>Schema migration<br/>Plugin updates<br/>Redis error retry loop
 
     App->>App: Initialize PHP-FPM
     App-->>OS: ✅ Pods ready
 
-    OS->>Web: 4. Deploy Web Tier
+    OS->>Web: 7. Scale up Web + PHP
+    OS->>OS: Right-sizing cluster
+    OS->>App: Clear Moodle cache
+    OS->>OS: Disable maintenance mode
     Web->>App: Test backend connection
     App-->>Web: ✅ Backend available
     Web-->>OS: ✅ Web ready
 
+    LH-->>Web: Poll (DEPLOYING → READY)
+    Web-->>LH: ✅ HTTP 200
+
     OS->>GH: ✅ Deployment complete
 
-    GH->>OS: 5. Health Check Loop
+    LH->>LH: 📋 Capture Job Logs (oc logs)
+    LH->>Web: 🚦 Run Lighthouse Audit
 
-    loop Every 30 seconds (max 3 min)
-        GH->>DB: Check database health
-        DB-->>GH: Status
-        GH->>Redis: Check cache health
-        Redis-->>GH: Status
-        GH->>App: Check pod readiness
-        App-->>GH: Status
-        GH->>Web: Check web availability
-        Web-->>GH: Status
+    alt Audit Passed
+        LH->>GH: ✅ Quality Gates Passed
+    else Audit Failed + Failsafe Enabled
+        LH->>OS: 🚧 Enable Maintenance Mode
+        LH->>GH: ⚠️ Manual intervention required
     end
 
-    alt All Healthy
-        GH->>GH: ✅ Deploy SUCCESS
-        GH->>GH: Continue to Lighthouse
-    else Unhealthy after 3 min
-        GH->>GH: ❌ Deploy FAILED
-        GH->>GH: Rollback deployment
-    end
+    GH->>GH: 📤 Upload Artifacts
+    GH->>GH: 🔔 Send Notification
 ```
 
 ---
@@ -441,13 +458,14 @@ sequenceDiagram
 | **Skip Container Scan** (`CONTAINERS=NO`) | ✅ Yes | ❌ No | ❌ No | ~4-6 min |
 | **Trivy DB Cache** (`SCAN_CACHE=YES`) | ✅ Yes | ✅ Yes | ✅ Yes | ~30-60 sec |
 | **Parallel Image Builds** | ✅ Yes | ✅ Yes | ✅ Yes | ~10-15 min |
+| **Parallel Lighthouse Monitor** | ✅ Yes | ✅ Yes | ✅ Yes | ~8-10 min |
 | **Skip Cleanup** (`CLEAN_BUILDS=NO`) | ✅ Yes | ✅ Usually | ✅ Yes | ~1-2 min |
-| **Skip Migration** (`FORCE_MIGRATE=NO`) | ✅ Often | ❌ No | ⚠️ Careful | ~2-5 min |
+| **Skip Migration** (`FORCE_MIGRATE=NO`) | ✅ Often | ❌ No | ⚠️ Careful | ~10-15 min |
 
 **Total Time Comparison**:
 - **Dev (Optimized)**: ~5-10 min (skip builds, minimal security, no cleanup)
-- **Test (Full)**: ~25-35 min (full builds, comprehensive security, full testing)
-- **Prod (Careful)**: ~30-40 min (full builds, maximum security, controlled deployment)
+- **Test (Full)**: ~50-60 min (full builds, comprehensive security, PVC migration, full testing)
+- **Prod (Careful)**: ~55-65 min (full builds, maximum security, controlled deployment)
 
 ---
 
@@ -496,7 +514,16 @@ stateDiagram-v2
     DeployFail --> Rollback
     Rollback --> NotifyTeam
 
-    HealthOK --> Lighthouse
+    HealthOK --> MigrateFiles
+    MigrateFiles --> MigrateOK: PVC copy complete
+    MigrateFiles --> DeployFail: Copy failed (800s timeout)
+
+    MigrateOK --> MoodleUpgrade
+    MoodleUpgrade --> UpgradeOK: Upgrade complete
+    MoodleUpgrade --> RedisRetry: Redis connection error
+    RedisRetry --> MoodleUpgrade: Restart proxy + retry
+
+    UpgradeOK --> Lighthouse
 
     Lighthouse --> Complete: Pass/Warn
     Lighthouse --> Complete: Continue Anyway
@@ -538,8 +565,8 @@ stateDiagram-v2
 |----------|--------------|----------|
 | **🔥 Hotfix (Emergency)** | `SKIP_BUILDS=YES`<br/>`SECURITY_SCAN_LEVEL=OFF`<br/>`FORCE_MIGRATE=NO` | ~5-8 min |
 | **🚀 Feature Deploy (Dev)** | `SKIP_BUILDS=YES`<br/>`SECURITY_SCAN_LEVEL=BASIC`<br/>`SCAN_EXIT_ON=WARN` | ~8-12 min |
-| **✅ Full Build (Test)** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=HIGH`<br/>`CLEAN_BUILDS=YES` | ~30-35 min |
-| **🔒 Production Release** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=CRITICAL`<br/>`FORCE_MIGRATE=NO` | ~35-40 min |
+| **✅ Full Build (Test)** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=HIGH`<br/>`CLEAN_BUILDS=YES` | ~50-60 min |
+| **🔒 Production Release** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=CRITICAL`<br/>`FORCE_MIGRATE=NO` | ~55-65 min |
 
 ### Environment URLs
 

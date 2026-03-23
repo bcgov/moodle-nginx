@@ -31,6 +31,7 @@ on:
         type: boolean
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   CACHE_VERSION: v1
   SECURITY_RESULTS_RETENTION: 7 # days
 
@@ -71,7 +72,7 @@ jobs:
 
       - name: 📦 Cache Security Scan Results
         id: cache-security
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         if: github.event.inputs.force_refresh != 'true'
         with:
           path: |
@@ -453,7 +454,7 @@ jobs:
           fi
 
       - name: 💾 Archive Security Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-scan-results-${{ github.run_number }}
           path: |

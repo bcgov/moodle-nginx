@@ -3,6 +3,7 @@
 name: 🧹️ Clean-up
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: ${{ github.repository }}
   USER: ${{ github.actor }}
 
