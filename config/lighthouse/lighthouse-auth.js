@@ -31,9 +31,19 @@ async function retryNavigation(page, url, options = {}, maxRetries = 3) {
   }
 }
 
-async function waitForSiteReadiness(page, url, maxWaitTime = 60000) {
+async function waitForSiteReadiness(page, url, maxWaitTime = 1800000) {
   console.log(`🔍 Checking site readiness for: ${url}`);
   const startTime = Date.now();
+
+  // Maintenance page indicators: OpenShift static page + Moodle CLI maintenance
+  const maintenancePatterns = [
+    'Site Maintenance',
+    'Page unavailable due to maintenance',
+    'currently undergoing maintenance',
+    'cli/maintenance.php',
+    'This site is undergoing maintenance',
+    'Maintenance mode is enabled',
+  ];
 
   while (Date.now() - startTime < maxWaitTime) {
     try {
@@ -43,8 +53,22 @@ async function waitForSiteReadiness(page, url, maxWaitTime = 60000) {
       });
 
       if (response && response.status() === 200) {
-        console.log(`✅ Site is ready! Status: ${response.status()}`);
-        return true;
+        // Check page content for maintenance indicators
+        const bodyText = await page.evaluate(() => document.body ? document.body.innerText : '');
+        const pageTitle = await page.evaluate(() => document.title || '');
+        const fullText = pageTitle + ' ' + bodyText;
+
+        const isMaintenance = maintenancePatterns.some(pattern =>
+          fullText.toLowerCase().includes(pattern.toLowerCase())
+        );
+
+        if (isMaintenance) {
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`🔧 Maintenance mode detected (${elapsed}s elapsed) — waiting for site to exit maintenance...`);
+        } else {
+          console.log(`✅ Site is ready! Status: ${response.status()}`);
+          return true;
+        }
       } else {
         console.log(`⚠️ Site returned status: ${response ? response.status() : 'no response'}`);
       }
@@ -52,8 +76,8 @@ async function waitForSiteReadiness(page, url, maxWaitTime = 60000) {
       console.log(`⚠️ Site not ready yet: ${error.message}`);
     }
 
-    console.log(`⏳ Waiting 10 seconds before next readiness check...`);
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    console.log(`⏳ Waiting 15 seconds before next readiness check...`);
+    await new Promise(resolve => setTimeout(resolve, 15000));
   }
 
   throw new Error(`Site was not ready within ${maxWaitTime / 1000} seconds`);
@@ -174,7 +198,31 @@ async function runLighthouse(url, options, config = null) {
 
   try {
     // Wait for the login button to be available
-    await page.waitForSelector('.loginform', { timeout: 30000 });
+    // If maintenance mode is detected, wait for it to clear and re-navigate
+    try {
+      await page.waitForSelector('.loginform', { timeout: 30000 });
+    } catch (selectorError) {
+      // Check if this is a maintenance page (returns 200 but no login form)
+      const pageText = await page.evaluate(() =>
+        (document.title || '') + ' ' + (document.body ? document.body.innerText : '')
+      );
+      const maintenanceHints = [
+        'site maintenance', 'undergoing maintenance', 'maintenance mode',
+        'page unavailable due to maintenance', 'cli/maintenance.php'
+      ];
+      const isMaintenance = maintenanceHints.some(hint =>
+        pageText.toLowerCase().includes(hint)
+      );
+
+      if (isMaintenance) {
+        console.log('🔧 Maintenance mode detected on login page — waiting for site to exit maintenance...');
+        await waitForSiteReadiness(page, url);
+        await retryNavigation(page, url);
+        await page.waitForSelector('.loginform', { timeout: 30000 });
+      } else {
+        throw selectorError; // Not maintenance — re-throw original error
+      }
+    }
 
     // Click the link to open the form
     await page.click('.loginform>details summary');
