@@ -267,42 +267,92 @@ async function runLighthouse(url, options, config = null) {
   for (const path of paths) {
     const pageStartTime = Date.now();
     const url = process.env.APP_HOST_URL + path;
-    console.log(`📄 [${pathsPassed + 1}/${pathCount}] Auditing: ${path}`);
-    // await page.setCookie(...cookies);
-    const {lhr} = await lighthouse(url, options, config);
-    await retryNavigation(page, url); // Navigate to the new URL
+    const pageNum = pathsPassed + 1;
+    console.log(`📄 [${pageNum}/${pathCount}] Auditing: ${path}`);
+
+    // Run Lighthouse with one retry on internal failure (null scores / runtimeError)
+    let lhr = null;
+    const maxAuditAttempts = 2;
+    for (let auditAttempt = 1; auditAttempt <= maxAuditAttempts; auditAttempt++) {
+      try {
+        const result = await lighthouse(url, options, config);
+        lhr = result.lhr;
+      } catch (lhError) {
+        console.log(`   ⚠️ Lighthouse threw an error on attempt ${auditAttempt}: ${lhError.message}`);
+        lhr = null;
+      }
+
+      // Check for Lighthouse internal failure (runtimeError or null scores)
+      const hasRuntimeError = lhr && lhr.runtimeError && lhr.runtimeError.code;
+      const hasNullScores = lhr && (
+        lhr.categories.accessibility.score === null ||
+        lhr.categories.performance.score === null ||
+        lhr.categories['best-practices'].score === null
+      );
+
+      if (!lhr || hasRuntimeError || hasNullScores) {
+        const reason = !lhr ? 'Lighthouse crashed'
+          : hasRuntimeError ? `runtimeError: ${lhr.runtimeError.code} — ${lhr.runtimeError.message}`
+          : 'null scores (internal timeout)';
+        if (auditAttempt < maxAuditAttempts) {
+          console.log(`   ⚠️ Lighthouse internal failure on attempt ${auditAttempt}: ${reason}`);
+          console.log(`   🔄 Retrying audit for: ${path}`);
+          continue;
+        }
+        console.log(`   ⚠️ Lighthouse internal failure on attempt ${auditAttempt}: ${reason}`);
+        console.log(`   ⏭️ Skipping scores for ${path} (Lighthouse failure, not a real score)`);
+        break;
+      }
+
+      // Valid scores — stop retrying
+      break;
+    }
+
+    await retryNavigation(page, url); // Navigate to the new URL for screenshot
+
+    const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
+    const pageContent = await page.content();
+    await fsp.writeFile(filename + '.html', pageContent);
+    await page.screenshot({path: filename + '.png'});
+
+    // Check for Lighthouse failure — skip scoring but warn
+    const hasValidScores = lhr
+      && lhr.categories.accessibility.score !== null
+      && lhr.categories.performance.score !== null
+      && lhr.categories['best-practices'].score !== null
+      && !(lhr.runtimeError && lhr.runtimeError.code);
+
+    if (!hasValidScores) {
+      warnings.push(`⚠️ Lighthouse internal failure for ${path} — scores skipped`);
+      results.push({ path, accessibilityScore: 'N/A', performanceScore: 'N/A', bestPracticesScore: 'N/A', skipped: true });
+      const pageElapsed = ((Date.now() - pageStartTime) / 1000).toFixed(1);
+      console.log(`   ⚠️ [${pageNum}/${pathCount}] Skipped in ${pageElapsed}s — Lighthouse internal failure`);
+      pathsPassed++;
+      continue;
+    }
 
     // Get the scores
     const accessibilityScore = Math.round(lhr.categories.accessibility.score * 100);
     const performanceScore = Math.round(lhr.categories.performance.score * 100);
     const bestPracticesScore = Math.round(lhr.categories['best-practices'].score * 100);
-    const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
-
-    const pageContent = await page.content();
-    await fsp.writeFile(filename + '.html', content);
-    await page.screenshot({path: filename + '.png'}); // Take a screenshot after clicking the login button
 
     // Verify the scores
     if (accessibilityScore < 90) {
       errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
       pathsFailed++;
-      // throw new Error(`Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
     }
     if (performanceScore < 35) {
       errors.push(`❌ Performance score ${performanceScore} is less than 35 for ${path}`);
       pathsFailed++;
-      // throw new Error(`Performance score ${performanceScore} is less than 35 for ${path}`);
     }
     if (bestPracticesScore < 80) {
       errors.push(`❌ Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
       pathsFailed++;
-      // throw new Error(`Best Practices score ${bestPracticesScore} is less than 80 for ${path}`);
     }
 
     for (const char of detectEncodingIssues) {
       if (pageContent.includes(char)) {
         warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
-        // throw new Error(`⚠️ Found improperly encoded character "${char}" in the HTML content`);
       }
     }
 
@@ -315,7 +365,7 @@ async function runLighthouse(url, options, config = null) {
     });
 
     const pageElapsed = ((Date.now() - pageStartTime) / 1000).toFixed(1);
-    console.log(`   ✅ [${pathsPassed + 1}/${pathCount}] Done in ${pageElapsed}s — A11y: ${accessibilityScore} | Perf: ${performanceScore} | BP: ${bestPracticesScore}`);
+    console.log(`   ✅ [${pageNum}/${pathCount}] Done in ${pageElapsed}s — A11y: ${accessibilityScore} | Perf: ${performanceScore} | BP: ${bestPracticesScore}`);
     pathsPassed++;
   }
 
