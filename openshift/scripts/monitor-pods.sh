@@ -42,7 +42,16 @@ echo "Galera check interval: ${GALERA_CHECK_INTERVAL}s"
 echo "Error threshold: ${ERROR_THRESHOLD}"
 
 # Source utilities (same pattern as other scripts)
-source /scripts/_utils.sh
+if ! source /scripts/_utils.sh 2>/dev/null; then
+  echo "FATAL: Failed to source /scripts/_utils.sh — required functions unavailable"
+  exit 1
+fi
+
+# Validate required environment
+if [[ -z "$DEPLOY_NAMESPACE" ]]; then
+  echo "FATAL: DEPLOY_NAMESPACE is not set — cannot monitor pods"
+  exit 1
+fi
 
 # Authenticate with OpenShift API (same as check-pod-logs.sh)
 # Set writable kubeconfig path — container filesystem root is read-only
@@ -54,6 +63,13 @@ if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
 else
   echo "WARNING: OPENSHIFT_TOKEN or OPENSHIFT_SERVER not set — oc commands will use pod SA token"
 fi
+
+# Validate oc connectivity — fail fast if API is unreachable
+if ! oc get namespace "$DEPLOY_NAMESPACE" -o name &>/dev/null; then
+  echo "FATAL: Cannot reach OpenShift API or namespace $DEPLOY_NAMESPACE — check credentials"
+  exit 1
+fi
+echo "✅ OpenShift API connectivity verified for namespace: $DEPLOY_NAMESPACE"
 
 # Suppress repetitive oc CLI warnings (legacy token, insecure TLS) from polluting health check logs
 export KUBECTL_WARN_EXTERNAL_UNKNOWN=false
@@ -68,11 +84,21 @@ check_pod_health() {
   local error_patterns="$2"
   local restart_enabled="${3:-false}"
 
-  local pods=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  local pods_output
+  pods_output=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>&1)
+  local oc_exit=$?
   local pod_count=0
   local mode_label="observe"
   [[ "$restart_enabled" == "true" ]] && mode_label="restart"
 
+  # Distinguish "no pods" from "oc command failed" (auth expired, network, etc.)
+  if [[ $oc_exit -ne 0 ]]; then
+    service_summary+=("  🟡 $selector — oc query failed (exit $oc_exit) [$mode_label]")
+    issue_details+=("  ⚠️  oc get pods -l $selector failed — possible API connectivity issue")
+    return 1
+  fi
+
+  local pods="$pods_output"
   if [[ -z "$pods" ]]; then
     service_summary+=("  ⚪ $selector — no running pods [$mode_label]")
     return 0
@@ -205,10 +231,14 @@ while true; do
     # ── Redis Proxy readiness check ──
     # The proxy can get "stuck" with stale connections after Galera/Redis changes.
     # Log-based checks only catch written errors; this validates actual pod readiness.
-    local proxy_pod=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    if [[ -n "$proxy_pod" ]]; then
-      local ready=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-      local restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
+    proxy_pod=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>&1)
+    proxy_oc_exit=$?
+    if [[ $proxy_oc_exit -ne 0 ]]; then
+      service_summary+=("  🟡 redis-proxy — oc query failed (exit $proxy_oc_exit)")
+      issue_details+=("  ⚠️  redis-proxy readiness check skipped — oc command failed")
+    elif [[ -n "$proxy_pod" ]]; then
+      ready=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+      restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
       restarts=${restarts:-0}
 
       if [[ "$ready" == "True" ]]; then
@@ -250,6 +280,17 @@ while true; do
     fi
 
     last_galera_check=$current_time
+  fi
+
+  # ── Canary check: verify oc API connectivity is still alive ──
+  # If all selectors returned empty, it could mean the API is down, not that pods are gone.
+  # A quick namespace query validates the connection is still working.
+  if [[ $pods_checked -eq 0 && ${#service_summary[@]} -gt 0 ]]; then
+    if ! oc get namespace "$DEPLOY_NAMESPACE" -o name &>/dev/null; then
+      issue_details+=("  🔴 CANARY FAILED: oc API unreachable — all health checks may be stale")
+      issue_details+=("     All services reported empty/failed — this is likely an API connectivity issue")
+      total_issues=$((total_issues + 1))
+    fi
   fi
 
   # Status report — detailed when issues found, periodic summary when healthy

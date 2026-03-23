@@ -252,11 +252,11 @@ gantt
     Disable Maintenance Mode    :53:30, 00:30
 
     section Lighthouse Monitor (Parallel)
-    LH: Node.js + Chrome Setup  :08:30, 02:00
-    LH: Baseline Polling        :10:30, 19:30
-    LH: Deploy Monitoring       :active, 30:00, 24:00
-    LH: Capture Deploy Logs     :54:00, 00:15
-    LH: Performance Audit       :crit, 54:15, 05:00
+    LH — Node.js + Chrome Setup :08:30, 02:00
+    LH — Baseline Polling       :10:30, 19:30
+    LH — Deploy Monitoring      :active, 30:00, 24:00
+    LH — Capture Deploy Logs    :54:00, 00:15
+    LH — Performance Audit      :crit, 54:15, 05:00
 
     section Finalize
     Upload Artifacts            :59:15, 01:00
