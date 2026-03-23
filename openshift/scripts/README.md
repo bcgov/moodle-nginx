@@ -63,6 +63,28 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 | [`helm-image-resolver.sh`](./helm-image-resolver.sh) | Image registry resolution (Artifactory) | See inline header |
 | [`ensure-artifactory-access.sh`](./ensure-artifactory-access.sh) | Configure imagePullSecrets | See inline header |
 
+### CI/CD Utility Modules (`utils/`)
+
+Extracted, reusable shell modules sourced by GitHub Actions workflow steps. Each module is self-contained with its own logging, error handling, and `GITHUB_OUTPUT` integration.
+
+| Module | Purpose | Used By |
+|--------|---------|---------|
+| [`openshift.sh`](./utils/openshift.sh) | Core OpenShift operations, logging functions | All scripts |
+| [`site-monitor.sh`](./utils/site-monitor.sh) | Deployment state tracker (BASELINE → DEPLOYING → READY), pipeline failure early-exit | [build.yml](../../.github/workflows/build.yml) Lighthouse Monitor |
+| [`lighthouse-audit.sh`](./utils/lighthouse-audit.sh) | Lighthouse CI wrapper — environment verification, live output streaming | [build.yml](../../.github/workflows/build.yml) Lighthouse Monitor |
+| [`lighthouse.sh`](./utils/lighthouse.sh) | Lighthouse core functions — audit execution, setup, cache management | `lighthouse-audit.sh` |
+| [`deploy-logs.sh`](./utils/deploy-logs.sh) | Capture migrate-build-files and moodle-upgrade job logs via `oc logs` | [build.yml](../../.github/workflows/build.yml) Lighthouse Monitor |
+| [`maintenance-mode.sh`](./utils/maintenance-mode.sh) | Emergency maintenance mode on Lighthouse audit failure | [build.yml](../../.github/workflows/build.yml) Lighthouse Monitor |
+| [`npm.sh`](./utils/npm.sh) | Secure npm install, audit scanning, lockfile validation | `lighthouse.sh`, checkEnv |
+| [`docker-security.sh`](./utils/docker-security.sh) | Trivy base image scanning, SBOM generation | checkEnv security scan |
+| [`security.sh`](./utils/security.sh) | Security scan orchestration and result caching | `comprehensive-security-scan.sh` |
+| [`docker.sh`](./utils/docker.sh) | Docker image build and push helpers | Build workflows |
+| [`database.sh`](./utils/database.sh) | Galera/MariaDB operations and health checks | Deployment scripts |
+| [`redis.sh`](./utils/redis.sh) | Redis Sentinel operations | Deployment scripts |
+| [`moodle.sh`](./utils/moodle.sh) | Moodle-specific operations (cache clear, maintenance) | Deployment scripts |
+| [`github-actions.sh`](./utils/github-actions.sh) | GitHub Actions helper functions | CI workflows |
+| [`version-management.sh`](./utils/version-management.sh) | Version consistency validation helpers | `validate-version-consistency.sh` |
+
 ## 🏗️ Architecture Overview
 
 ### Monitoring System
@@ -135,6 +157,8 @@ All scripts include comprehensive headers with:
 - Links to related documentation
 
 ### External Documentation
+- **Build & Deployment Flow**: [`.docs/diagrams/build-deployment-flow.md`](../../.docs/diagrams/build-deployment-flow.md)
+- **Logging Levels**: [`.docs/logging-levels.md`](../../.docs/logging-levels.md)
 - **Architecture**: [`.docs/galera-monitoring-solution.md`](../../.docs/galera-monitoring-solution.md)
 - **Manual Troubleshooting**: [`.docs/manual-galera-troubleshooting.md`](../../.docs/manual-galera-troubleshooting.md)
 - **Main README**: [Repository root](../../README.md)
@@ -184,10 +208,21 @@ The `_utils.sh` file sources modular utilities from the `utils/` directory:
 
 ```
 utils/
-├── openshift.sh    - Core OpenShift operations
-├── redis.sh        - Redis-specific operations
-├── database.sh     - Galera/MariaDB operations
-└── moodle.sh       - Moodle-specific operations
+├── openshift.sh           - Core OpenShift operations + logging (log_info, log_debug, etc.)
+├── site-monitor.sh        - Deployment state tracker with human-readable timings
+├── lighthouse-audit.sh    - Lighthouse CI wrapper with live output streaming
+├── lighthouse.sh          - Lighthouse core: audit, setup, cache management
+├── deploy-logs.sh         - Post-deploy job log capture (migrate-build-files, moodle-upgrade)
+├── maintenance-mode.sh    - Emergency maintenance on audit failure
+├── npm.sh                 - Secure npm install + audit scanning
+├── docker-security.sh     - Trivy base image scanning + SBOM
+├── security.sh            - Security scan orchestration + caching
+├── docker.sh              - Docker image build/push helpers
+├── github-actions.sh      - GitHub Actions helper functions
+├── version-management.sh  - Version consistency validation
+├── database.sh            - Galera/MariaDB operations
+├── redis.sh               - Redis Sentinel operations
+└── moodle.sh              - Moodle-specific operations
 ```
 
 Each utility module is self-contained and well-documented. See individual files for details.

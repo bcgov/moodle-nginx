@@ -2,15 +2,16 @@
 
 ## Explanation
 
-This directory contains the docker setup to run an instance of Moodle 4.01. A number of containers are created as follows
+This directory contains the docker setup to run an instance of Moodle (MOODLE_405_STABLE). A number of containers are created as follows
 
 * PHP 8.1-fpm to run the web instance of Moodle
 * PHP 8.1-cli (second instance) to run cron
-* nginx as the web server
-* redis for cache
-* mariadb for database
+* Nginx as the web server
+* Redis 8.0 for session and application cache
+* MariaDB Galera 10.6 for database
 
-Most relevant variables for versions, pod names, etc. can be found in `example.env` and `example.versions.env` files.
+All image versions are centrally managed in `example.versions.env`.
+Most relevant runtime variables can be found in `example.env`.
 
 ## 🔄 Centralized Dependency Management
 
@@ -140,11 +141,11 @@ Deployment to OpenShift is handled via automated GitHub Actions workflows with c
 
 | Workflow | Purpose | Trigger |
 |----------|---------|---------|
-| **build.yml** | Main CI/CD pipeline | Push to branch / Schedule |
-| **security-comprehensive.yml** | Security validation | Pre-build phase |
-| **deploy.yml** | OpenShift deployment | After successful build |
-| **lighthouse-check** | Post-deploy audit | After deployment |
-| **notify.yml** | Rocket.Chat notifications | Build/deploy events |
+| [**build.yml**](.github/workflows/build.yml) | Main CI/CD pipeline — env check, security scan, builds, deploy, Lighthouse monitor, notify | Push / PR / Schedule / Manual |
+| [**deploy.yml**](.github/workflows/deploy.yml) | OpenShift deployment orchestration | Called by build.yml |
+| [**security-comprehensive.yml**](.github/workflows/security-comprehensive.yml) | Standalone security validation | Manual dispatch |
+| [**notify.yml**](.github/workflows/notify.yml) | Rocket.Chat notifications | Called by build.yml |
+| [**cleanup.yml**](.github/workflows/cleanup.yml) | Old deployment cleanup | Called by build.yml |
 
 ### Branch-Specific Behavior
 
