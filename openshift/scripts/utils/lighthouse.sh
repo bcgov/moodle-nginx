@@ -121,9 +121,11 @@ run_lighthouse_audit() {
   log_debug "Running: node lighthouse-auth.js"
   log_debug "Target URL: $APP_HOST_URL"
 
-  # Capture output with better error handling
-  lighthouse_output=$(node lighthouse-auth.js 2>&1)
-  exit_code=$?
+  # Stream output live to CI log while saving to file for artifact collection.
+  # This gives real-time visibility into per-page timing and scores.
+  local log_file="$full_output_path/lighthouse-full.log"
+  node lighthouse-auth.js 2>&1 | tee "$log_file"
+  exit_code=${PIPESTATUS[0]}
 
   log_debug "Lighthouse execution completed with exit code: $exit_code"
 
@@ -133,7 +135,7 @@ run_lighthouse_audit() {
 
   if [ $exit_code -eq 0 ]; then
     status="success"
-    local warn_count=$(echo "$lighthouse_output" | grep -i warning | wc -l)
+    local warn_count=$(grep -ci warning "$log_file" 2>/dev/null || echo "0")
     if [ "$warn_count" -gt 0 ]; then
       warnings=" ($warn_count warnings)"
     fi
@@ -145,32 +147,17 @@ run_lighthouse_audit() {
     log_error "Exit code: $exit_code"
     log_error "Working directory: $(pwd)"
     log_error "Target URL: $APP_HOST_URL"
-    log_error ""
-    log_error "--- Full Lighthouse Output ---"
-
-    # Show ALL output for failed runs (not just first/last lines)
-    if [ -n "$lighthouse_output" ]; then
-      echo "$lighthouse_output" | while IFS= read -r line; do
-        log_error "$line"
-      done
-    else
-      log_error "(No output captured)"
-    fi
-
-    log_error "--- End Output ---"
+    log_error "(Full output streamed above and saved to: $log_file)"
     log_error "================================"
 
     # Extract first non-empty line as error message
-    local error_message=$(echo "$lighthouse_output" | grep -v '^$' | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
+    local error_message=$(grep -v '^$' "$log_file" 2>/dev/null | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
     if [ -z "$error_message" ]; then
       error_message="Lighthouse failed with exit code $exit_code"
     fi
     warnings=" (Error: $error_message)"
   fi
 
-  # Save full output using absolute path
-  local log_file="$full_output_path/lighthouse-full.log"
-  echo "$lighthouse_output" > "$log_file"
   log_debug "Full output saved to: $log_file"
 
   # Return to workspace root

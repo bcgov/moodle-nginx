@@ -34,6 +34,19 @@
 # See: .docs/diagrams/build-deployment-flow.md
 # =============================================================================
 
+# ── Time formatting helper ──
+# Converts raw seconds to human-readable "Xh Ym Zs" / "Xm Ys" / "Xs" format
+_format_duration() {
+  local seconds="$1"
+  if [ "$seconds" -ge 3600 ]; then
+    printf "%dh %dm %ds" $((seconds / 3600)) $(((seconds % 3600) / 60)) $((seconds % 60))
+  elif [ "$seconds" -ge 60 ]; then
+    printf "%dm %ds" $((seconds / 60)) $((seconds % 60))
+  else
+    printf "%ds" "$seconds"
+  fi
+}
+
 monitor_site_deployment() {
   local target_url="${1:?Usage: monitor_site_deployment <url> [poll_interval] [baseline_timeout] [deploy_timeout] [stabilize_wait]}"
   local poll_interval="${2:-15}"
@@ -45,7 +58,7 @@ monitor_site_deployment() {
   echo "🔭 DEPLOYMENT MONITOR"
   echo "================================================"
   echo "Target: $target_url"
-  echo "Poll: ${poll_interval}s | Baseline timeout: ${baseline_timeout}s | Deploy timeout: ${deploy_timeout}s"
+  echo "Poll: ${poll_interval}s | Baseline timeout: $(_format_duration $baseline_timeout) | Deploy timeout: $(_format_duration $deploy_timeout)"
   echo ""
 
   local STATE="BASELINE"
@@ -70,8 +83,8 @@ monitor_site_deployment() {
       last_heartbeat=$now
       timestamp=$(date '+%H:%M:%S')
       case "$STATE" in
-        BASELINE)  echo "[$timestamp] (+${elapsed}s) ⏳ Waiting for deployment to start... (${phase_elapsed}s/${baseline_timeout}s)" ;;
-        DEPLOYING) echo "[$timestamp] (+${elapsed}s) ⏳ Deploy in progress — ${site_state} (HTTP ${http_status:-???}) — ${phase_elapsed}s/${deploy_timeout}s elapsed" ;;
+        BASELINE)  echo "[$timestamp] (+$(_format_duration $elapsed)) ⏳ Waiting for deployment to start... ($(_format_duration $phase_elapsed)/$(_format_duration $baseline_timeout))" ;;
+        DEPLOYING) echo "[$timestamp] (+$(_format_duration $elapsed)) ⏳ Deploy in progress — ${site_state} (HTTP ${http_status:-???}) — $(_format_duration $phase_elapsed)/$(_format_duration $deploy_timeout) elapsed" ;;
       esac
     fi
 
@@ -92,14 +105,14 @@ monitor_site_deployment() {
     # ── Phase-specific timeout checks ──
     if [ "$STATE" = "BASELINE" ] && [ $phase_elapsed -ge $baseline_timeout ]; then
       echo ""
-      echo "⏰ Baseline timeout (${baseline_timeout}s) — deployment not detected"
+      echo "⏰ Baseline timeout ($(_format_duration $baseline_timeout)) — deployment not detected"
       echo "   Proceeding with audit against current site"
       break
     fi
 
     if [ "$STATE" = "DEPLOYING" ] && [ $phase_elapsed -ge $deploy_timeout ]; then
       echo ""
-      echo "⏰ Deploy timeout (${deploy_timeout}s) — site has not recovered"
+      echo "⏰ Deploy timeout ($(_format_duration $deploy_timeout)) — site has not recovered"
       _monitor_output "MONITOR_RESULT" "timeout_deploying"
       echo "   Skipping audit (site not ready)"
       _monitor_print_summary "$transition_count" "$STATE" "$elapsed" "$baseline_checks"
@@ -108,7 +121,7 @@ monitor_site_deployment() {
 
     # ── Check site status ──
     http_status=$(curl -sSL -o /tmp/lh_site_check.html -w '%{http_code}' \
-      --connect-timeout 5 --max-time 10 "$target_url" 2>/dev/null || echo "000")
+      --connect-timeout 5 --max-time 10 "$target_url" 2>/dev/null) || http_status="000"
 
     # Detect maintenance content (covers OpenShift/Moodle maintenance pages returning 200)
     # Uses specific markers to avoid false positives — Moodle's normal pages contain the
@@ -126,10 +139,10 @@ monitor_site_deployment() {
     if [ "$http_status" != "$last_status" ] || [ "$site_state" != "$last_site_state" ]; then
       timestamp=$(date '+%H:%M:%S')
       case "$site_state" in
-        up)          echo "[$timestamp] (+${elapsed}s) ✅ Site live: HTTP $http_status" ;;
-        maintenance) echo "[$timestamp] (+${elapsed}s) 🔧 Maintenance page detected: HTTP $http_status" ;;
-        down)        echo "[$timestamp] (+${elapsed}s) 🔴 Site unavailable: HTTP $http_status" ;;
-        unreachable) echo "[$timestamp] (+${elapsed}s) 🔌 Site unreachable: connection failed" ;;
+        up)          echo "[$timestamp] (+$(_format_duration $elapsed)) ✅ Site live: HTTP $http_status" ;;
+        maintenance) echo "[$timestamp] (+$(_format_duration $elapsed)) 🔧 Maintenance page detected: HTTP $http_status" ;;
+        down)        echo "[$timestamp] (+$(_format_duration $elapsed)) 🔴 Site unavailable: HTTP $http_status" ;;
+        unreachable) echo "[$timestamp] (+$(_format_duration $elapsed)) 🔌 Site unreachable (connection timeout)" ;;
       esac
       last_status="$http_status"
       last_site_state="$site_state"
@@ -149,7 +162,7 @@ monitor_site_deployment() {
       DEPLOYING)
         if [ "$site_state" = "up" ]; then
           STATE="READY"
-          echo "   🎯 Site recovered — deployment appears complete (${elapsed}s total)"
+          echo "   🎯 Site recovered — deployment appears complete ($(_format_duration $elapsed) total)"
           echo "   ⏳ Stabilization wait (${stabilize_wait}s)..."
           sleep "$stabilize_wait"
           break
@@ -175,7 +188,7 @@ _monitor_print_summary() {
   echo "================================================"
   echo "  State transitions: $transition_count"
   echo "  Final state: $state"
-  echo "  Total monitoring time: ${elapsed}s"
+  echo "  Total monitoring time: $(_format_duration $elapsed)"
   echo "  Baseline checks: $baseline_checks"
   echo ""
 }

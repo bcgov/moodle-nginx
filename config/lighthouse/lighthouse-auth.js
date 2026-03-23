@@ -31,7 +31,7 @@ async function retryNavigation(page, url, options = {}, maxRetries = 3) {
   }
 }
 
-async function waitForSiteReadiness(page, url, maxWaitTime = 300000) {
+async function waitForSiteReadiness(page, url, maxWaitTime = 60000) {
   console.log(`🔍 Checking site readiness for: ${url}`);
   const startTime = Date.now();
 
@@ -260,10 +260,14 @@ async function runLighthouse(url, options, config = null) {
   let pathsPassed = 0;
   let pathsFailed = 0;
   let results = [];
+  const auditStartTime = Date.now();
+  console.log(`\n🚀 Starting Lighthouse audits for ${pathCount} page(s)...\n`);
 
   // Loop over the paths and run Lighthouse on each one
   for (const path of paths) {
+    const pageStartTime = Date.now();
     const url = process.env.APP_HOST_URL + path;
+    console.log(`📄 [${pathsPassed + 1}/${pathCount}] Auditing: ${path}`);
     // await page.setCookie(...cookies);
     const {lhr} = await lighthouse(url, options, config);
     await retryNavigation(page, url); // Navigate to the new URL
@@ -310,11 +314,16 @@ async function runLighthouse(url, options, config = null) {
       bestPracticesScore
     });
 
+    const pageElapsed = ((Date.now() - pageStartTime) / 1000).toFixed(1);
+    console.log(`   ✅ [${pathsPassed + 1}/${pathCount}] Done in ${pageElapsed}s — A11y: ${accessibilityScore} | Perf: ${performanceScore} | BP: ${bestPracticesScore}`);
     pathsPassed++;
   }
 
   await browser.close();
   await chrome.kill();
+
+  const totalElapsed = ((Date.now() - auditStartTime) / 1000).toFixed(1);
+  console.log(`\n⏱️  Total audit time: ${totalElapsed}s for ${pathCount} page(s)\n`);
 
   // Write the results to a JSON file:
   fs.writeFileSync('lighthouse-results.json', JSON.stringify(results));
