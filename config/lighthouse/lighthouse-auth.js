@@ -11,7 +11,7 @@ async function retryNavigation(page, url, options = {}, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Navigation attempt ${attempt} to: ${url}`);
-      await page.goto(url, { waitUntil: 'networkidle0', timeout: 90000, ...options });
+      await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000, ...options });
       console.log(`✅ Successfully navigated to: ${url}`);
       return;
     } catch (error) {
@@ -273,9 +273,9 @@ async function runLighthouse(url, options, config = null) {
     await retryNavigation(page, url); // Navigate to the new URL
 
     // Get the scores
-    const accessibilityScore = lhr.categories.accessibility.score * 100;
-    const performanceScore = lhr.categories.performance.score * 100;
-    const bestPracticesScore = lhr.categories['best-practices'].score * 100;
+    const accessibilityScore = Math.round(lhr.categories.accessibility.score * 100);
+    const performanceScore = Math.round(lhr.categories.performance.score * 100);
+    const bestPracticesScore = Math.round(lhr.categories['best-practices'].score * 100);
     const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
 
     const pageContent = await page.content();

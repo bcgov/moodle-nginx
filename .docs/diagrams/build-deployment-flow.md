@@ -118,16 +118,18 @@ graph TD
 
     LHMonitor --> LHSetup[🏗️ LH Setup<br/>~2 min<br/>- Node.js 25 + Chrome<br/>- APT deps from cache<br/>- NPM modules from cache]
 
-    LHSetup --> LHPoll[🔭 Site Monitoring<br/>~variable<br/>- Poll every 15s<br/>- Detect maintenance mode<br/>- Track state transitions]
+    LHSetup --> LHPoll[🔭 Site Monitoring<br/>~variable<br/>- Poll every 15s<br/>- Human-readable timings<br/>- Detect maintenance mode<br/>- Track state transitions<br/>- Pipeline failure early-exit<br/>See: site-monitor.sh]
 
-    LHPoll --> LHAudit[🚦 Lighthouse Audit<br/>~5 min<br/>- Performance metrics<br/>- Accessibility checks<br/>- Security headers<br/>- SEO analysis<br/>- Best practices]
+    LHPoll --> LHLogs[📋 Capture Deploy Logs<br/>- migrate-build-files<br/>- moodle-upgrade<br/>See: deploy-logs.sh]
+
+    LHLogs --> LHAudit[🚦 Lighthouse Audit<br/>~5 min<br/>- Live output streaming<br/>- Per-page timing + scores<br/>- Performance metrics<br/>- Accessibility checks<br/>- Best practices<br/>See: lighthouse-audit.sh]
 
     LHAudit --> LHResult{Lighthouse<br/>Score?}
 
     LHResult -->|Pass| LHPass[✅ Quality Gates Passed]
     LHResult -->|Fail| LHFail{Failsafe<br/>Enabled?}
 
-    LHFail -->|YES| MaintenanceMode[🚧 Enable Maintenance<br/>Moodle and/or OpenShift]
+    LHFail -->|YES| MaintenanceMode[🚧 Enable Maintenance<br/>Moodle and/or OpenShift<br/>See: maintenance-mode.sh]
     LHFail -->|NO| LHWarn[⚠️ Quality Issues Detected]
 
     LHPass --> Artifacts
@@ -161,6 +163,7 @@ graph TD
     style LHMonitor fill:#e8eaf6
     style LHAudit fill:#e8eaf6
     style LHPoll fill:#ede7f6
+    style LHLogs fill:#ede7f6
     style DeploySuccess fill:#c8e6c9
     style DeployFail fill:#ffcdd2,color:#c62828
     style Complete fill:#a5d6a7
@@ -252,11 +255,12 @@ gantt
     LH: Node.js + Chrome Setup  :08:30, 02:00
     LH: Baseline Polling        :10:30, 19:30
     LH: Deploy Monitoring       :active, 30:00, 24:00
-    LH: Performance Audit       :crit, 54:00, 05:00
+    LH: Capture Deploy Logs     :54:00, 00:15
+    LH: Performance Audit       :crit, 54:15, 05:00
 
     section Finalize
-    Upload Artifacts            :59:00, 01:00
-    Send Notifications          :60:00, 00:30
+    Upload Artifacts            :59:15, 01:00
+    Send Notifications          :60:15, 00:30
 ```
 
 ---
@@ -434,7 +438,9 @@ sequenceDiagram
     OS->>GH: ✅ Deployment complete
 
     LH->>LH: 📋 Capture Job Logs (oc logs)
+    Note over LH: deploy-logs.sh<br/>migrate-build-files + moodle-upgrade
     LH->>Web: 🚦 Run Lighthouse Audit
+    Note over LH,Web: lighthouse-audit.sh<br/>Streams live per-page timing + scores
 
     alt Audit Passed
         LH->>GH: ✅ Quality Gates Passed

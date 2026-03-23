@@ -121,10 +121,10 @@ run_lighthouse_audit() {
   log_debug "Running: node lighthouse-auth.js"
   log_debug "Target URL: $APP_HOST_URL"
 
-  # Stream output live to CI log while saving to file for artifact collection.
-  # This gives real-time visibility into per-page timing and scores.
+  # Stream output live to CI log (stderr) while saving to file for artifact collection.
+  # Redirect to stderr so stdout stays clean for the function's return value.
   local log_file="$full_output_path/lighthouse-full.log"
-  node lighthouse-auth.js 2>&1 | tee "$log_file"
+  node lighthouse-auth.js 2>&1 | tee "$log_file" >&2
   exit_code=${PIPESTATUS[0]}
 
   log_debug "Lighthouse execution completed with exit code: $exit_code"
@@ -135,7 +135,9 @@ run_lighthouse_audit() {
 
   if [ $exit_code -eq 0 ]; then
     status="success"
-    local warn_count=$(grep -ci warning "$log_file" 2>/dev/null || echo "0")
+    local warn_count
+    warn_count=$(grep -ci warning "$log_file" 2>/dev/null) || true
+    warn_count=${warn_count:-0}
     if [ "$warn_count" -gt 0 ]; then
       warnings=" ($warn_count warnings)"
     fi
