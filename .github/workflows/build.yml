@@ -201,16 +201,23 @@ jobs:
       - name: 🔁 Preflight — Verify Artifactory connectivity
         run: |
           echo "Testing Artifactory registry connectivity..."
+          # Extract registry hostname (ARTIFACTORY_URL includes repo path)
+          REGISTRY_HOST=$(echo "${{ secrets.ARTIFACTORY_URL }}" | cut -d'/' -f1)
+          echo "Registry host: ${REGISTRY_HOST}"
           for attempt in 1 2 3; do
-            if curl -sSf --connect-timeout 10 --max-time 20 \
-              "https://${{ secrets.ARTIFACTORY_URL }}/v2/" -o /dev/null 2>&1; then
-              echo "✅ Artifactory reachable (attempt $attempt)"
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+              --connect-timeout 10 --max-time 20 \
+              "https://${REGISTRY_HOST}/v2/" 2>/dev/null) || true
+            # 200 = open registry, 401 = requires auth — both mean reachable
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+              echo "✅ Artifactory reachable (HTTP $HTTP_CODE, attempt $attempt)"
               exit 0
             fi
-            echo "⚠️ Attempt $attempt/3 failed, retrying in 15s..."
+            echo "⚠️ Attempt $attempt/3 failed (HTTP $HTTP_CODE), retrying in 15s..."
             sleep 15
           done
-          echo "❌ Artifactory unreachable after 3 attempts — aborting pipeline"
+          echo "❌ Artifactory unreachable after 3 attempts (last HTTP $HTTP_CODE)"
+          echo "💡 Check https://status.developer.gov.bc.ca or contact platform services"
           exit 1
 
       - name: Setup Node.js for Lighthouse preflight
