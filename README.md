@@ -50,3 +50,5 @@ Deployment to OpenShift is handled using GitHub Actions. The workflow is defined
 ### Note: Act must be installed locally, or run in a container
 
 act -s GITHUB_TOKEN="$(gh auth token)" --env-file example.env --secret-file example.secrets -W './.github/workflows/build-push-php-image.yml'
+
+Allan waz here.
