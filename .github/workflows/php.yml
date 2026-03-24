@@ -119,4 +119,4 @@ jobs:
           build-args: |
             DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_IMAGE }}
           cache-from: type=gha,scope=php
-          cache-to: type=gha,scope=php,mode=max
+          cache-to: type=gha,scope=php,mode=min

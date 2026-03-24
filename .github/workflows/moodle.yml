@@ -162,7 +162,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache-v2
             type=gha,scope=moodle-${{ github.ref_name }}
-          cache-to: type=gha,scope=moodle-${{ github.ref_name }},mode=max
+          cache-to: type=gha,scope=moodle-${{ github.ref_name }},mode=min
 
       # 🔒 Security scan built image BEFORE pushing to Artifactory
       - name: 🔒 Security Scan Built Image
