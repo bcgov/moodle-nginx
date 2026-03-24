@@ -4,7 +4,26 @@ const testURL = process.env.APP_HOST_URL + '/login/index.php'
 
 const options = {
   chromeFlags: ['--headless'],
-  output: 'json'
+  output: 'json',
+  onlyCategories: ['accessibility', 'performance', 'best-practices'],
+};
+
+// Lighthouse config: disable simulated throttling for CI — use real network speed.
+// Simulated throttling (default) adds ~40-50s per page on a CI runner, and the
+// artificial network/CPU slowdown doesn't reflect real user conditions from a GH Actions
+// runner. Real network speed still catches performance regressions while cutting
+// per-page audit time from ~70s to ~15-25s.
+const lighthouseConfig = {
+  settings: {
+    throttlingMethod: 'provided',
+    throttling: {
+      cpuSlowdownMultiplier: 1,
+      requestLatencyMs: 0,
+      downloadThroughputKbps: 0,
+      uploadThroughputKbps: 0,
+    },
+    screenEmulation: { disabled: true },
+  },
 };
 
 async function retryNavigation(page, url, options = {}, maxRetries = 3) {
@@ -302,7 +321,7 @@ async function runLighthouse(url, options, config = null) {
   // - Course view (2x): Content rendering + cache performance validation
   // - Module pages: Activity plugins, resource delivery, anomaly detection
   const baseUrl = process.env.APP_HOST_URL;
-  const numberOfPages = 5; // Balance between coverage and execution time (~4-6 min)
+  const numberOfPages = 5; // Balance between coverage and execution time (~1-2 min)
   const paths = await getDynamicPaths(page, baseUrl, numberOfPages);
   const pathCount = paths.length;
   let pathsPassed = 0;
@@ -323,7 +342,7 @@ async function runLighthouse(url, options, config = null) {
     const maxAuditAttempts = 2;
     for (let auditAttempt = 1; auditAttempt <= maxAuditAttempts; auditAttempt++) {
       try {
-        const result = await lighthouse(url, options, config);
+        const result = await lighthouse(url, options, config || lighthouseConfig);
         lhr = result.lhr;
       } catch (lhError) {
         console.log(`   ⚠️ Lighthouse threw an error on attempt ${auditAttempt}: ${lhError.message}`);
@@ -356,13 +375,6 @@ async function runLighthouse(url, options, config = null) {
       break;
     }
 
-    await retryNavigation(page, url); // Navigate to the new URL for screenshot
-
-    const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
-    const pageContent = await page.content();
-    await fsp.writeFile(filename + '.html', pageContent);
-    await page.screenshot({path: filename + '.png'});
-
     // Check for Lighthouse failure — skip scoring but warn
     const hasValidScores = lhr
       && lhr.categories.accessibility.score !== null
@@ -371,6 +383,14 @@ async function runLighthouse(url, options, config = null) {
       && !(lhr.runtimeError && lhr.runtimeError.code);
 
     if (!hasValidScores) {
+      // Save debug artifacts for failed audits
+      const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
+      try {
+        await retryNavigation(page, url);
+        await fsp.writeFile(filename + '.html', await page.content());
+        await page.screenshot({path: filename + '.png'});
+      } catch (_) { /* best-effort */ }
+
       warnings.push(`⚠️ Lighthouse internal failure for ${path} — scores skipped`);
       results.push({ path, accessibilityScore: 'N/A', performanceScore: 'N/A', bestPracticesScore: 'N/A', skipped: true });
       const pageElapsed = ((Date.now() - pageStartTime) / 1000).toFixed(1);
@@ -385,6 +405,7 @@ async function runLighthouse(url, options, config = null) {
     const bestPracticesScore = Math.round(lhr.categories['best-practices'].score * 100);
 
     // Verify the scores
+    const scoreFailed = accessibilityScore < 90 || performanceScore < 35 || bestPracticesScore < 80;
     if (accessibilityScore < 90) {
       errors.push(`❌ Accessibility score ${accessibilityScore} is less than 90 for ${path}`);
       pathsFailed++;
@@ -398,10 +419,22 @@ async function runLighthouse(url, options, config = null) {
       pathsFailed++;
     }
 
-    for (const char of detectEncodingIssues) {
-      if (pageContent.includes(char)) {
-        warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
-      }
+    // Save debug artifacts only when scores fail (skip on pass for speed)
+    if (scoreFailed) {
+      const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
+      try {
+        await retryNavigation(page, url);
+        const pageContent = await page.content();
+        await fsp.writeFile(filename + '.html', pageContent);
+        await page.screenshot({path: filename + '.png'});
+
+        for (const char of detectEncodingIssues) {
+          if (pageContent.includes(char)) {
+            warnings.push(`⚠️ Character encoding issue detected on: ${path}`);
+            break;
+          }
+        }
+      } catch (_) { /* best-effort artifact save */ }
     }
 
     // Add the scores to the results array

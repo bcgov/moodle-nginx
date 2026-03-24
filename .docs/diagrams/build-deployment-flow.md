@@ -122,7 +122,7 @@ graph TD
 
     LHPoll --> LHLogs[📋 Capture Deploy Logs<br/>- migrate-build-files<br/>- moodle-upgrade<br/>See: deploy-logs.sh]
 
-    LHLogs --> LHAudit[🚦 Lighthouse Audit<br/>~5 min<br/>- Live output streaming<br/>- Per-page timing + scores<br/>- Performance metrics<br/>- Accessibility checks<br/>- Best practices<br/>See: lighthouse-audit.sh]
+    LHLogs --> LHAudit[🚦 Lighthouse Audit<br/>~2 min<br/>- Live output streaming<br/>- Per-page timing + scores<br/>- Performance metrics<br/>- Accessibility checks<br/>- Best practices<br/>See: lighthouse-audit.sh]
 
     LHAudit --> LHResult{Lighthouse<br/>Score?}
 
@@ -256,7 +256,7 @@ gantt
     LH — Baseline Polling       :10:30, 19:30
     LH — Deploy Monitoring      :active, 30:00, 24:00
     LH — Capture Deploy Logs    :54:00, 00:15
-    LH — Performance Audit      :crit, 54:15, 05:00
+    LH — Performance Audit      :crit, 54:15, 02:00
 
     section Finalize
     Upload Artifacts            :59:15, 01:00
