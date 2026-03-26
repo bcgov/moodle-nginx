@@ -187,7 +187,18 @@ jobs:
           # For push events, checkout the pushed branch (github.ref)
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      # Dependabot PRs cannot access secrets (ARTIFACTORY_URL, etc.) and should
+      # not trigger full builds. Skip builds/deploy; keep preflight audits only.
+      - name: 🤖 Dependabot — skip builds and deploy
+        if: github.actor == 'dependabot[bot]'
+        run: |
+          echo "Dependabot PR detected — skipping builds and deployment."
+          echo "Only preflight audits (Lighthouse, security) will run."
+          echo "SKIP_BUILDS=YES" >> $GITHUB_ENV
+          echo "SKIP_DEPLOY=YES" >> $GITHUB_ENV
+
       - name: Validate environment-scoped deployment variables
+        if: github.actor != 'dependabot[bot]'
         env:
           MONITOR_IMAGE: ${{ vars.MONITOR_IMAGE }}
         run: |
@@ -201,6 +212,7 @@ jobs:
           echo "Environment-scoped monitor configuration is present."
 
       - name: 🔁 Preflight — Verify Artifactory connectivity
+        if: github.actor != 'dependabot[bot]'
         run: |
           echo "Testing Artifactory registry connectivity..."
           # Extract registry hostname (ARTIFACTORY_URL includes repo path)
