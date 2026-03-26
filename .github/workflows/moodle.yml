@@ -54,6 +54,12 @@ on:
       PCURATOR_BRANCH_VERSION:
         required: true
         type: string
+      GITHUBSYNC_URL:
+        required: true
+        type: string
+      GITHUBSYNC_BRANCH_VERSION:
+        required: true
+        type: string
 
 jobs:
   build-images:
@@ -150,6 +156,8 @@ jobs:
             PCURATOR_BRANCH_VERSION=${{ inputs.PCURATOR_BRANCH_VERSION }}
             COURSESEARCH_URL=${{ inputs.COURSESEARCH_URL }}
             COURSESEARCH_BRANCH_VERSION=${{ inputs.COURSESEARCH_BRANCH_VERSION }}
+            GITHUBSYNC_URL=${{ inputs.GITHUBSYNC_URL }}
+            GITHUBSYNC_BRANCH_VERSION=${{ inputs.GITHUBSYNC_BRANCH_VERSION }}
             HVP_URL=${{ inputs.HVP_URL }}
             HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }}
             PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }}
@@ -220,6 +228,8 @@ jobs:
             PCURATOR_BRANCH_VERSION=${{ inputs.PCURATOR_BRANCH_VERSION }}
             COURSESEARCH_URL=${{ inputs.COURSESEARCH_URL }}
             COURSESEARCH_BRANCH_VERSION=${{ inputs.COURSESEARCH_BRANCH_VERSION }}
+            GITHUBSYNC_URL=${{ inputs.GITHUBSYNC_URL }}
+            GITHUBSYNC_BRANCH_VERSION=${{ inputs.GITHUBSYNC_BRANCH_VERSION }}
             HVP_URL=${{ inputs.HVP_URL }}
             HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }}
             PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }}

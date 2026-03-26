@@ -14,17 +14,25 @@ ENV GIT_SSL_NO_VERIFY=0
 
 # Version control for Moodle and plugins
 ARG MOODLE_URL="https://github.com/moodle/moodle"
-ARG MOODLE_BRANCH_VERSION=MOODLE_401_STABLE
+ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
+
+# ELM enrolment bridge sync
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
+# "production" is the branch we deploy to production, "main" is the branch we do development work in
 ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
 ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
 ARG PCURATOR_BRANCH_VERSION=main
 ENV PCURATOR_DIR=$MOODLE_APP_DIR/mod/pathcurator
-ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
+
+ARG COURSESEARCH_URL="https://github.com/PSA-Corporate-Learning-Branch/moodle-course-search/"
 ARG COURSESEARCH_BRANCH_VERSION=main
 ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
+
+ARG GITHUBSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/moodle-local_githubsync/"
+ARG GITHUBSYNC_BRANCH_VERSION=main
+ENV GITHUBSYNC_DIR=$MOODLE_APP_DIR/local/githubsync
 
 ARG THEME_URL="https://github.com/PSA-Corporate-Learning-Branch/bcgovpsa-moodle"
 ARG THEME_BRANCH_VERSION=main
@@ -102,14 +110,20 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 # Add favicon
 COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
+# Cache-bust: changing this value forces Docker to re-clone all plugins below
+ARG PLUGIN_CACHE_BUST=0
+RUN echo "Plugin cache bust: $PLUGIN_CACHE_BUST"
+
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN mkdir -p $PCURATOR_DIR
 RUN mkdir -p $COURSESEARCH_DIR
+RUN mkdir -p $GITHUBSYNC_DIR
 
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $PCURATOR_BRANCH_VERSION --single-branch $PCURATOR_URL $PCURATOR_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $COURSESEARCH_BRANCH_VERSION --single-branch $COURSESEARCH_URL $COURSESEARCH_DIR && \
+    git clone --recurse-submodules --jobs 8 --branch $GITHUBSYNC_BRANCH_VERSION --single-branch $GITHUBSYNC_URL $GITHUBSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR && \
     echo "PSAELMSYNC commit: $(git -C $PSAELMSYNC_DIR rev-parse HEAD)" && \
@@ -117,6 +131,7 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     echo "THEME commit: $(git -C $THEME_DIR rev-parse HEAD)" && \
     echo "PCURATOR commit: $(git -C $PCURATOR_DIR rev-parse HEAD)" && \
     echo "COURSESEARCH commit: $(git -C $COURSESEARCH_DIR rev-parse HEAD)" && \
+    echo "GITHUBSYNC commit: $(git -C $GITHUBSYNC_DIR rev-parse HEAD)" && \
     echo "HVP commit: $(git -C $HVP_DIR rev-parse HEAD)" && \
     echo "REPORT_ALL_BACKUPS commit: $(git -C $REPORT_ALL_BACKUPS_DIR rev-parse HEAD)"
 
