@@ -454,7 +454,7 @@ jobs:
           fi
 
       - name: 💾 Archive Security Results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: security-scan-results-${{ github.run_number }}
           path: |

@@ -545,7 +545,7 @@ jobs:
       # Upload comprehensive security reports as artifacts
       - name: 📤 Upload Security Reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: comprehensive-security-reports
           path: |
@@ -911,7 +911,7 @@ jobs:
           collect_lighthouse_artifacts "config/lighthouse" "tmp/artifacts" "."
 
       - name: 📤 Archive artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lighthouse-artifacts
