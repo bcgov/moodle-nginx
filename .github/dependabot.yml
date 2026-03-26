@@ -1,0 +1,82 @@
+# =============================================================================
+# Dependabot Configuration — Automated Dependency Updates
+# =============================================================================
+# IMPORTANT: This file MUST live on the default branch (main) for GitHub
+# to detect it. The target-branch directives route PRs to 950003-dev.
+#
+# Dependency manifests are ephemeral (generated at build time from
+# example.versions.env). Dependabot scans the committed manifest stubs
+# that populate-dependency-manifests.sh generates.
+#
+# See: .docs/dependencies.md for the centralized version management overview.
+# =============================================================================
+
+version: 2
+updates:
+  # ── Docker images in Dockerfiles and compose files ────────────────────
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "950003-dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+
+  # ── Docker images in dependencies manifest ────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/openshift/dependencies"
+    target-branch: "950003-dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    commit-message:
+      prefix: "deps(security)"
+      include: "scope"
+
+  # ── PHP Composer dependencies ─────────────────────────────────────────
+  - package-ecosystem: "composer"
+    directory: "/config/moodle"
+    target-branch: "950003-dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "11:00"
+    commit-message:
+      prefix: "deps(php)"
+      include: "scope"
+    ignore:
+      # Block versions requiring PHP 8.2+
+      - dependency-name: "maennchen/zipstream-php"
+        versions: [">= 3.2.0"]
+      # Block major version updates (often break compatibility)
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 10
+
+  # ── NPM dependencies for Lighthouse ──────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/config/lighthouse"
+    target-branch: "950003-dev"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "08:00"
+    commit-message:
+      prefix: "deps(npm)"
+      include: "scope"
+
+  # ── GitHub Actions ───────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "950003-dev"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
