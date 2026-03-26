@@ -223,7 +223,7 @@ jobs:
           exit 1
 
       - name: Setup Node.js for Lighthouse preflight
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: '25'
           cache: 'npm'
@@ -762,7 +762,7 @@ jobs:
 
       # Setup Node.js 25 for Lighthouse (requires Node 22.19+)
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: '25'
           cache: 'npm'
