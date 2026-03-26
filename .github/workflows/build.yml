@@ -940,7 +940,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Download artifacts
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: lighthouse-artifacts
           path: artifacts
