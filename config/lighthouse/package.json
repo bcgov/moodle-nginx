@@ -8,7 +8,7 @@
     "puppeteer": "^24.40.0"
   },
   "devDependencies": {
-    "jest": "^30.0.0"
+    "jest": "^30.3.0"
   },
   "scripts": {
     "test": "lighthouse --chrome-flags='--headless --no-sandbox --disable-gpu'",
