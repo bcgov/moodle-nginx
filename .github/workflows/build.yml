@@ -258,13 +258,15 @@ jobs:
           echo "High/critical vulnerabilities detected in Lighthouse dependencies."
           echo "Attempting automatic remediation with npm audit fix --package-lock-only..."
 
-          if npm audit fix --package-lock-only --no-fund; then
-            echo "Re-running preflight audit after auto-remediation..."
-            if npm audit --audit-level=high --package-lock-only; then
-              echo "Preflight passed after auto-remediation."
-              echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
-              exit 0
-            fi
+          # npm audit fix exits non-zero when ANY vulns remain (even moderate).
+          # Always re-audit with --audit-level=high regardless of fix exit code.
+          npm audit fix --package-lock-only --no-fund || true
+
+          echo "Re-running preflight audit after auto-remediation..."
+          if npm audit --audit-level=high --package-lock-only; then
+            echo "Preflight passed after auto-remediation."
+            echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
+            exit 0
           fi
 
           echo "Preflight still failing after auto-remediation."
