@@ -108,10 +108,12 @@ on:
       ARTIFACTORY_URL:
         required: true
 
-# Least-privilege token — contents:read for checkout, actions:read for pipeline status checks
+# Least-privilege token — contents:read for checkout, actions:read for pipeline
+# status checks, id-token:write inherited by deploy.yml for OIDC authentication
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 jobs:
   #Print variables for logging and debugging purposes
