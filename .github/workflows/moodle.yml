@@ -5,6 +5,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 
@@ -41,6 +42,27 @@ on:
       THEME_BRANCH_VERSION:
         required: true
         type: string
+      COURSESEARCH_URL:
+        required: true
+        type: string
+      COURSESEARCH_BRANCH_VERSION:
+        required: true
+        type: string
+      PCURATOR_URL:
+        required: true
+        type: string
+      PCURATOR_BRANCH_VERSION:
+        required: true
+        type: string
+      GITHUBSYNC_URL:
+        required: true
+        type: string
+      GITHUBSYNC_BRANCH_VERSION:
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   build-images:
@@ -49,13 +71,28 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
 
-      # Login to Artifactory
+      # Login to Artifactory (with retry for transient network issues)
+      - name: 🔁 Artifactory login with retry
+        run: |
+          for attempt in 1 2 3; do
+            if docker login "${{ secrets.ARTIFACTORY_URL }}" \
+              -u "${{ secrets.ARTIFACTORY_USER }}" \
+              -p "${{ secrets.ARTIFACTORY_PASSWORD }}" 2>&1; then
+              echo "✅ Artifactory login succeeded (attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️ Login attempt $attempt/3 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Artifactory login failed after 3 attempts"
+          exit 1
+
       - name: 🔑 Login to Artifactory
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ secrets.ARTIFACTORY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
@@ -69,25 +106,140 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      - name: 🐸 Buld to JFrog
+      - name: Setup Versions Env Vars
+        id: dotenv_versions
+        uses: falti/dotenv-action@v1
+        with:
+          path: example.versions.env
+          export-variables: true
+          keys-case: upper
+
+      - name: Set up Docker Buildx (container driver)
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+          buildkitd-flags: --debug
+
+      # 🔧 Install Trivy for post-build security scanning
+      - name: 🛡️ Install Trivy
         run: |
-          docker buildx build \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --build-arg MOODLE_URL=${{ inputs.MOODLE_URL }} \
-            --build-arg MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }} \
-            --build-arg THEME_URL=${{ inputs.THEME_URL }} \
-            --build-arg THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }} \
-            --build-arg HVP_URL=${{ inputs.HVP_URL }} \
-            --build-arg HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }} \
-            --build-arg PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }} \
-            --build-arg PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }} \
-            --build-arg REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }} \
-            --build-arg REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }} \
-            --build-arg PLUGIN_CACHE_BUST=${{ github.run_id }} \
-            --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
-            --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }} \
-            --output=type=image,push=true \
-            --push \
-            -f ${{ env.MOODLE_DOCKER_FILE_PATH }} \
-            .
+          # Trivy installation is fast (~5-10s), no need to cache
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+          trivy --version
+
+      # 🗄️ Cache Trivy vulnerability database (refreshed daily)
+      - name: 🗄️ Cache Trivy Database
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-db-
+
+      # Build Moodle image locally for security scanning before push
+      - name: 🐸 Build Moodle Image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ env.MOODLE_DOCKER_FILE_PATH }}
+          load: true
+          provenance: false
+          tags: ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}
+          build-args: |
+            MOODLE_URL=${{ inputs.MOODLE_URL }}
+            MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }}
+            THEME_URL=${{ inputs.THEME_URL }}
+            THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }}
+            PCURATOR_URL=${{ inputs.PCURATOR_URL }}
+            PCURATOR_BRANCH_VERSION=${{ inputs.PCURATOR_BRANCH_VERSION }}
+            COURSESEARCH_URL=${{ inputs.COURSESEARCH_URL }}
+            COURSESEARCH_BRANCH_VERSION=${{ inputs.COURSESEARCH_BRANCH_VERSION }}
+            GITHUBSYNC_URL=${{ inputs.GITHUBSYNC_URL }}
+            GITHUBSYNC_BRANCH_VERSION=${{ inputs.GITHUBSYNC_BRANCH_VERSION }}
+            HVP_URL=${{ inputs.HVP_URL }}
+            HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }}
+            PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }}
+            PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }}
+            REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }}
+            REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
+            MOODLE_CACHE_BUST=${{ github.run_id }}
+            PLUGIN_CACHE_BUST=${{ github.run_id }}
+            DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }}
+          cache-from: |
+            type=registry,ref=${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:buildcache-v2
+            type=gha,scope=moodle-${{ github.ref_name }}
+          cache-to: type=gha,scope=moodle-${{ github.ref_name }},mode=min
+
+      # 🔒 Security scan built image BEFORE pushing to Artifactory
+      - name: 🔒 Security Scan Built Image
+        run: |
+          source openshift/scripts/utils/docker-security.sh
+
+          # Determine severity level from SECURITY_SCAN_LEVEL (inherited from build.yml env)
+          SEVERITY="CRITICAL,HIGH"
+          if [ "${{ env.SECURITY_SCAN_LEVEL }}" = "FULL" ]; then
+            SEVERITY="CRITICAL,HIGH,MEDIUM"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "BASIC" ]; then
+            SEVERITY="CRITICAL,HIGH"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "MINIMAL" ]; then
+            SEVERITY="CRITICAL"
+          fi
+
+          # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
+          EXIT_ON_CRITICAL="false"
+          if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ]; then
+            EXIT_ON_CRITICAL="true"
+          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "HIGH" ]; then
+            EXIT_ON_CRITICAL="true"
+          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "MEDIUM" ]; then
+            EXIT_ON_CRITICAL="true"
+          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
+            EXIT_ON_CRITICAL="true"
+          fi
+
+          echo "🔒 Moodle Image Security Scan Configuration:"
+          echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
+          echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
+          echo ""
+
+          # Scan the built image (now available locally)
+          scan_built_image_for_github_actions \
+            "${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}" \
+            "$SEVERITY" \
+            "$EXIT_ON_CRITICAL"      # Only push if security scan passed
+
+      # Push to Artifactory
+      - name: 📤 Push to Artifactory
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ env.MOODLE_DOCKER_FILE_PATH }}
+          provenance: false
+          outputs: type=image,push=true,oci-mediatypes=false
+          tags: ${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}
+          build-args: |
+            MOODLE_URL=${{ inputs.MOODLE_URL }}
+            MOODLE_BRANCH_VERSION=${{ inputs.MOODLE_BRANCH_VERSION }}
+            THEME_URL=${{ inputs.THEME_URL }}
+            THEME_BRANCH_VERSION=${{ inputs.THEME_BRANCH_VERSION }}
+            PCURATOR_URL=${{ inputs.PCURATOR_URL }}
+            PCURATOR_BRANCH_VERSION=${{ inputs.PCURATOR_BRANCH_VERSION }}
+            COURSESEARCH_URL=${{ inputs.COURSESEARCH_URL }}
+            COURSESEARCH_BRANCH_VERSION=${{ inputs.COURSESEARCH_BRANCH_VERSION }}
+            GITHUBSYNC_URL=${{ inputs.GITHUBSYNC_URL }}
+            GITHUBSYNC_BRANCH_VERSION=${{ inputs.GITHUBSYNC_BRANCH_VERSION }}
+            HVP_URL=${{ inputs.HVP_URL }}
+            HVP_BRANCH_VERSION=${{ inputs.HVP_BRANCH_VERSION }}
+            PSAELMSYNC_URL=${{ inputs.PSAELMSYNC_URL }}
+            PSAELMSYNC_BRANCH_VERSION=${{ inputs.PSAELMSYNC_BRANCH_VERSION }}
+            REPORT_ALL_BACKUPS_URL=${{ inputs.REPORT_ALL_BACKUPS_URL }}
+            REPORT_ALL_BACKUPS_BRANCH_VERSION=${{ inputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
+            MOODLE_CACHE_BUST=${{ github.run_id }}
+            PLUGIN_CACHE_BUST=${{ github.run_id }}
+            DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }}
+          cache-from: type=gha,scope=moodle-${{ github.ref_name }}

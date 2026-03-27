@@ -1,9 +1,84 @@
-# Deploy MariaDB Galera to OpenShift
+#!/bin/bash
+#==============================================================================
+# deploy-mariadb-galera.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy MariaDB Galera cluster to OpenShift with 3-node replication for
+#   high availability. Manages StatefulSet deployment, ConfigMaps, PVCs, and
+#   custom preStop hooks for graceful shutdown.
+#
+# ARCHITECTURE:
+#   - 3-node StatefulSet for multi-master replication
+#   - Custom my.cnf configuration via ConfigMap
+#   - Helm-based deployment with Artifactory image support
+#   - PreStop hook prevents split-brain scenarios during pod shutdown
+#   - Persistent volumes for each pod (data/, temp/, backups/)
+#
+# QUICK CONFIG:
+#   DB_DEPLOYMENT_NAME       - StatefulSet name (default: mariadb-galera)
+#   USE_ARTIFACTORY          - Pull from Artifactory vs. public registry
+#   MARIADB_IMAGE            - Image name:tag (resolved via helm-image-resolver.sh)
+#   GALERA_CLUSTER_BOOTSTRAP - Bootstrap mode (default: no)
+#
+# USAGE:
+#   # Standard deployment
+#   export DB_DEPLOYMENT_NAME="mariadb-galera"
+#   ./openshift/scripts/deploy-mariadb-galera.sh
+#
+#   # Bootstrap new cluster (first deployment only)
+#   export GALERA_CLUSTER_BOOTSTRAP="yes"
+#   ./openshift/scripts/deploy-mariadb-galera.sh
+#
+# RELATED DOCS:
+#   - Architecture: ../../docs/galera-monitoring-solution.md
+#   - Troubleshooting: ../../docs/manual-galera-troubleshooting.md
+#   - Configuration: ../../config/mariadb/my.cnf
+#   - Helm Values: ../../config/mariadb/galera-values.yaml
+#   - PreStop Patch: ../../config/mariadb/mariadb-galera-prestop-patch.json
+#==============================================================================
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# Load environment variables from versions file
+if [[ -f "./example.versions.env" ]]; then
+    source ./example.versions.env
+else
+    log_warn "example.versions.env not found - using environment variables from deployment"
+fi
+
+# Source Helm image resolver for DRY image management
+source ./openshift/scripts/helm-image-resolver.sh
+
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
+
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
+
+log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
+log_debug "DEBUG: HELM_REPO=$HELM_REPO"
+log_debug "DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY"
+log_debug "DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REGISTRY=$RESOLVED_IMAGE_REGISTRY"
+log_debug "DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY"
+log_debug "DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG"
+
+# Validate Helm environment and show Artifactory status
+if ! validate_helm_environment; then
+    echo "❌ Helm environment validation failed. Please check your environment variables."
+    exit 1
+fi
+
+show_artifactory_status
+
+# Resolve MariaDB image configuration
+if ! resolve_helm_image "MARIADB_IMAGE"; then
+    echo "❌ Failed to resolve MARIADB_IMAGE configuration"
+    exit 1
+fi
+
+echo "🐳 Using MariaDB image: ${RESOLVED_FULL_IMAGE}"
 
 PATCH_FILE="config/mariadb/mariadb-galera-prestop-patch.json"
 
@@ -57,13 +132,17 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "Upgrading $DB_DEPLOYMENT_NAME..."
 
   # Capture the output of the helm upgrade command into a variable
+  # Note: Keep replicas at 0 to prevent pods from starting before patches are applied
   helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set image.repository=bitnamilegacy/mariadb-galera \
+    --set image.registry=$RESOLVED_IMAGE_REGISTRY \
+    --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
+    --set image.tag=$RESOLVED_IMAGE_TAG \
     --set global.security.allowInsecureImages=true \
+    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
-    --set replicaCount=$DB_REPLICAS \
+    --set replicaCount=0 \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
 
@@ -86,12 +165,15 @@ else
   # --set metrics.prometheusRules.enabled=false \
   # --set primary.persistence.accessModes={ReadWriteMany} \
   # --atomic \
+  # Note: Start with replicas=0 to prevent pods from starting before patches are applied
   helm install $DB_DEPLOYMENT_NAME \
     oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
-    --set image.repository=bitnamilegacy/mariadb-galera \
-    --set image.tag=10.6 \
+    --set image.registry=$RESOLVED_IMAGE_REGISTRY \
+    --set image.repository=$RESOLVED_IMAGE_REPOSITORY \
+    --set image.tag=$RESOLVED_IMAGE_TAG \
     --set image.pullPolicy=Always \
     --set global.security.allowInsecureImages=true \
+    --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" \
     --set podManagementPolicy=Parallel \
     --set galera.bootstrap.forceSafeToBootstrap=true \
     --set galera.bootstrap.forceBootstrap=true \
@@ -101,7 +183,7 @@ else
     --set db.user=$DB_USER \
     --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
-    --set replicaCount=$DB_REPLICAS \
+    --set replicaCount=0 \
     --set persistence.size=10Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
@@ -118,11 +200,20 @@ else
     --set extraVolumeMounts[0].readOnly=true \
     --set lifecycle.preStop.exec.command[0]="/bin/sh" \
     --set lifecycle.preStop.exec.command[1]="-c" \
-    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh" \
-    --wait \
-    --timeout 20m0s
+    --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh"
     #-f ./config/mariadb/galera-values.yaml
+
+  echo "✅ Helm install completed with replicas=0 (pods will be started after patching)"
 fi
+
+log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
+log_debug "DEBUG: HELM_REPO=$HELM_REPO"
+log_debug "DEBUG: ARTIFACTORY_REGISTRY=$ARTIFACTORY_REGISTRY"
+log_debug "DEBUG: MARIADB_IMAGE=$MARIADB_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REGISTRY=$RESOLVED_IMAGE_REGISTRY"
+log_debug "DEBUG: RESOLVED_FULL_IMAGE=$RESOLVED_FULL_IMAGE"
+log_debug "DEBUG: RESOLVED_IMAGE_REPOSITORY=$RESOLVED_IMAGE_REPOSITORY"
+log_debug "DEBUG: RESOLVED_IMAGE_TAG=$RESOLVED_IMAGE_TAG"
 
 # Function to check if a JSON path exists in the StatefulSet
 json_path_exists() {
@@ -134,8 +225,11 @@ json_path_exists() {
   return 0
 }
 
-# Define the patches to add preStop hook to the StatefulSet
+# Define the patches to add custom container images
+#  and a preStop hook to the StatefulSet
 patches=(
+  "{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"$RESOLVED_FULL_IMAGE\"}"
+  "{\"op\": \"replace\", \"path\": \"/spec/template/spec/initContainers/0/image\", \"value\": \"$RESOLVED_FULL_IMAGE\"}"
   '{"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "prestop-script", "configMap": {"name": "mariadb-galera-prestop-script"}}}'
   '{"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "prestop-script", "mountPath": "/usr/local/bin/prestop.sh", "subPath": "mariadb-prestop.sh", "readOnly": true}}'
   '{"op": "add", "path": "/spec/template/spec/containers/0/lifecycle", "value": {}}'
@@ -144,6 +238,8 @@ patches=(
 
 # Define the JSON paths to check if the patches have been applied
 paths=(
+  '.spec.template.spec.containers[0].image'
+  '.spec.template.spec.initContainers[0].image'
   '{.spec.template.spec.volumes[?(@.name=="prestop-script")]}'
   '{.spec.template.spec.containers[0].volumeMounts[?(@.name=="prestop-script")]}'
   '{.spec.template.spec.containers[0].lifecycle}'
@@ -182,6 +278,46 @@ sleep 10
 # StatefulSet, Also ensure PVC retention policy is set to "Retain"
 oc patch statefulset $DB_DEPLOYMENT_NAME -p '{"spec":{"persistentVolumeClaimRetentionPolicy":{"whenDeleted":"Retain","whenScaled":"Retain"}, "updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":3}}}}'
 
+echo "✅ All patches applied successfully"
+
+# Verify StatefulSet template has correct image configuration
+echo "🔍 Verifying StatefulSet template configuration..."
+STS_TEMPLATE_IMAGE=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.template.spec.containers[0].image}')
+echo "   StatefulSet template image: $STS_TEMPLATE_IMAGE"
+
+if [[ "$STS_TEMPLATE_IMAGE" == "docker.io/"* ]]; then
+  echo "❌ ERROR: StatefulSet template still has docker.io prefix!"
+  echo "   This indicates the image patches did not apply correctly"
+  exit 1
+elif [[ "$STS_TEMPLATE_IMAGE" == "$RESOLVED_FULL_IMAGE" ]]; then
+  echo "✅ StatefulSet template matches expected image configuration"
+else
+  echo "⚠️  Warning: StatefulSet template image differs from expected"
+  echo "   Expected: $RESOLVED_FULL_IMAGE"
+  echo "   Actual: $STS_TEMPLATE_IMAGE"
+fi
+
+# Now scale up to the desired number of replicas with patched configuration
+echo "📈 Scaling StatefulSet to $DB_REPLICAS replicas with patched configuration..."
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
+
+# Wait for the StatefulSet to show the desired number of replicas
+echo "⏳ Waiting for StatefulSet to update replica count..."
+ATTEMPTS=0
+MAX_ATTEMPTS=30
+while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}') -ne $DB_REPLICAS && $ATTEMPTS -lt $MAX_ATTEMPTS ]]; do
+  WAITED=$((ATTEMPTS * 2))
+  echo "   Waiting for spec.replicas to update... $WAITED seconds"
+  sleep 2
+  ATTEMPTS=$((ATTEMPTS + 1))
+done
+
+if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
+  echo "⚠️  Warning: StatefulSet spec.replicas did not update to $DB_REPLICAS within expected time"
+else
+  echo "✅ StatefulSet spec.replicas set to $DB_REPLICAS"
+fi
+
 sleep 10
 
 echo "Waiting for MariaDB Galera nodes to synchronize..."
@@ -190,6 +326,36 @@ if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 30 $DB_REPLICAS; then
   exit 1
 fi
 echo "✔️ MariaDB Galera nodes are synchronized."
+
+echo "🔍 Verifying pods are using correct image..."
+# Get all pod names for the StatefulSet
+POD_NAMES=$(oc get pods -l app.kubernetes.io/name=$DB_DEPLOYMENT_NAME -o jsonpath='{.items[*].metadata.name}')
+
+if [ -z "$POD_NAMES" ]; then
+  echo "⚠️  Warning: No pods found for verification"
+else
+  IMAGE_VERIFICATION_FAILED=false
+  for POD_NAME in $POD_NAMES; do
+    ACTUAL_IMAGE=$(oc get pod $POD_NAME -o jsonpath='{.spec.containers[0].image}')
+    echo "   Pod $POD_NAME: $ACTUAL_IMAGE"
+
+    # Check if image matches expected (without docker.io prefix)
+    if [[ "$ACTUAL_IMAGE" == "docker.io/"* ]]; then
+      echo "   ❌ ERROR: Pod still has docker.io prefix in image!"
+      IMAGE_VERIFICATION_FAILED=true
+    elif [[ "$ACTUAL_IMAGE" == "$RESOLVED_FULL_IMAGE" ]]; then
+      echo "   ✅ Image matches expected configuration"
+    else
+      echo "   ⚠️  Warning: Image does not match expected: $RESOLVED_FULL_IMAGE"
+    fi
+  done
+
+  if [ "$IMAGE_VERIFICATION_FAILED" = true ]; then
+    echo "❌ Image verification failed - pods are using incorrect images"
+    echo "   This may indicate the StatefulSet needs to be manually scaled to 0 and back up"
+    # Don't exit - let the database check proceed, but warn user
+  fi
+fi
 
 echo "Checking if the database is online and contains expected Moodle data..."
 ATTEMPTS=0
@@ -254,6 +420,14 @@ done
 if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   echo "❌ Timeout waiting for the database to be online. Exiting..."
   exit 1
+fi
+
+# Verify Artifactory image pull secrets are configured (verification)
+echo "Verifying Artifactory access for MariaDB deployment..."
+if ensure_image_pull_secrets "statefulset" "$DB_DEPLOYMENT_NAME"; then
+  echo "✅ MariaDB StatefulSet has Artifactory access confirmed"
+else
+  echo "⚠️ MariaDB StatefulSet may have imagePullSecrets issues (this should have been configured during Helm deployment)"
 fi
 
 echo "$DB_NAME Database deployment is complete."

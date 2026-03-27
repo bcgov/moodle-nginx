@@ -36,7 +36,7 @@ objects:
             deployment: ${BUILD_NAME}
         spec:
           imagePullSecrets:
-            - name: artifactory-m950-learning
+            - name: ${ARTIFACTORY_PULL_SECRET}
           volumes:
             - name: maintenance-page
               configMap:
@@ -80,3 +80,6 @@ parameters:
   - name: WEB_IMAGE
     required: true
     value: "nginxinc/nginx-unprivileged:1.25.4-alpine-slim"
+  - name: ARTIFACTORY_PULL_SECRET
+    required: false
+    value: "artifactory-m950-learning"

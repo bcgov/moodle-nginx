@@ -5,11 +5,16 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: web
   USER: ${{ github.actor }}
 
 on:
   workflow_call:
+
+permissions:
+  contents: read
+
 jobs:
   build-images:
     name: '🐸 Build to JFrog'
@@ -17,17 +22,33 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
           sparse-checkout: |
             config/nginx
             example.env
             example.versions.env
+            openshift/scripts/optimize-image-push.sh
 
-      # Login to Artifactory
+      # Login to Artifactory (with retry for transient network issues)
+      - name: 🔁 Artifactory login with retry
+        run: |
+          for attempt in 1 2 3; do
+            if docker login "${{ secrets.ARTIFACTORY_URL }}" \
+              -u "${{ secrets.ARTIFACTORY_USER }}" \
+              -p "${{ secrets.ARTIFACTORY_PASSWORD }}" 2>&1; then
+              echo "✅ Artifactory login succeeded (attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️ Login attempt $attempt/3 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Artifactory login failed after 3 attempts"
+          exit 1
+
       - name: 🔑 Login to Artifactory
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ secrets.ARTIFACTORY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
@@ -49,9 +70,42 @@ jobs:
           export-variables: true
           keys-case: upper
 
-      # Pull latest WEB image and push to Artifactory
-      - name: 🛠️ Pull WEB base image and push to Artifactory
+      # Pull latest WEB image and push to Artifactory (optimized)
+      - name: 🛠️ Optimized WEB base image push to Artifactory
         run: |
-          docker pull ${{ env.WEB_IMAGE }}
-          docker tag ${{ env.WEB_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.WEB_IMAGE }}
-          docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.WEB_IMAGE }}
+          # Use the utility script for consistency across all workflows
+          if [ -f "./openshift/scripts/optimize-image-push.sh" ]; then
+            echo "🚀 Using optimize-image-push.sh utility script"
+            chmod +x ./openshift/scripts/optimize-image-push.sh
+            ./openshift/scripts/optimize-image-push.sh \
+              --source-image "${{ env.WEB_IMAGE }}" \
+              --artifactory-url "${{ secrets.ARTIFACTORY_URL }}" \
+              --timeout 300 \
+              --retry-count 3
+          else
+            echo "❌ optimize-image-push.sh utility script not found"
+            echo "💡 This script is required for optimized image handling"
+            echo "📋 Expected location: ./openshift/scripts/optimize-image-push.sh"
+            echo "🔧 Please ensure the utility script is included in the repository"
+            exit 1
+          fi
+
+      # Report optimization results
+      - name: 📊 WEB Image Optimization Report
+        if: always()
+        run: |
+          echo "======================================"
+          echo "📊 WEB BASE IMAGE OPTIMIZATION REPORT"
+          echo "======================================"
+          echo "Image: ${{ env.WEB_IMAGE }}"
+          echo "Cache Hit: ${{ env.IMAGE_CACHE_HIT || 'false' }}"
+          echo "Build Time: ${{ env.IMAGE_BUILD_TIME || '0' }}s"
+          echo "Operation: ${{ env.IMAGE_OPERATION || 'standard' }}"
+
+          if [ "${{ env.IMAGE_CACHE_HIT }}" = "true" ]; then
+            echo "💡 Time Saved: ~60-300s (typical pull/push duration)"
+            echo "🎉 Optimization: SUCCESSFUL"
+          else
+            echo "🔄 Optimization: Image was updated or unavailable"
+          fi
+          echo "======================================"

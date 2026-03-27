@@ -3,6 +3,7 @@
 name: 🧹️ Clean-up
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: ${{ github.repository }}
   USER: ${{ github.actor }}
 
@@ -50,6 +51,9 @@ on:
         description: "Clean log"
         value: ${{ jobs.clean.outputs.output1 }}
 
+permissions:
+  contents: read
+
 jobs:
   # Clean Openshift
   # Not configured for prod deployments (to be safe)
@@ -68,7 +72,7 @@ jobs:
       clean1: ${{ steps.delete-from-os.outputs.clean1 }}
     steps:
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
 

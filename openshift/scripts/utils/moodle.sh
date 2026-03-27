@@ -32,7 +32,7 @@ find_courses_with_tag() {
   cat > "$search_script" << 'EOF'
 <?php
 define('CLI_SCRIPT', true);
-require_once('/bitnami/moodle/config.php');
+require_once('/var/www/html/config.php');
 
 $tag_name = $argv[1] ?? '';
 $output_format = $argv[2] ?? 'table';
@@ -120,7 +120,7 @@ update_course_tag() {
   cat > "$update_script" << 'EOF'
 <?php
 define('CLI_SCRIPT', true);
-require_once('/bitnami/moodle/config.php');
+require_once('/var/www/html/config.php');
 
 $course_id = intval($argv[1] ?? 0);
 $old_tag = $argv[2] ?? '';
@@ -205,7 +205,7 @@ migrate_courses() {
   cat > "$migrate_script" << 'EOF'
 <?php
 define('CLI_SCRIPT', true);
-require_once('/bitnami/moodle/config.php');
+require_once('/var/www/html/config.php');
 
 $operation = $argv[1] ?? '';
 $criteria = $argv[2] ?? '';
@@ -341,13 +341,13 @@ clear_moodle_cache() {
   case "$cache_type" in
     "all")
       echo "  Clearing all caches..."
-      oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php /bitnami/moodle/admin/cli/purge_caches.php
+      oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php /var/www/html/admin/cli/purge_caches.php
       ;;
     "theme")
       echo "  Clearing theme cache..."
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         theme_reset_all_caches();
         echo 'Theme cache cleared\n';
       "
@@ -356,7 +356,7 @@ clear_moodle_cache() {
       echo "  Clearing language cache..."
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         get_string_manager()->reset_caches();
         echo 'Language cache cleared\n';
       "
@@ -365,7 +365,7 @@ clear_moodle_cache() {
       echo "  Clearing JavaScript cache..."
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         js_reset_all_caches();
         echo 'JavaScript cache cleared\n';
       "
@@ -382,9 +382,12 @@ clear_moodle_cache() {
 
 # Deployment-time cache clearing function
 clear_moodle_cache_deployment() {
-  local php_deployment_name="${1:-deployment/$PHP_DEPLOYMENT_NAME}"
+  local php_deployment_name="${1:-$PHP_DEPLOYMENT_NAME}"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
+
+  # Ensure proper resource format using utility function
+  php_deployment_name=$(normalize_resource_name "$php_deployment_name" "deployment" "format")
 
   echo ""
   echo "🚀 Clearing Moodle cache and rebuilding theme across PHP deployments..."
@@ -412,25 +415,90 @@ clear_moodle_cache_deployment() {
 
 # Function to clear Moodle cache across all PHP pods
 clear_moodle_cache_across_pods() {
-  local php_resource_name="${1:-deployment/php}"  # Default to 'php' deployment
+  local php_resource_name="${1:-php}"  # Default to 'php' deployment
   local namespace="${2:-$DEPLOY_NAMESPACE}"
   local theme_name="${3:-bcgovpsa}"
   local max_retries="${4:-30}"
   local wait_time="${5:-10}"
 
-  echo "🌐 Clearing Moodle cache across all PHP pods..."
-  echo "📍 Namespace: $namespace"
-  echo "🔍 PHP resource: $php_resource_name"
-  echo "🎨 Theme: $theme_name"
+  # Ensure proper resource format using utility function
+  php_resource_name=$(normalize_resource_name "$php_resource_name" "deployment" "format")
+
+  log_info "🌐 Clearing Moodle cache across all PHP pods..."
+  log_info "📍 Namespace: $namespace"
+  log_info "🔍 PHP resource: $php_resource_name"
+  log_info "🎨 Theme: $theme_name"
 
   # Use existing handle_pods_in_resource function
   if handle_pods_in_resource "$php_resource_name" "$namespace" "clear_cache_on_pod" "$theme_name" "" "$max_retries" "$wait_time"; then
-    echo "🎉 Cache clearing completed across all PHP pods!"
+    log_info "🎉 Cache clearing completed across all PHP pods!"
     return 0
   else
-    echo "⚠️  Cache clearing completed with some issues on PHP pods"
+    log_warn "Cache clearing completed with some issues on PHP pods"
     return 1
   fi
+}
+
+# Function to clear cache on a specific pod (used by handle_pods_in_resource)
+clear_cache_on_pod() {
+  local pod_name="$1"
+  local namespace="$2"
+  local theme_name="${3:-bcgovpsa}"
+  local error_handler="${4:-}"
+
+  log_info "🧹 Clearing Moodle cache on pod: $pod_name"
+
+  # Validate pod exists and is running
+  if ! oc get pod "$pod_name" -n "$namespace" &>/dev/null; then
+    log_error "❌ Pod not found: $pod_name"
+    return 1
+  fi
+
+  # Check pod status
+  local pod_status=$(oc get pod "$pod_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+  if [[ "$pod_status" != "Running" ]]; then
+    log_warn "Pod $pod_name is not running (status: $pod_status). Skipping cache clear."
+    return 1
+  fi
+
+  # Clear all caches
+  log_debug "  Clearing all caches on pod $pod_name..."
+  if oc exec -n "$namespace" "$pod_name" -- php /var/www/html/admin/cli/purge_caches.php 2>/dev/null; then
+    log_debug " ✅ All caches cleared on pod $pod_name"
+  else
+    log_warn "  Failed to clear all caches on pod $pod_name"
+  fi
+
+  # Clear theme cache specifically
+  log_debug "  Clearing theme cache on pod $pod_name..."
+  if oc exec -n "$namespace" "$pod_name" -- php -r "
+    define('CLI_SCRIPT', true);
+    require_once('/var/www/html/config.php');
+    theme_reset_all_caches();
+    echo 'Theme cache cleared\n';
+  " 2>/dev/null; then
+    log_debug " ✅ Theme cache cleared on pod $pod_name"
+  else
+    log_warn "Failed to clear theme cache on pod $pod_name"
+  fi
+
+  # Rebuild theme if theme name provided
+  if [[ -n "$theme_name" && "$theme_name" != "" ]]; then
+    log_debug "  Rebuilding theme '$theme_name' on pod $pod_name..."
+    if oc exec -n "$namespace" "$pod_name" -- php -r "
+      define('CLI_SCRIPT', true);
+      require_once('/var/www/html/config.php');
+      theme_reset_all_caches();
+      echo 'Theme rebuilt\n';
+    " 2>/dev/null; then
+      log_debug "  ✅ Theme '$theme_name' rebuilt on pod $pod_name"
+    else
+      log_warn "Failed to rebuild theme '$theme_name' on pod $pod_name"
+    fi
+  fi
+
+  log_info "✅ Cache clearing completed on pod: $pod_name"
+  return 0
 }
 
 # Function to rebuild course cache
@@ -451,7 +519,7 @@ rebuild_course_cache() {
   cat > "$rebuild_script" << 'EOF'
 <?php
 define('CLI_SCRIPT', true);
-require_once('/bitnami/moodle/config.php');
+require_once('/var/www/html/config.php');
 
 $course_id = $argv[1] ?? 'all';
 
@@ -510,7 +578,7 @@ check_cache_status() {
   cat > "$status_script" << 'EOF'
 <?php
 define('CLI_SCRIPT', true);
-require_once('/bitnami/moodle/config.php');
+require_once('/var/www/html/config.php');
 
 global $CFG;
 
@@ -581,7 +649,7 @@ EOF
 fix_mojibake_files() {
   local moodle_pod="$1"
   local file_pattern="${2:-*.mbz}"
-  local target_dir="${3:-/bitnami/moodledata/temp}"
+  local target_dir="${3:-/var/www/htmldata/temp}"
 
   echo "🔧 Fixing mojibake in files: $file_pattern"
 
@@ -655,8 +723,8 @@ moodle_content_cleanup() {
     "deep")
       echo "  Running deep cleanup..."
       clear_moodle_cache "$moodle_pod" "all"
-      fix_mojibake_files "$moodle_pod" "*.mbz" "/bitnami/moodledata/temp"
-      fix_mojibake_files "$moodle_pod" "*.xml" "/bitnami/moodledata/temp"
+      fix_mojibake_files "$moodle_pod" "*.mbz" "/var/www/htmldata/temp"
+      fix_mojibake_files "$moodle_pod" "*.xml" "/var/www/htmldata/temp"
       rebuild_course_cache "$moodle_pod" "all"
       ;;
     "analysis")
@@ -796,7 +864,7 @@ manage_moodle_maintenance() {
       echo "  Enabling maintenance mode with message: $message"
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         set_config('maintenance_enabled', 1);
         set_config('maintenance_message', '$message');
         echo 'Maintenance mode enabled\n';
@@ -806,7 +874,7 @@ manage_moodle_maintenance() {
       echo "  Disabling maintenance mode..."
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         set_config('maintenance_enabled', 0);
         unset_config('maintenance_message');
         echo 'Maintenance mode disabled\n';
@@ -816,7 +884,7 @@ manage_moodle_maintenance() {
       echo "  Checking maintenance mode status..."
       oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
         define('CLI_SCRIPT', true);
-        require_once('/bitnami/moodle/config.php');
+        require_once('/var/www/html/config.php');
         \$enabled = get_config('core', 'maintenance_enabled');
         \$message = get_config('core', 'maintenance_message');
         echo 'Maintenance mode: ' . (\$enabled ? 'ENABLED' : 'DISABLED') . '\n';

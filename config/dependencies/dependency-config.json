@@ -1,0 +1,98 @@
+{
+  "dependencies": {
+    "docker_images": {
+      "description": "Container images used across the platform",
+      "source_vars": [
+        "PHP_IMAGE",
+        "CRON_IMAGE",
+        "DB_IMAGE",
+        "WEB_IMAGE",
+        "BACKUP_IMAGE",
+        "REDIS_IMAGE",
+        "REDIS_SENTINEL_IMAGE",
+        "GOLANG_IMAGE",
+        "UBUNTU_IMAGE"
+      ],
+      "output_manifest": "openshift/dependencies/images.yml",
+      "dependabot_ecosystem": "docker"
+    },
+    "helm_charts": {
+      "description": "Helm charts and their versions",
+      "source_vars": [
+        "BACKUP_HELM_CHART",
+        "REDIS_HELM_CHART"
+      ],
+      "version_vars": [
+        "REDIS_CHART_VERSION"
+      ],
+      "output_manifest": "openshift/dependencies/Chart.yaml",
+      "dependabot_ecosystem": "github-actions"
+    },
+    "security_tools": {
+      "description": "Security scanning tools",
+      "source_vars": [
+        "TRIVY_VERSION",
+        "DOCKER_SCOUT_VERSION"
+      ],
+      "output_manifest": ".github/security-tools.json"
+    },
+    "moodle_plugins": {
+      "description": "Moodle plugins from Git repositories",
+      "git_repos": [
+        {
+          "var_prefix": "MOODLE",
+          "url_var": "MOODLE_URL",
+          "branch_var": "MOODLE_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "HVP",
+          "url_var": "HVP_URL",
+          "branch_var": "HVP_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "PSAELMSYNC",
+          "url_var": "PSAELMSYNC_URL",
+          "branch_var": "PSAELMSYNC_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "REPORT_ALL_BACKUPS",
+          "url_var": "REPORT_ALL_BACKUPS_URL",
+          "branch_var": "REPORT_ALL_BACKUPS_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "THEME",
+          "url_var": "THEME_URL",
+          "branch_var": "THEME_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "PCURATOR",
+          "url_var": "PCURATOR_URL",
+          "branch_var": "PCURATOR_BRANCH_VERSION"
+        },
+        {
+          "var_prefix": "COURSESEARCH",
+          "url_var": "COURSESEARCH_URL",
+          "branch_var": "COURSESEARCH_BRANCH_VERSION"
+        }
+      ],
+      "output_manifest": "config/moodle/git-dependencies.json"
+    }
+  },
+  "build_integration": {
+    "docker_compose": {
+      "description": "Local development with docker-compose",
+      "auto_populate": true,
+      "env_file": ".env.generated"
+    },
+    "ci_cd": {
+      "description": "GitHub Actions and OpenShift builds",
+      "populate_step": "setup-dependencies",
+      "cache_key": "deps-${GITHUB_SHA:-local}-${date +%Y%m%d}"
+    }
+  },
+  "sync_scripts": {
+    "populate_manifests": "openshift/scripts/populate-dependency-manifests.sh",
+    "validate_dependencies": "openshift/scripts/validate-dependencies.sh",
+    "update_local_env": "openshift/scripts/update-local-env.sh"
+  }
+}

@@ -14,11 +14,58 @@ define('CLI_SCRIPT', false);
 
 require_once('config.php'); // Use Moodle's DB config
 
+$mode = $argv[1] ?? 'detect'; // 'detect' or 'convert'
+$target_charset = 'utf8mb4';
+$target_collation = 'utf8mb4_unicode_ci';
+
+echo "<p>Moodle DB Charset/Collation Utility</p>\n";
+echo "<p>Mode: $mode</p>\n";
+
+// Get all tables in the current database
+$tables = $DB->get_records_sql("SHOW TABLE STATUS");
+if (!$tables) {
+    echo "<p>No tables found.</p>\n";
+    exit(1);
+}
+
+foreach ($tables as $table) {
+    $name = $table->name;
+    $engine = $table->engine;
+    $collation = $table->collation;
+    echo "<p>Table: $name\tEngine: $engine\tCollation: $collation</p>\n";
+}
+
+if (@$_REQUEST['mojibake'] === 'convert') {
+    echo "<p>Converting all tables to $target_charset/$target_collation...</p>\n";
+    foreach ($tables as $table) {
+        $name = $table->name;
+        $sql = "ALTER TABLE `$name` CONVERT TO CHARACTER SET $target_charset COLLATE $target_collation";
+        try {
+            $DB->execute($sql);
+            echo "<p>Converted $name</p>\n";
+        } catch (Exception $e) {
+            echo "<p>Failed to convert $name: " . $e->getMessage() . "</p>\n";
+        }
+    }
+    echo "<p>Conversion complete.</p>\n";
+} else {
+    echo "<p><a href=\"?mojibake=convert\">Convert all tables to $target_charset/$target_collation.</a></p>";
+}
+
+
+die;
+
+
+
+
+
 echo "Test utf-8 encoding: “ ” ‘ ’ … ™ © ®\n";
 
 // --- Mojibake replacements array (garbled => intended) ---
 $mojibake_replacements = [
   'â€œ' => '“',
+  'â†‘' => '↑',
+  'â†“' => '↓',
   'â€' => '”',
   'Ã¢â‚¬Ëœ' => "'",
   'Ã¢â‚¬â„¢' => "'",
@@ -54,6 +101,11 @@ $mojibake_replacements = [
 uksort($mojibake_replacements, function ($a, $b) {
   return strlen($b) <=> strlen($a);
 });
+
+// print_r("<pre>");
+// print_r($mojibake_replacements);
+// print_r("</pre>");
+// exit;
 
 // --- Table/column targets array ---
 $moodle_content_columns = [

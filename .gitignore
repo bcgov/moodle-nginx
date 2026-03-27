@@ -11,3 +11,23 @@ var/*
 !example.secrets
 node_modules
 package*.json
+!config/lighthouse/package.json
+!config/lighthouse/package-lock.json
+
+# Generated dependency manifests (auto-generated from example.versions.env)
+# config/moodle/composer.json
+config/moodle/composer.lock
+openshift/dependencies/
+.github/security-tools.json
+config/moodle/git-dependencies.json
+
+# Python bytecache
+__pycache__/
+*.pyc
+
+# Generated runtime reports
+tmp/
+
+# Internal documentation (do not publish)
+.docs/internal/
+.docs/DOCUMENTATION-REVIEW.md

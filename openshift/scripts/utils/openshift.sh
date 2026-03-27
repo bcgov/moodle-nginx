@@ -5,6 +5,211 @@
 # secret management, logging, and validation functions
 
 # =============================================================================
+# CLUSTER HEALTH AND EVENT MONITORING FUNCTIONS
+# =============================================================================
+
+# Function to check for critical cluster events that would prevent successful deployment
+check_cluster_health() {
+  local resource_type="$1"     # e.g., "pod", "deployment", "statefulset"
+  local resource_name="$2"     # e.g., "mariadb-galera", "maintenance-message"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local check_duration="${4:-5m}"  # How far back to check events (5m, 10m, 1h)
+
+  log_debug "🔍 Checking cluster health for $resource_type/$resource_name..."
+
+  # Get recent events for the specific resource
+  local events_output
+  events_output=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name",involvedObject.kind="$resource_type" --sort-by='.lastTimestamp' -o json 2>/dev/null)
+
+  if [[ -z "$events_output" || "$events_output" == '{"items":[]}' ]]; then
+    # No specific events found, check for general cluster issues
+    events_output=$(oc get events -n "$namespace" --sort-by='.lastTimestamp' -o json 2>/dev/null)
+  fi
+
+  # Parse events and look for critical issues
+  local critical_issues=()
+  local pvc_issues=0
+  local csi_issues=0
+  local node_issues=0
+  local network_issues=0
+
+  if [[ -n "$events_output" && "$events_output" != '{"items":[]}' ]]; then
+    # Check for PVC/storage issues
+    if echo "$events_output" | grep -qi "AttachVolume.Attach failed\|timed out waiting for external-attacher\|CSI driver.*attach.*failed\|volume.*attach.*failed"; then
+      pvc_issues=$((pvc_issues + 1))
+      critical_issues+=("PVC_ATTACH_FAILURES")
+    fi
+
+    # Check for CSI/storage driver issues
+    if echo "$events_output" | grep -qi "csi.trident.netapp.io\|DeadlineExceeded.*attach\|context deadline exceeded.*volume"; then
+      csi_issues=$((csi_issues + 1))
+      critical_issues+=("CSI_DRIVER_ISSUES")
+    fi
+
+    # Check for node/scheduling issues
+    if echo "$events_output" | grep -qi "FailedScheduling\|InsufficientMemory\|InsufficientCPU\|NodeNotReady"; then
+      node_issues=$((node_issues + 1))
+      critical_issues+=("NODE_SCHEDULING_ISSUES")
+    fi
+
+    # Check for network issues
+    if echo "$events_output" | grep -qi "NetworkNotReady\|CNI.*failed\|network.*timeout"; then
+      network_issues=$((network_issues + 1))
+      critical_issues+=("NETWORK_ISSUES")
+    fi
+  fi
+
+  # Determine severity and recommended action
+  local total_issues=$((pvc_issues + csi_issues + node_issues + network_issues))
+
+  if [[ $total_issues -gt 0 ]]; then
+    log_warn "⚠️ Cluster health issues detected for $resource_type/$resource_name:"
+    [[ $pvc_issues -gt 0 ]] && log_warn "  - PVC attachment failures: $pvc_issues"
+    [[ $csi_issues -gt 0 ]] && log_warn "  - CSI driver issues: $csi_issues"
+    [[ $node_issues -gt 0 ]] && log_warn "  - Node/scheduling issues: $node_issues"
+    [[ $network_issues -gt 0 ]] && log_warn "  - Network issues: $network_issues"
+
+    # Return the most severe issue type
+    if [[ $pvc_issues -gt 0 || $csi_issues -gt 0 ]]; then
+      echo "STORAGE_CRITICAL"
+      return 2  # Critical storage issues
+    elif [[ $node_issues -gt 0 ]]; then
+      echo "NODE_CRITICAL"
+      return 1  # Node issues
+    elif [[ $network_issues -gt 0 ]]; then
+      echo "NETWORK_WARNING"
+      return 1  # Network issues
+    fi
+  else
+    log_debug "✅ No critical cluster health issues detected"
+    echo "HEALTHY"
+    return 0
+  fi
+}
+
+# Function to display detailed cluster events for troubleshooting
+show_cluster_events() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  log_info "📋 Recent cluster events for $resource_type/$resource_name:"
+  echo "----------------------------------------"
+
+  # Show events for the specific resource
+  local specific_events
+  specific_events=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | tail -10)
+
+  if [[ -n "$specific_events" ]]; then
+    echo "🎯 Specific events for $resource_name:"
+    echo "$specific_events"
+    echo ""
+  fi
+
+  # Show general cluster events that might be relevant
+  echo "🌐 General cluster events (last 10):"
+  oc get events -n "$namespace" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | grep -E "(Failed|Error|Warning)" | tail -10 | head -5
+  echo "----------------------------------------"
+}
+
+# Function to wait with centralized cluster health monitoring
+wait_with_cluster_monitoring() {
+  local resource_type="$1"      # e.g., "deployment", "statefulset"
+  local resource_name="$2"      # e.g., "mariadb-galera"
+  local wait_function="$3"      # Function to call for actual waiting
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local max_wait_time="${5:-3600}"  # 60 minutes default
+
+  # Centralized cluster monitoring configuration
+  local cluster_monitoring_enabled="${CLUSTER_HEALTH_MONITORING:-YES}"
+  local last_health_check=0
+  local health_check_interval=300  # Check every 5 minutes
+  local consecutive_storage_failures=0
+  local max_storage_failures=3
+
+  local elapsed_time=0
+
+  # Show monitoring configuration
+  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+    log_info "  Starting deployment wait with centralized cluster health monitoring..."
+    log_info "  Resource: $resource_type/$resource_name"
+    log_info "  Max wait time: ${max_wait_time}s"
+    log_info "  Health check interval: ${health_check_interval}s"
+    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
+  else
+    log_info "  Starting deployment wait (cluster monitoring disabled)..."
+    log_info "  Resource: $resource_type/$resource_name"
+    log_info "  Max wait time: ${max_wait_time}s"
+    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
+  fi
+
+  while [[ $elapsed_time -lt $max_wait_time ]]; do
+    # Run the actual wait function (non-blocking check)
+    if $wait_function; then
+      log_success "Resource deployment completed successfully!"
+      return 0
+    fi
+
+    # Perform cluster health check if enabled
+    if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+      if [[ $((elapsed_time - last_health_check)) -ge $health_check_interval ]]; then
+        log_debug "Performing centralized cluster health check for $resource_type/$resource_name..."
+
+        local health_status
+        health_status=$(check_cluster_health "$resource_type" "$resource_name" "$namespace")
+        local health_exit_code=$?
+
+        case "$health_status" in
+          "STORAGE_CRITICAL")
+            consecutive_storage_failures=$((consecutive_storage_failures + 1))
+            log_warn "Storage issues detected while waiting for $resource_type/$resource_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+
+            if [[ $consecutive_storage_failures -ge $max_storage_failures ]]; then
+              log_warn "Extending wait time due to persistent storage issues..."
+              # Extend max_wait_time for storage issues
+              max_wait_time=$((max_wait_time + 900))  # Add 15 minutes
+              log_info "Showing cluster events for troubleshooting..."
+              show_cluster_events "$resource_type" "$resource_name" "$namespace"
+            fi
+            ;;
+          "NODE_CRITICAL"|"NETWORK_WARNING")
+            log_warn "Cluster infrastructure issues detected while waiting for $resource_type/$resource_name"
+            show_cluster_events "$resource_type" "$resource_name" "$namespace"
+            ;;
+          "HEALTHY")
+            consecutive_storage_failures=0
+            log_debug "Centralized cluster health check: Normal (waiting for $resource_type/$resource_name)"
+            ;;
+        esac
+
+        last_health_check=$elapsed_time
+      fi
+    fi
+
+    # Sleep and update elapsed time
+    sleep 10
+    elapsed_time=$((elapsed_time + 10))
+
+    # Provide periodic status updates
+    if [[ $((elapsed_time % 300)) -eq 0 ]]; then  # Every 5 minutes
+      local minutes_elapsed=$((elapsed_time / 60))
+      local minutes_remaining=$(((max_wait_time - elapsed_time) / 60))
+      log_info "⏳ Still waiting... ${minutes_elapsed}m elapsed, ${minutes_remaining}m remaining"
+    fi
+  done
+
+  log_error "Deployment wait timed out after ${max_wait_time} seconds"
+
+  # Show final cluster health check on timeout if monitoring enabled
+  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+    log_info "📋 Final centralized cluster health check..."
+    show_cluster_events "$resource_type" "$resource_name" "$namespace"
+  fi
+
+  return 1
+}
+
+# =============================================================================
 # RESOURCE MANAGEMENT FUNCTIONS
 # =============================================================================
 
@@ -61,21 +266,19 @@ get_replicas() {
   fi
 
   # Determine resource type and get current replicas
-  local resource_type=""
   local original_replicas=""
 
   if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="statefulset"
     original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
   elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="deployment"
     original_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
   else
-    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - No Resource" "Could not find StatefulSet or Deployment for selector: $selector (resource: $resource_name)" "error" "$namespace"
+    echo "0"
     return 1
   fi
 
-  return $original_replicas;
+  echo "${original_replicas:-0}"
+  return 0
 }
 
 # Function to check if StatefulSet/Deployment has all replicas available and ready
@@ -149,21 +352,65 @@ wait_for_resource_ready() {
 
   echo "⏳ Waiting for $description to be ready (selector: $selector)..."
 
-  local retries=0
-  while [[ $retries -lt $max_retries ]]; do
-    if check_resource_ready "$selector" "$namespace"; then
+  # Extract resource type and name for cluster monitoring (if available)
+  local resource_type=""
+  local resource_name=""
+  if [[ "$selector" =~ = ]]; then
+    resource_name="${selector##*=}"
+    # Try to determine resource type by checking what exists
+    if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
+      resource_type="statefulset"
+    elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
+      resource_type="deployment"
+    fi
+  fi
+
+  # Use cluster health monitoring if enabled and resource type is available
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" && -n "$resource_type" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $description ($resource_type/$resource_name)..."
+
+    # Create a single-iteration wrapper function for the centralized monitoring
+    eval "
+    readiness_check_wrapper() {
+      check_resource_ready \"$selector\" \"$namespace\"
+      return \$?
+    }
+    "
+
+    # Calculate timeout in seconds (max_retries * wait_time)
+    local timeout_seconds=$((max_retries * wait_time))
+
+    # Use centralized cluster health monitoring
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "readiness_check_wrapper" "$namespace" "$timeout_seconds"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
       echo "✅ $description is ready"
-      return 0
     else
-      echo "    $description not ready yet... (retry $retries/$max_retries)"
+      echo "⚠️ Timeout: $description did not become ready after $timeout_seconds seconds"
     fi
 
-    retries=$((retries + 1))
-    sleep $wait_time
-  done
+    return $result
+  else
+    log_debug "🔄 Using traditional waiting for $description (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO} or resource type unavailable)..."
 
-  echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
-  return 1
+    # Use traditional waiting without cluster monitoring
+    local retries=0
+    while [[ $retries -lt $max_retries ]]; do
+      if check_resource_ready "$selector" "$namespace"; then
+        echo "✅ $description is ready"
+        return 0
+      else
+        echo "    $description not ready yet... (retry $retries/$max_retries)"
+      fi
+
+      retries=$((retries + 1))
+      sleep $wait_time
+    done
+
+    echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
+    return 1
+  fi
 }
 
 # Define error handling functions
@@ -754,6 +1001,95 @@ EOF
 }
 
 # =============================================================================
+# RESOURCE UTILITY FUNCTIONS
+# =============================================================================
+
+# Function to normalize OpenShift resource names to proper format
+# Handles conversion between "name" and "type/name" formats
+normalize_resource_name() {
+  local resource="$1"
+  local default_type="${2:-deployment}"  # Default resource type if none specified
+  local operation="${3:-format}"         # 'format' (ensure type/name) or 'extract' (get just name)
+
+  if [[ -z "$resource" ]]; then
+    log_error "normalize_resource_name: Resource name cannot be empty"
+    return 1
+  fi
+
+  case "$operation" in
+    "format")
+      # Ensure resource is in "type/name" format
+      if [[ "$resource" == */* ]]; then
+        # Already has type, clean up any redundant API group suffixes
+        local resource_type=${resource%%/*}
+        local resource_name=${resource##*/}
+
+        # Handle full API resource names (e.g., deployment.apps -> deployment)
+        case "$resource_type" in
+          "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
+          "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
+          "service.v1" | "services.v1") resource_type="service" ;;
+          "job.batch" | "jobs.batch") resource_type="job" ;;
+          "pod.v1" | "pods.v1") resource_type="pod" ;;
+        esac
+
+        echo "$resource_type/$resource_name"
+      else
+        # Just a name, prepend default type
+        echo "$default_type/$resource"
+      fi
+      ;;
+    "extract")
+      # Extract just the name part (remove type prefix if present)
+      if [[ "$resource" == */* ]]; then
+        echo "${resource##*/}"
+      else
+        echo "$resource"
+      fi
+      ;;
+    "type")
+      # Extract just the type part
+      if [[ "$resource" == */* ]]; then
+        local resource_type=${resource%%/*}
+        # Clean up API group suffixes
+        case "$resource_type" in
+          "deployment.apps" | "deployments.apps") echo "deployment" ;;
+          "statefulset.apps" | "statefulsets.apps") echo "statefulset" ;;
+          "service.v1" | "services.v1") echo "service" ;;
+          "job.batch" | "jobs.batch") echo "job" ;;
+          "pod.v1" | "pods.v1") echo "pod" ;;
+          *) echo "$resource_type" ;;
+        esac
+      else
+        echo "$default_type"
+      fi
+      ;;
+    *)
+      log_error "normalize_resource_name: Invalid operation '$operation'. Use 'format', 'extract', or 'type'"
+      return 1
+      ;;
+  esac
+}
+
+# Function to validate resource name format for functions that require "type/name"
+validate_resource_format() {
+  local resource="$1"
+  local function_name="${2:-unknown}"
+
+  if [[ -z "$resource" ]]; then
+    log_error "$function_name: Resource name cannot be empty"
+    return 1
+  fi
+
+  if [[ "$resource" != */* ]]; then
+    log_error "$function_name: Invalid resource format: $resource. Expected format: <type>/<name>"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
 # WAIT AND MONITORING FUNCTIONS
 # =============================================================================
 
@@ -770,22 +1106,14 @@ wait_for() {
   # Wait to ensure the resource has had enough time to set the desired state
   sleep 10
 
-  # Extract resource type and name
-  if [[ $resource == */* ]]; then
-    local resource_type=${resource%%/*}
-    local resource_name=${resource##*/}
-
-    # Handle full API resource names (e.g., deployment.apps -> deployment)
-    case "$resource_type" in
-      "deployment.apps" | "deployments.apps") resource_type="deployment" ;;
-      "statefulset.apps" | "statefulsets.apps") resource_type="statefulset" ;;
-      "service.v1" | "services.v1") resource_type="service" ;;
-      "job.batch" | "jobs.batch") resource_type="job" ;;
-    esac
-  else
-    log_error "Invalid resource format: $resource. Expected format: <type>/<name>"
+  # Validate and normalize resource format
+  if ! validate_resource_format "$resource" "wait_for"; then
     return 1
   fi
+
+  # Extract resource type and name using utility function
+  local resource_type=$(normalize_resource_name "$resource" "" "type")
+  local resource_name=$(normalize_resource_name "$resource" "" "extract")
 
   # Convert timeout to seconds for calculation
   local timeout_seconds=$(echo $timeout | sed 's/[a-zA-Z]*//g')
@@ -799,10 +1127,28 @@ wait_for() {
     return 0
   fi
 
-  if [[ $resource_type == "job" ]]; then
-    handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+  # Use cluster health monitoring if enabled via environment variable
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" && "$resource_type" != "job" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING})..."
+
+    # Create a wrapper function for the actual wait logic
+    eval "
+    handle_deployment_status_wrapper() {
+      handle_deployment_status \"$resource_name\" \"$condition\" \"$scale_direction\" 1 0 \"$wait_time\" \"$resource_type\"
+      return \$?
+    }
+    "
+
+    # Use centralized cluster health monitoring
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "handle_deployment_status_wrapper" "$DEPLOY_NAMESPACE" "$timeout_seconds"
   else
-    handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
+    log_debug "🔄 Using traditional waiting for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO})..."
+    # Use traditional waiting without cluster monitoring
+    if [[ $resource_type == "job" ]]; then
+      handle_job_status "$resource_name" "$max_retries" "$retry_count" "$wait_time"
+    else
+      handle_deployment_status "$resource_name" "$condition" "$scale_direction" "$max_retries" "$retry_count" "$wait_time" "$resource_type"
+    fi
   fi
 }
 
@@ -813,6 +1159,7 @@ wait_for_deployment_without_errors() {
   local error_handler=${3:-delete_pod}
   local max_retries=${4:-30}
   local wait_time=${5:-30}
+  local enable_cluster_monitoring=${6:-true}  # New parameter to control cluster health monitoring
 
   # Split the resource into type and name
   local resource_type=${resource%%/*}
@@ -847,14 +1194,43 @@ wait_for_deployment_without_errors() {
     return 0
   fi
 
-  # Use handle_pods_in_resource to manage pods
-  if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
-    log_error "Errors detected in pods for $resource. Exiting..."
-    return 1
-  fi
+  # Use cluster health monitoring if enabled via environment variable
+  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" ]]; then
+    log_debug "🔄 Using centralized cluster health monitoring for $resource deployment..."
 
-  log_success "All pods in $resource are ready and error-free."
-  return 0
+    # Create a wrapper function for the handle_pods_in_resource logic
+    eval "
+    handle_pods_wrapper() {
+      handle_pods_in_resource \"$resource_type/$resource_name\" \"$DEPLOY_NAMESPACE\" \"check_pod_logs\" \"$error_search_string\" \"$error_handler\" \"$max_retries\" \"$wait_time\"
+      return \$?
+    }
+    "
+
+    # Calculate timeout in seconds (max_retries * wait_time)
+    local timeout_seconds=$((max_retries * wait_time))
+
+    # Use centralized cluster health monitoring with wrapper function
+    wait_with_cluster_monitoring "$resource_type" "$resource_name" "handle_pods_wrapper" "$DEPLOY_NAMESPACE" "$timeout_seconds"
+    local result=$?
+
+    if [[ $result -eq 0 ]]; then
+      log_success "All pods in $resource are ready and error-free."
+    else
+      log_error "Errors detected in pods for $resource or timeout occurred."
+    fi
+
+    return $result
+  else
+    log_debug "🔄 Using traditional waiting for $resource (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO})..."
+    # Use traditional waiting without cluster monitoring
+    if ! handle_pods_in_resource "$resource_type/$resource_name" "$DEPLOY_NAMESPACE" "check_pod_logs" "$error_search_string" "$error_handler" $max_retries $wait_time; then
+      log_error "Errors detected in pods for $resource. Exiting..."
+      return 1
+    fi
+
+    log_success "All pods in $resource are ready and error-free."
+    return 0
+  fi
 }
 
 check_timestamp() {
@@ -909,24 +1285,31 @@ check_timestamp() {
 
 # Function to log debug messages only when DEBUG_LEVEL is set to DEBUG
 log_debug() {
-  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
-    echo "🔍 Debug: $*"
+  if [[ "${DEBUG_LEVEL}" == "DEBUG" ]] || [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
+    echo "🔍 Debug: $*" >&2
+  fi
+}
+
+# Function to log trace messages (ultra-verbose, command-level detail)
+log_trace() {
+  if [[ "${DEBUG_LEVEL}" == "TRACE" ]]; then
+    echo "🔬 Trace: $*" >&2
   fi
 }
 
 # Function to log info messages (always shown)
 log_info() {
-  echo "ℹ️  $*"
+  echo "ℹ️  $*" >&2
 }
 
 # Function to log warning messages (always shown)
 log_warn() {
-  echo "⚠️  $*"
+  echo "⚠️  $*" >&2
 }
 
 # Function to log error messages (always shown)
 log_error() {
-  echo "❌ $*"
+  echo "❌ $*" >&2
 }
 
 # Function to log success messages (always shown)
@@ -941,6 +1324,7 @@ check_pod_logs() {
   local error_search_strings=${3:-"error"}
   local error_handler=${4:-delete_pod}
   local log_file="/tmp/logs/check-pod-logs.log"
+  local tail_lines=${5:-100}  # Only check recent logs to avoid startup noise
 
   # Split the error_search_strings into an array
   IFS=',' read -r -a error_strings <<< "$error_search_strings"
@@ -956,7 +1340,7 @@ check_pod_logs() {
   IFS=' ' read -r -a container_array <<< "$CONTAINERS"
 
   for container in "${container_array[@]}"; do
-    LOGS=$(oc logs $pod -n $namespace -c $container)
+    LOGS=$(oc logs "$pod" -n "$namespace" -c "$container" --tail="$tail_lines")
 
     for error_search_string in "${error_strings[@]}"; do
       if echo "$LOGS" | grep -q "$error_search_string"; then
@@ -1054,15 +1438,26 @@ check_deployment_logs() {
   return 0
 }
 
-# Enhanced logging function for critical events
+# Enhanced logging function for structured events
 log_critical_event() {
   local event_type="$1"
   local message="$2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local severity="${4:-warning}"
   local timestamp=$(date '+%Y-%m-%d %H:%M:%S UTC')
 
+  # Use severity-appropriate label for log aggregation
+  local label="EVENT"
+  case "$severity" in
+    "error"|"failure") label="CRITICAL_EVENT" ;;
+    "warning")         label="WARNING_EVENT" ;;
+    "healing"|"repair") label="HEALING_EVENT" ;;
+    "success")         label="INFO_EVENT" ;;
+    *)                 label="INFO_EVENT" ;;
+  esac
+
   # Log to stdout with structured format for OpenShift log aggregation
-  echo "CRITICAL_EVENT|${timestamp}|${namespace}|${event_type}|${message}"
+  echo "${label}|${timestamp}|${namespace}|${event_type}|${message}"
 
   # Also log to OpenShift events for visibility in cluster
   if command -v oc >/dev/null 2>&1; then
@@ -1137,8 +1532,10 @@ EOF
       -d "$webhook_payload" > /dev/null 2>&1 || true
   fi
 
-  # Always log the critical event for aggregation
-  log_critical_event "$event_type" "$message" "$namespace"
+  # Log events for aggregation (only for actionable severities)
+  if [[ "$severity" =~ ^(error|failure|warning|healing)$ ]]; then
+    log_critical_event "$event_type" "$message" "$namespace" "$severity"
+  fi
 }
 
 # Function to check logs for errors and restart if needed
@@ -1555,10 +1952,10 @@ enable_maintenance_mode() {
 
   # Redirect traffic to maintenance service
   if [[ "$route_mode" == "auto" ]]; then
-    log_info "🔄 Redirecting all relevant routes to maintenance service..."
+    log_info "Redirecting all relevant routes to maintenance service..."
     patch_all_routes "$service_name"
   else
-    log_info "🔄 Redirecting specific route $route_mode to $service_name..."
+    log_info "Redirecting specific route $route_mode to $service_name..."
     patch_route "$route_mode" "$service_name"
   fi
 }
@@ -1573,15 +1970,15 @@ disable_maintenance_mode() {
 
   # Redirect traffic back to application
   if [[ "$route_mode" == "auto" ]]; then
-    log_info "🔄 Redirecting all relevant routes back to application service: $target_service_name"
+    log_info "Redirecting all relevant routes back to application service: $target_service_name"
     patch_all_routes "$target_service_name"
   else
-    log_info "🔄 Redirecting specific route $route_mode to $target_service_name..."
+    log_info "Redirecting specific route $route_mode to $target_service_name..."
     patch_route "$route_mode" "$target_service_name"
   fi
 
   log_success "Route redirection completed - traffic now directed to $target_service_name"
-  log_warn "Note: Maintenance service scaling should be handled by caller after verification"
+  log_info "Note: Maintenance service scaling should be handled by caller after verification"
 }
 
 # =============================================================================
@@ -1648,11 +2045,11 @@ create_or_update_secret() {
   local secret_data="$2"  # Format: "key1=value1,key2=value2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
 
-  log_info "🔐 Creating/updating secret '$secret_name'..."
+  log_info "Creating/updating secret '$secret_name'..."
 
   # Delete existing secret if it exists
   if oc get secret "$secret_name" -n "$namespace" &> /dev/null; then
-    log_info "  Deleting existing secret..."
+    log_info "Deleting existing secret..."
     oc delete secret "$secret_name" -n "$namespace"
   fi
 
@@ -1685,7 +2082,7 @@ manage_secret_with_validation() {
   local namespace="${3:-$DEPLOY_NAMESPACE}"
   local force_update="${4:-false}"
 
-  log_info "🔧 Managing secret '$secret_name' with validation..."
+  log_info "Managing secret '$secret_name' with validation..."
 
   # If force_update is false, check if secret already exists and matches
   if [[ "$force_update" != "true" ]]; then
@@ -1735,7 +2132,7 @@ restart_deployment() {
   local deployment_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  log_info "🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
+  log_info " 🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
 
   if oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
     if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
@@ -1770,28 +2167,117 @@ handle_job_status() {
   local retry_count=$3
   local wait_time=$4
 
+  # Enhanced monitoring variables for jobs
+  local cluster_monitoring_enabled="${CLUSTER_HEALTH_MONITORING:-YES}"
+  local last_health_check=0
+  local health_check_interval=300  # Check every 5 minutes
+  local consecutive_storage_failures=0
+  local max_storage_failures=3
+  local original_max_retries=$max_retries
+  local storage_extension_applied=false
+
+  log_debug "🔄 Starting job monitoring with cluster health enabled: $cluster_monitoring_enabled"
+
   while true; do
     # Check if the job has failed
     local job_failed=$(oc get jobs $job_name -o 'jsonpath={..status.failed}')
     if [[ $job_failed -gt 0 ]]; then
       log_error "Job $job_name has failed. Retrieving logs..."
       local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}')
-      local error_log_text=$(oc logs $pod_name)
-      log_error "Error log:"
-      log_error "$error_log_text"
+      if [[ -n "$pod_name" ]]; then
+        local error_log_text=$(oc logs $pod_name 2>/dev/null || echo "No logs available")
+        log_error "Error log:"
+        log_error "$error_log_text"
+      else
+        log_warn "No pod found for job $job_name to retrieve logs"
+      fi
       return 1
     fi
 
     # Check if the job has succeeded
     local job_succeeded=$(oc get jobs $job_name -o 'jsonpath={..status.succeeded}')
     if [[ $job_succeeded -gt 0 ]]; then
-      log_success "✔️ Job $job_name has completed successfully."
+      log_success "Job $job_name has completed successfully."
       return 0
+    fi
+
+    # Perform cluster health check if enabled and enough time has passed
+    if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+      local current_time=$((retry_count * wait_time))
+      if [[ $((current_time - last_health_check)) -ge $health_check_interval ]]; then
+        log_debug "Performing cluster health check for job $job_name..."
+
+        # Get pod associated with the job for health checking
+        local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+        local health_status
+        if [[ -n "$pod_name" ]]; then
+          health_status=$(check_cluster_health "Pod" "$pod_name" "$DEPLOY_NAMESPACE")
+        else
+          health_status=$(check_cluster_health "Job" "$job_name" "$DEPLOY_NAMESPACE")
+        fi
+        local health_exit_code=$?
+
+        case "$health_status" in
+          "STORAGE_CRITICAL")
+            consecutive_storage_failures=$((consecutive_storage_failures + 1))
+            log_warn "Storage issues detected for job $job_name (attempt $consecutive_storage_failures/$max_storage_failures)"
+
+            if [[ $consecutive_storage_failures -ge $max_storage_failures && "$storage_extension_applied" == "false" ]]; then
+              # Extend max_retries for persistent storage issues
+              local extension_retries=$((15 * 60 / wait_time))  # Add 15 minutes worth of retries
+              max_retries=$((max_retries + extension_retries))
+              storage_extension_applied=true
+              log_warn "🕒 Extending job timeout due to persistent storage issues..."
+              log_info "   Original timeout: $((original_max_retries * wait_time))s"
+              log_info "   Extended timeout: $((max_retries * wait_time))s"
+              log_info "🔍 Showing cluster events for troubleshooting..."
+              show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+
+              # Also show pod-specific events if available
+              if [[ -n "$pod_name" ]]; then
+                log_info "🔍 Showing pod events for $pod_name..."
+                show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+              fi
+            fi
+            ;;
+          "NODE_CRITICAL"|"NETWORK_WARNING")
+            log_warn "Cluster infrastructure issues detected for job $job_name"
+            show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+            if [[ -n "$pod_name" ]]; then
+              show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+            fi
+            ;;
+          "HEALTHY")
+            consecutive_storage_failures=0
+            log_success "Cluster health check: Normal for job $job_name"
+            ;;
+        esac
+
+        last_health_check=$current_time
+      fi
     fi
 
     # Retry logic
     if [[ $retry_count -ge $max_retries ]]; then
-      log_error "Timeout waiting for job $job_name to complete. Exiting..."
+      if [[ "$storage_extension_applied" == "true" ]]; then
+        log_error "Timeout waiting for job $job_name to complete (extended timeout due to storage issues). Exiting..."
+        log_info "Consider checking cluster storage health or increasing PVC attachment timeout settings."
+      else
+        log_error "Timeout waiting for job $job_name to complete. Exiting..."
+      fi
+
+      # Show final cluster status for troubleshooting
+      if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
+        log_info "Final cluster health check for troubleshooting..."
+        local pod_name=$(oc get pods --selector=job-name=$job_name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [[ -n "$pod_name" ]]; then
+          show_cluster_events "Pod" "$pod_name" "$DEPLOY_NAMESPACE"
+        else
+          show_cluster_events "Job" "$job_name" "$DEPLOY_NAMESPACE"
+        fi
+      fi
+
       return 1
     fi
 
@@ -1823,10 +2309,15 @@ handle_deployment_status() {
     local status=$?
 
     if [[ $status -ne 0 ]]; then
-      log_warn "Failed to retrieve pods for resource: $resource_name. Retrying..."
+      log_debug "Failed to retrieve pods for resource: $resource_name. Retrying..."
       retry_count=$((retry_count + 1))
       if [[ $retry_count -ge $max_retries ]]; then
-        log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+        # Use debug for single-iteration calls to avoid log spam
+        if [[ $max_retries -le 1 ]]; then
+          log_debug "Single check timeout for condition '$condition' with resource: $resource_name"
+        else
+          log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+        fi
         return 1
       fi
       sleep $wait_time
@@ -1835,7 +2326,7 @@ handle_deployment_status() {
 
     if [[ $scale_direction == "up" ]]; then
       if [[ -z "$pods" ]]; then
-        log_warn "No pods found for $resource_name. Retrying..."
+        log_debug "No pods found for $resource_name. Retrying..."
 
         # Add debug info on first failure and every 10 retries
         if [[ $retry_count -eq 0 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
@@ -1844,17 +2335,26 @@ handle_deployment_status() {
         fi
       else
         local all_pods_ready=true
+        local pods_status=""
         for pod in $pods; do
           local output=$(oc wait --for=condition=$condition pod/$pod --timeout=${wait_time}s 2>&1)
           if ! echo "$output" | grep -q "condition met"; then
             all_pods_ready=false
-            log_info "Pod $pod is not in '$condition' condition. Retrying..."
+            pods_status+="$pod:not-$condition "
             break
+          else
+            pods_status+="$pod:$condition "
           fi
         done
+
         if $all_pods_ready; then
           log_success "All pods for $resource_name are in '$condition' condition."
           return 0
+        else
+          # Use debug for routine waiting, info only for first few attempts or periodic updates
+          if [[ $retry_count -le 3 ]] || [[ $((retry_count % 10)) -eq 0 ]]; then
+            log_debug "Waiting for $resource_name pods to be $condition: $pods_status"
+          fi
         fi
       fi
     elif [[ $scale_direction == "down" ]]; then
@@ -1862,18 +2362,26 @@ handle_deployment_status() {
         log_success "All pods for $resource_name have scaled down."
         return 0
       else
-        log_info "Pods still exist for $resource_name ($pods). Retrying..."
+        log_debug "Pods still exist for $resource_name ($pods). Retrying..."
       fi
     fi
 
     # Retry logic
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+      # Use debug for single-iteration calls to avoid log spam
+      if [[ $max_retries -le 1 ]]; then
+        log_debug "Single check timeout for condition '$condition' with resource: $resource_name"
+      else
+        log_error "Timeout waiting for condition '$condition' with resource: $resource_name. Exiting..."
+      fi
       return 1
     fi
 
-    log_info "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
+    # Show progress less frequently to reduce log noise
+    if [[ $max_retries -gt 1 ]]; then
+      log_debug "Retrying... ($(((retry_count + 1) * wait_time))/$((max_retries * wait_time)))"
+    fi
     sleep $wait_time
   done
 }
@@ -1973,4 +2481,142 @@ create_or_update_helm_deployment() {
   rm $upgrade_file
 
   log_success "Helm updates completed for $helm_name."
+}
+
+# =============================================================================
+# IMAGE PULL SECRETS MANAGEMENT
+# =============================================================================
+
+# Function to ensure imagePullSecrets are configured for a deployment or statefulset
+# This provides centralized management of Artifactory access across all deployments
+ensure_image_pull_secrets() {
+  local resource_type=$1     # "deployment" or "statefulset"
+  local resource_name=$2     # Name of the deployment/statefulset
+  local namespace=${3:-$OC_PROJECT}  # Optional namespace (defaults to current project)
+
+  # Get the secret name from environment variable with fallback
+  local secret_name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}"
+
+  log_info "🔐 Ensuring imagePullSecrets for $resource_type/$resource_name"
+
+  # Check if the resource exists
+  if ! oc get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; then
+    log_warn "Resource $resource_type/$resource_name not found in namespace $namespace"
+    return 1
+  fi
+
+  # Check if imagePullSecrets already exist
+  local existing_secrets
+  existing_secrets=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}' 2>/dev/null)
+
+  if [[ "$existing_secrets" == *"$secret_name"* ]]; then
+    log_debug "✅ imagePullSecrets already configured with $secret_name"
+    return 0
+  fi
+
+  log_info "Adding imagePullSecrets: $secret_name"
+
+  # Check if imagePullSecrets field exists at all
+  local has_image_pull_secrets
+  has_image_pull_secrets=$(oc get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath='{.spec.template.spec.imagePullSecrets}' 2>/dev/null)
+
+  if [[ -z "$has_image_pull_secrets" || "$has_image_pull_secrets" == "null" ]]; then
+    # No imagePullSecrets field exists, create it
+    log_debug "Creating new imagePullSecrets field"
+    oc patch "$resource_type" "$resource_name" -n "$namespace" --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/imagePullSecrets",
+        "value": [{"name": "'"$secret_name"'"}]
+      }
+    ]'
+  else
+    # imagePullSecrets field exists, append to it
+    log_debug "Appending to existing imagePullSecrets"
+    oc patch "$resource_type" "$resource_name" -n "$namespace" --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/imagePullSecrets/-",
+        "value": {"name": "'"$secret_name"'"}
+      }
+    ]'
+  fi
+
+  local patch_result=$?
+  if [[ $patch_result -eq 0 ]]; then
+    log_success "Successfully added imagePullSecrets: $secret_name"
+    return 0
+  else
+    log_error "Failed to add imagePullSecrets to $resource_type/$resource_name"
+    return 1
+  fi
+}
+
+# Function to ensure imagePullSecrets for multiple resources
+ensure_image_pull_secrets_batch() {
+  local namespace=${1:-$OC_PROJECT}
+  shift
+  local resources=("$@")  # Array of "type/name" pairs
+
+  log_info "🔐 Batch ensuring imagePullSecrets for ${#resources[@]} resources"
+
+  local failed_count=0
+  local success_count=0
+
+  for resource in "${resources[@]}"; do
+    local resource_type="${resource%/*}"
+    local resource_name="${resource#*/}"
+
+    if ensure_image_pull_secrets "$resource_type" "$resource_name" "$namespace"; then
+      ((success_count++))
+    else
+      ((failed_count++))
+    fi
+  done
+
+  log_info "📊 imagePullSecrets batch operation completed:"
+  log_info "  ✅ Successful: $success_count"
+  if [[ $failed_count -gt 0 ]]; then
+    log_warn "  ❌ Failed: $failed_count"
+  fi
+
+  return $failed_count
+}
+
+# Function to automatically ensure imagePullSecrets for common deployment types
+ensure_artifactory_access() {
+  local namespace=${1:-$OC_PROJECT}
+
+  log_info "🏭 Ensuring Artifactory access for common deployments in namespace: $namespace"
+
+  # Define common resources that need Artifactory access
+  local common_resources=(
+    "deployment/$DB_BACKUP_DEPLOYMENT_FULL_NAME"
+    "statefulset/$DB_DEPLOYMENT_NAME"
+    "statefulset/$REDIS_NAME-node"
+    "deployment/$REDIS_PROXY_NAME"
+    "deployment/maintenance-message"
+  )
+
+  # Filter out resources that actually exist
+  local existing_resources=()
+  for resource in "${common_resources[@]}"; do
+    local resource_type="${resource%/*}"
+    local resource_name="${resource#*/}"
+
+    if [[ -n "$resource_name" ]] && oc get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; then
+      existing_resources+=("$resource")
+      log_debug "Found existing resource: $resource"
+    else
+      log_debug "Resource not found (skipping): $resource"
+    fi
+  done
+
+  if [[ ${#existing_resources[@]} -eq 0 ]]; then
+    log_warn "No common deployments found that need Artifactory access"
+    return 0
+  fi
+
+  log_info "Processing ${#existing_resources[@]} existing resources..."
+  ensure_image_pull_secrets_batch "$namespace" "${existing_resources[@]}"
 }

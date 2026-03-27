@@ -1,0 +1,79 @@
+# Dependabot configuration for automated dependency updates
+# Generated: 2025-10-29T18:28:07Z
+
+version: 2
+updates:
+  # Docker images in compose files
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "@bcgov/platform-services"
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+
+  # Docker images in dependencies manifest
+  - package-ecosystem: "docker"
+    directory: "/openshift/dependencies"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    reviewers:
+      - "@bcgov/platform-services"
+    commit-message:
+      prefix: "deps(security)"
+      include: "scope"
+
+  # PHP Composer dependencies
+  - package-ecosystem: "composer"
+    directory: "/config/moodle"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "11:00"
+    reviewers:
+      - "@bcgov/platform-services"
+    commit-message:
+      prefix: "deps(php)"
+      include: "scope"
+    # PHP 8.1 compatibility constraints
+    ignore:
+      # Block versions requiring PHP 8.2+
+      - dependency-name: "maennchen/zipstream-php"
+        versions: [">= 3.2.0"]
+      # Block major version updates (often break compatibility)
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    # Allow security updates immediately
+    open-pull-requests-limit: 10
+
+  # NPM dependencies for Lighthouse
+  - package-ecosystem: "npm"
+    directory: "/config/lighthouse"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "08:00"
+    reviewers:
+      - "@bcgov/platform-services"
+    commit-message:
+      prefix: "deps(npm)"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    reviewers:
+      - "@bcgov/platform-services"
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"

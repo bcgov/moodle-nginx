@@ -1,0 +1,21 @@
+{
+  "generated_at": "2025-10-29T18:28:07Z",
+  "generator": "GitHub Actions",
+  "workflow": "Generate Environment and Manifest Files",
+  "commit": "8d70e99ff8a645471d7eb3409831eb0cfc90d0ea",
+  "source_file": "example.versions.env",
+  "tools": {
+    "trivy": {
+      "version": "latest",
+      "description": "Container vulnerability scanner",
+      "usage": "Security scanning in CI/CD"
+    },
+    "docker_scout": {
+      "version": "latest",
+      "description": "Docker security analysis",
+      "usage": "Image vulnerability assessment"
+    }
+  },
+  "scan_frequency": "daily",
+  "alert_channels": ["rocket-chat", "github-issues"]
+}
