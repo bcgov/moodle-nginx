@@ -68,7 +68,7 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref_name }}
 
