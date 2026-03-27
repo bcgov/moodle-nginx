@@ -956,6 +956,7 @@ jobs:
         with:
           name: lighthouse-artifacts
           path: artifacts
+          digest-mismatch: warn  # Safety net: warn instead of error during v8 rollout
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
