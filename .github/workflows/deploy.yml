@@ -195,7 +195,7 @@ jobs:
           fi
 
       - name: Deploy Backups via Helm
-        uses: WyriHaximus/github-action-helm3@v3
+        uses: WyriHaximus/github-action-helm3@v4
         with:
           exec: bash ./openshift/scripts/deploy-database-backups.sh
         env:
