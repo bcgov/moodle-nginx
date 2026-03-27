@@ -108,6 +108,11 @@ on:
       ARTIFACTORY_URL:
         required: true
 
+# Least-privilege token — contents:read for checkout, actions:read for pipeline status checks
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:

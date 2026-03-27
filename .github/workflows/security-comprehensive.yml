@@ -35,6 +35,9 @@ env:
   CACHE_VERSION: v1
   SECURITY_RESULTS_RETENTION: 7 # days
 
+permissions:
+  contents: read
+
 jobs:
   security-scan:
     name: 🔍 Multi-Ecosystem Security Scan

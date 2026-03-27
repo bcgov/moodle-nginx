@@ -18,6 +18,9 @@ on:
         required: false
         default: 'NO'
 
+permissions:
+  contents: read
+
 jobs:
   build-images:
     name: '🐸 Pull and Push Images to JFrog'

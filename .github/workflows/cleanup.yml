@@ -51,6 +51,9 @@ on:
         description: "Clean log"
         value: ${{ jobs.clean.outputs.output1 }}
 
+permissions:
+  contents: read
+
 jobs:
   # Clean Openshift
   # Not configured for prod deployments (to be safe)
