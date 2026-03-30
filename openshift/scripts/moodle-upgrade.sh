@@ -1,4 +1,47 @@
 #!/bin/bash
+#==============================================================================
+# moodle-upgrade.sh
+#==============================================================================
+# PURPOSE:
+#   Orchestrates Moodle database upgrades during deployment. Runs as OpenShift
+#   Job to ensure one-time execution per image rebuild. Handles plugin cleanup,
+#   database schema updates, and encoding fixes.
+#
+# UPGRADE PROCESS:
+#   1. Enable maintenance mode (prevents user access)
+#   2. Check timestamp (skip if recently run)
+#   3. Uninstall missing/obsolete plugins
+#   4. Fix database collation (utf8mb4_unicode_ci)
+#   5. Run Moodle core upgrade (admin/cli/upgrade.php)
+#   6. Verify PHP configuration
+#
+# TIMESTAMP CHECK:
+#   Uses IMAGE_REBUILD_TIME_LIMIT to prevent duplicate runs:
+#   - Writes timestamp to /var/www/html/last_migration_timestamp
+#   - Skips upgrade if run within time limit (seconds)
+#   - Set to 0 to always run (useful for testing)
+#
+# CONFIGURATION:
+#   IMAGE_REBUILD_TIME_LIMIT     - Seconds before allowing re-run (default: 0)
+#
+# EXECUTION CONTEXT:
+#   - Runs inside: OpenShift Job (moodle-upgrade.yml)
+#   - Image: Moodle PHP container
+#   - User: www-data
+#   - Path: /var/www/html (Moodle root)
+#
+# USAGE:
+#   # Deployed via OpenShift Job
+#   oc create job moodle-upgrade --from=cronjob/moodle-cron
+#
+#   # Manual execution (inside pod)
+#   oc exec deployment/moodle-php -- bash /usr/local/bin/moodle-upgrade.sh
+#
+# RELATED DOCS:
+#   - Job Template: ../moodle-upgrade.yml
+#   - Utilities: ./_utils.sh
+#   - Moodle CLI: https://docs.moodle.org/en/Administration_via_command_line
+#==============================================================================
 
 # Ensure the script is running with bash
 if [ -z "$BASH_VERSION" ]; then

@@ -3,6 +3,7 @@
 name: 🚀 Deploy
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 
@@ -13,6 +14,13 @@ on:
         required: false
         type: string
         default: "INFO"
+      ARTIFACTORY_PULL_SECRET:
+        required: true
+        type: string
+      CLUSTER_HEALTH_MONITORING:
+        required: false
+        type: string
+        default: "YES"
       FORCE_MIGRATE:
         required: true
         type: string
@@ -43,7 +51,7 @@ on:
       PHP_DEPLOYMENT_NAME:
         required: true
         type: string
-      DB_IMAGE:
+      MARIADB_IMAGE:
         required: true
         type: string
       DB_HOST:
@@ -121,6 +129,12 @@ on:
       BACKUP_IMAGE:
         required: true
         type: string
+      TARGET_GITHUB_ENVIRONMENT:
+        required: true
+        type: string
+      MONITOR_IMAGE:
+        required: true
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -130,10 +144,11 @@ jobs:
   deploy:
     name: OpenShift (${{ github.ref_name }})
     runs-on: ubuntu-22.04
+    environment: ${{ inputs.TARGET_GITHUB_ENVIRONMENT }}
     if: github.event.workflow_run.conclusion != 'failure'
     steps:
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
 
@@ -162,6 +177,7 @@ jobs:
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
         env:
           BUILD_NAME: "maintenance-message"
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           WEB_IMAGE: ${{ secrets.ARTIFACTORY_URL }}/${{ inputs.WEB_IMAGE }}
           APP: ${{ inputs.APP }}
@@ -179,14 +195,14 @@ jobs:
           fi
 
       - name: Deploy Backups via Helm
-        uses: WyriHaximus/github-action-helm3@v3
+        uses: WyriHaximus/github-action-helm3@v4
         with:
           exec: bash ./openshift/scripts/deploy-database-backups.sh
         env:
           DB_BACKUP_DEPLOYMENT_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_NAME }}
           DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ inputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
-          DB_BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
+          BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
           DB_HOST: ${{ inputs.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_PORT: ${{ inputs.DB_PORT }}
@@ -198,9 +214,11 @@ jobs:
         run: bash ./openshift/scripts/deploy-mariadb-galera.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           OC_PROJECT: ${{ inputs.DEPLOY_NAMESPACE }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
-          DB_IMAGE: ${{ inputs.DB_IMAGE }}
+          MARIADB_IMAGE: ${{ inputs.MARIADB_IMAGE }}
           DB_REPLICAS: ${{ inputs.DB_REPLICAS }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
           DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
@@ -215,6 +233,8 @@ jobs:
         run: bash ./openshift/scripts/deploy-redis-sentinel.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           IMAGE_REPO: ${{ inputs.IMAGE_REPO }}
           REDIS_HELM_CHART: ${{ inputs.REDIS_HELM_CHART }}
           DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
@@ -234,6 +254,8 @@ jobs:
         run: bash ./openshift/scripts/deploy-template.sh
         env:
           DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          ARTIFACTORY_PULL_SECRET: ${{ inputs.ARTIFACTORY_PULL_SECRET }}
+          CLUSTER_HEALTH_MONITORING: ${{ inputs.CLUSTER_HEALTH_MONITORING }}
           FORCE_MIGRATE: ${{ inputs.FORCE_MIGRATE }}
           DEPLOY_ENVIRONMENT: ${{ inputs.DEPLOY_ENVIRONMENT }}
           OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
@@ -264,4 +286,22 @@ jobs:
           REDIS_PORT: ${{ inputs.REDIS_PORT }}
           BACKUP_HELM_CHART: ${{ inputs.BACKUP_HELM_CHART }}
           BACKUP_IMAGE: ${{ inputs.BACKUP_IMAGE }}
+
+      - name: Deploy Pod Health Monitor
+        id: deploy_pod_health_monitor
+        continue-on-error: true
+        if: success()
+        run: bash ./openshift/scripts/deploy-health-monitor.sh
+        env:
+          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          OPENSHIFT_SERVER: ${{ inputs.OPENSHIFT_SERVER }}
+          OPENSHIFT_SA_TOKEN_NAME: ${{ inputs.OPENSHIFT_SA_TOKEN_NAME }}
+          MONITOR_IMAGE: ${{ inputs.MONITOR_IMAGE }}
+          ROCKETCHAT_WEBHOOK_URL: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
+          DEPLOYMENT_TYPE: "continuous"
+
+      - name: Warn if Pod Health Monitor deployment fails
+        if: steps.deploy_pod_health_monitor.outcome == 'failure'
+        run: |
+          echo "Warning: Health monitor deployment failed, continuing with deployment..."
 

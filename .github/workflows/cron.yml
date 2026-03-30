@@ -5,11 +5,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 
 on:
   workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build-images:
@@ -18,7 +22,7 @@ jobs:
     steps:
       # Checkout the PR branch
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
           sparse-checkout: |
@@ -29,9 +33,24 @@ jobs:
             example.versions.env
             openshift/scripts
 
-      # Login to Artifactory
+      # Login to Artifactory (with retry for transient network issues)
+      - name: 🔁 Artifactory login with retry
+        run: |
+          for attempt in 1 2 3; do
+            if docker login "${{ secrets.ARTIFACTORY_URL }}" \
+              -u "${{ secrets.ARTIFACTORY_USER }}" \
+              -p "${{ secrets.ARTIFACTORY_PASSWORD }}" 2>&1; then
+              echo "✅ Artifactory login succeeded (attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️ Login attempt $attempt/3 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Artifactory login failed after 3 attempts"
+          exit 1
+
       - name: 🔑 Login to Artifactory
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ secrets.ARTIFACTORY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
@@ -61,4 +80,4 @@ jobs:
         run: |
           docker tag ${{ env.CRON_IMAGE }} ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
           docker push ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }}
-          docker buildx build --cache-from type=gha --cache-to type=gha,mode=max --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .
+          docker buildx build --cache-from type=gha,scope=${{ github.ref_name }} --cache-to type=gha,scope=${{ github.ref_name }},mode=min --build-arg DOCKER_FROM_IMAGE=${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_IMAGE }} --tag ${{ secrets.ARTIFACTORY_URL }}/${{ env.CRON_NAME }}:${{ github.ref_name }} --output=type=image,push=true --push -f ${{ env.CRON_DOCKER_FILE_PATH }} .

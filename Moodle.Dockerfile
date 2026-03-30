@@ -10,22 +10,23 @@ ENV ETC_DIR=/usr/local/etc
 ENV PHP_INI_DIR=$ETC_DIR/php
 ENV PHP_INI_FILE=$ETC_DIR/php/conf.d/moodle-php.ini
 ARG PHP_INI_ENVIRONMENT=production
-ENV GIT_SSL_NO_VERIFY=1
+ENV GIT_SSL_NO_VERIFY=0
 
 # Version control for Moodle and plugins
 ARG MOODLE_URL="https://github.com/moodle/moodle"
 ARG MOODLE_BRANCH_VERSION=MOODLE_405_STABLE
 
-# The "bridge" plugin that processes enrolment from ELM and sends it back too.
+# ELM enrolment bridge sync
 ARG PSAELMSYNC_URL="https://github.com/PSA-Corporate-Learning-Branch/psaelmsync"
-ARG PSAELMSYNC_BRANCH_VERSION=production
+# "production" is the branch we deploy to production, "main" is the branch we do development work in
+ARG PSAELMSYNC_BRANCH_VERSION=main
 ENV PSAELMSYNC_DIR=$MOODLE_APP_DIR/local/psaelmsync
 
 ARG PCURATOR_URL="https://github.com/itr8tech/pathcurator-moodle/"
 ARG PCURATOR_BRANCH_VERSION=main
 ENV PCURATOR_DIR=$MOODLE_APP_DIR/mod/pathcurator
 
-ARG COURSESEARCH_URL="https://github.com/bcgov/moodle-course-search/"
+ARG COURSESEARCH_URL="https://github.com/PSA-Corporate-Learning-Branch/moodle-course-search/"
 ARG COURSESEARCH_BRANCH_VERSION=main
 ENV COURSESEARCH_DIR=$MOODLE_APP_DIR/blocks/course_search
 
@@ -36,7 +37,6 @@ ENV GITHUBSYNC_DIR=$MOODLE_APP_DIR/local/githubsync
 ARG THEME_URL="https://github.com/PSA-Corporate-Learning-Branch/bcgovpsa-moodle"
 ARG THEME_BRANCH_VERSION=main
 ENV THEME_DIR=$MOODLE_APP_DIR/theme/bcgovpsa
-
 ARG HVP_URL=" https://github.com/h5p/moodle-mod_hvp"
 ARG HVP_BRANCH_VERSION=stable
 ENV HVP_DIR=$MOODLE_APP_DIR/mod/hvp
@@ -60,6 +60,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     libfcgi-bin \
     rsync \
+    jq \
+    yq \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -84,6 +86,10 @@ RUN chmod +x /usr/local/bin/install-php-extensions && \
 
 RUN echo "Building to directory: $MOODLE_APP_DIR"
 
+# Cache-bust: changing this value forces Docker to re-clone Moodle core below
+ARG MOODLE_CACHE_BUST=0
+RUN echo "Moodle cache bust: $MOODLE_CACHE_BUST"
+
 RUN mkdir -p $MOODLE_APP_DIR
 RUN git config --global http.postBuffer 157286400
 RUN git config --global http.version HTTP/1.1
@@ -104,15 +110,14 @@ COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 # Add favicon
 COPY ./config/moodle/favicon.ico "$MOODLE_APP_DIR/favicon.ico"
 
+# Cache-bust: changing this value forces Docker to re-clone all plugins below
+ARG PLUGIN_CACHE_BUST=0
+RUN echo "Plugin cache bust: $PLUGIN_CACHE_BUST"
+
 RUN mkdir -p $PSAELMSYNC_DIR
 RUN mkdir -p $PCURATOR_DIR
 RUN mkdir -p $COURSESEARCH_DIR
 RUN mkdir -p $GITHUBSYNC_DIR
-RUN mkdir -p $THEME_DIR
-
-# Cache-bust: changing this value forces Docker to re-clone all plugins below
-ARG PLUGIN_CACHE_BUST=0
-RUN echo "Plugin cache bust: $PLUGIN_CACHE_BUST"
 
 RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANCH_VERSION --single-branch $PSAELMSYNC_URL $PSAELMSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $THEME_BRANCH_VERSION --single-branch $THEME_URL $THEME_DIR && \
@@ -120,16 +125,39 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     git clone --recurse-submodules --jobs 8 --branch $COURSESEARCH_BRANCH_VERSION --single-branch $COURSESEARCH_URL $COURSESEARCH_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $GITHUBSYNC_BRANCH_VERSION --single-branch $GITHUBSYNC_URL $GITHUBSYNC_DIR && \
     git clone --recurse-submodules --jobs 8 --branch $HVP_BRANCH_VERSION --single-branch $HVP_URL $HVP_DIR && \
-    git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR
+    git clone --recurse-submodules --jobs 8 --branch $REPORT_ALL_BACKUPS_BRANCH_VERSION --single-branch $REPORT_ALL_BACKUPS_URL $REPORT_ALL_BACKUPS_DIR && \
+    echo "PSAELMSYNC commit: $(git -C $PSAELMSYNC_DIR rev-parse HEAD)" && \
+    echo "PSAELMSYNC version.php: $(grep -E 'version|release' $PSAELMSYNC_DIR/version.php)" && \
+    echo "THEME commit: $(git -C $THEME_DIR rev-parse HEAD)" && \
+    echo "PCURATOR commit: $(git -C $PCURATOR_DIR rev-parse HEAD)" && \
+    echo "COURSESEARCH commit: $(git -C $COURSESEARCH_DIR rev-parse HEAD)" && \
+    echo "GITHUBSYNC commit: $(git -C $GITHUBSYNC_DIR rev-parse HEAD)" && \
+    echo "HVP commit: $(git -C $HVP_DIR rev-parse HEAD)" && \
+    echo "REPORT_ALL_BACKUPS commit: $(git -C $REPORT_ALL_BACKUPS_DIR rev-parse HEAD)"
 
 # Install Composer (if not already present)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
 php composer-setup.php --install-dir=/usr/local/bin --filename=composer && \
 rm composer-setup.php
 
-# Install ZipStream library for Moodle plugins
-RUN composer require maennchen/zipstream-php:"^2.1" --with-all-dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Copy dependency management files
+COPY ./example.versions.env ./
+COPY ./config/dependencies/dependency-config.json ./config/dependencies/
+COPY ./openshift/scripts/populate-dependency-manifests.sh ./openshift/scripts/
+
+# Generate ephemeral composer.json using the populate-dependency-manifests.sh script
+RUN chmod +x ./openshift/scripts/populate-dependency-manifests.sh && \
+    echo "=== DEBUG: Running dependency manifest generation ===" && \
+    ./openshift/scripts/populate-dependency-manifests.sh && \
+    echo "=== DEBUG: Generated composer.json content ===" && \
+    cat ./config/moodle/composer.json && \
+    echo "=== DEBUG: Copying to Moodle directory ===" && \
+    cp ./config/moodle/composer.json $MOODLE_APP_DIR/composer.json
+
+# Install dependencies with security validation (using ephemeral composer.json)
+RUN composer update --no-dev --optimize-autoloader --no-scripts && \
+    composer audit --format=table && \
+    (composer validate --strict || composer validate)
 
 COPY ./config/moodle/enable-maintenance-mode.sh /usr/local/bin/enable-maintenance.sh
 RUN dos2unix /usr/local/bin/enable-maintenance.sh

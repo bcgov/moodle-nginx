@@ -1,8 +1,61 @@
 #!/bin/bash
-#set -e # Exit on error
+#==============================================================================
+# deploy-redis-sentinel.sh
+#==============================================================================
+# PURPOSE:
+#   Deploy Redis Sentinel cluster with high availability failover. Manages
+#   StatefulSet for Redis nodes, Sentinel processes for monitoring, and proxy
+#   for transparent connection routing.
+#
+# ARCHITECTURE:
+#   - 3-node Redis StatefulSet with replication (1 master + 2 replicas)
+#   - 3 Sentinel processes for automatic failover detection
+#   - Redis Proxy deployment for connection routing
+#   - Helm-based deployment with Artifactory image support
+#   - ConfigMaps for stats endpoint and configuration
+#
+# QUICK CONFIG:
+#   REDIS_NAME               - Base name for Redis resources (default: redis)
+#   REDIS_CHART_VERSION      - Bitnami Redis Helm chart version (default: 23.1.3)
+#   REDIS_REQUEST_CPU        - CPU request per pod (default: 20m)
+#   REDIS_REQUEST_MEMORY     - Memory request per pod (default: 128Mi)
+#   REDIS_LIMIT_CPU          - CPU limit per pod (default: 150m)
+#   REDIS_LIMIT_MEMORY       - Memory limit per pod (default: 256Mi)
+#   USE_ARTIFACTORY          - Pull from Artifactory vs. public registry
+#
+# USAGE:
+#   # Standard deployment
+#   export REDIS_NAME="redis"
+#   export REDIS_CHART_VERSION="23.1.3"
+#   ./openshift/scripts/deploy-redis-sentinel.sh
+#
+#   # Deploy with custom resources
+#   export REDIS_REQUEST_MEMORY="256Mi"
+#   export REDIS_LIMIT_MEMORY="512Mi"
+#   ./openshift/scripts/deploy-redis-sentinel.sh
+#
+# RELATED DOCS:
+#   - Configuration: ../../config/redis/
+#   - Proxy Config: ../redis-proxy.yml
+#   - Services: ../redis-services.yml
+#   - Image Resolver: ./helm-image-resolver.sh
+#==============================================================================
 
 # Source the utility script
 source ./openshift/scripts/_utils.sh
+
+# Load environment variables from versions file
+if [[ -f "./example.versions.env" ]]; then
+    source ./example.versions.env
+else
+    log_warn "example.versions.env not found - using environment variables from deployment"
+fi
+
+# Source Helm image resolver for DRY image management
+source ./openshift/scripts/helm-image-resolver.sh
+
+# Initialize utility file arrays for any containerized operations
+initialize_utility_arrays
 
 oc project $OC_PROJECT
 
@@ -23,14 +76,37 @@ REDIS_LIMIT_CPU="${REDIS_LIMIT_CPU:-150m}"
 REDIS_LIMIT_MEMORY="${REDIS_LIMIT_MEMORY:-256Mi}"
 
 # Pin to chart version that works in dev/test environments
-REDIS_CHART_VERSION="23.1.3"
+REDIS_CHART_VERSION="${REDIS_CHART_VERSION:-23.1.3}"
 
-# Configure Redis deployment arguments in one place
+# Resolve Redis and Sentinel image configurations
+if ! resolve_helm_image "REDIS_IMAGE"; then
+    echo "❌ Failed to resolve REDIS_IMAGE configuration"
+    exit 1
+fi
+export REDIS_IMAGE_REGISTRY="$RESOLVED_IMAGE_REGISTRY"
+export REDIS_IMAGE_REPOSITORY="$RESOLVED_IMAGE_REPOSITORY"
+export REDIS_IMAGE_TAG="$RESOLVED_IMAGE_TAG"
+
+if ! resolve_helm_image "REDIS_SENTINEL_IMAGE"; then
+    echo "❌ Failed to resolve REDIS_SENTINEL_IMAGE configuration"
+    exit 1
+fi
+export SENTINEL_IMAGE_REGISTRY="$RESOLVED_IMAGE_REGISTRY"
+export SENTINEL_IMAGE_REPOSITORY="$RESOLVED_IMAGE_REPOSITORY"
+export SENTINEL_IMAGE_TAG="$RESOLVED_IMAGE_TAG"
+
+echo "🐳 Using Redis image: ${REDIS_IMAGE_REPOSITORY}:${REDIS_IMAGE_TAG}"
+echo "🐳 Using Sentinel image: ${SENTINEL_IMAGE_REPOSITORY}:${SENTINEL_IMAGE_TAG}"
+
+# Configure Redis deployment arguments
 REDIS_ARGS=(
-  "--set" "image.repository=bitnamilegacy/redis"
-  "--set" "image.tag=8.0.2-debian-12-r2"
-  "--set" "sentinel.image.repository=bitnamilegacy/redis-sentinel"
-  "--set" "sentinel.image.tag=8.0.2-debian-12-r1"
+  "--set" "image.registry=${REDIS_IMAGE_REGISTRY}"
+  "--set" "image.repository=${REDIS_IMAGE_REPOSITORY}"
+  "--set" "image.tag=${REDIS_IMAGE_TAG}"
+  "--set" "sentinel.image.registry=${SENTINEL_IMAGE_REGISTRY}"
+  "--set" "sentinel.image.repository=${SENTINEL_IMAGE_REPOSITORY}"
+  "--set" "sentinel.image.tag=${SENTINEL_IMAGE_TAG}"
+  "--set" "global.imagePullSecrets[0].name=${ARTIFACTORY_PULL_SECRET}"
   "--set" "global.security.allowInsecureImages=true"
   "--set" "redis.resources.limits.ephemeral-storage=2Gi"
   "--set" "redis.resources.requests.ephemeral-storage=50Mi"
@@ -41,16 +117,18 @@ REDIS_ARGS=(
   "--version" "$REDIS_CHART_VERSION"
 )
 
-# Create a minimal values file matching test environment
+# Create a minimal values file
 cat <<EOF > redis-values.yaml
 global:
   security:
     allowInsecureImages: true
+  imagePullSecrets:
+    - name: "$ARTIFACTORY_PULL_SECRET"
 
 # Use proven working image tags from test environment
 image:
-  repository: bitnamilegacy/redis
-  tag: 8.0.2-debian-12-r2
+  repository: $(echo "$REDIS_IMAGE" | cut -d':' -f1)
+  tag: $(echo "$REDIS_IMAGE" | cut -d':' -f2)
   debug: false
 
 auth:
@@ -86,8 +164,8 @@ replicas:
 sentinel:
   enabled: true
   image:
-    repository: bitnamilegacy/redis-sentinel
-    tag: 8.0.2-debian-12-r1
+    repository: $(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f1)
+    tag: $(echo "$REDIS_SENTINEL_IMAGE" | cut -d':' -f2)
   persistence:
     enabled: false
   resources:
@@ -114,8 +192,8 @@ else
   log_debug "  Redis: $current_redis_image"
   log_debug "  Sentinel: $current_sentinel_image"
 
-  target_redis_image="bitnamilegacy/redis:8.0.2-debian-12-r2"
-  target_sentinel_image="bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
+  target_redis_image="$REDIS_IMAGE"
+  target_sentinel_image="$REDIS_SENTINEL_IMAGE"
 
   log_debug "Target images:"
   log_debug "  Redis: $target_redis_image"
@@ -143,68 +221,80 @@ else
 
     # Set flag to force install instead of upgrade
     FORCE_HELM_INSTALL=true
-  # Also check if the current StatefulSet is actually using persistent volume claims
-  elif oc get pvc -l app.kubernetes.io/name=redis &> /dev/null; then
-    echo "⚠️ Old Redis PVCs detected. Checking if they're actually in use by current StatefulSet..."
+  else
+    # Check if the current StatefulSet is actually using persistent volume claims
+    log_debug "Checking for existing Redis PVCs..."
+    existing_redis_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+    log_debug "Found Redis PVCs: '${existing_redis_pvcs}' (empty means none found)"
 
-    # Get PVCs that are actually bound to the current StatefulSet
-    local active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
-    local bound_pvcs=""
+    if [[ -n "$existing_redis_pvcs" ]]; then
+      log_warn "Old Redis PVCs detected: $existing_redis_pvcs"
+      log_info "Checking if they're actually in use by current StatefulSet..."
 
-    if [[ -n "$active_pvcs" ]]; then
-      # Check if any PVCs are actually bound to the StatefulSet
-      for template in $active_pvcs; do
-        local pvc_pattern="${template}-${redis_node_name}-"
-        if oc get pvc -l app.kubernetes.io/name=redis | grep -q "$pvc_pattern"; then
-          bound_pvcs="$bound_pvcs $pvc_pattern"
-        fi
-      done
-    fi
+      # Get PVCs that are actually bound to the current StatefulSet
+      active_pvcs=$(oc get statefulset "$redis_node_name" -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null || echo "")
+      log_debug "StatefulSet volume claim templates: '${active_pvcs}'"
+      bound_pvcs=""
 
-    if [[ -n "$bound_pvcs" ]]; then
-      log_info "Current StatefulSet is using PVCs: $bound_pvcs"
-      log_info "Helm reinstall required to disable persistence..."
-      log_info "Scaling down existing StatefulSet before Helm uninstall..."
-
-      scale_deployment "statefulset" "$redis_node_name" "0" "0"
-      if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-        log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-        exit 1
-      fi
-
-      # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
-      log_info "Uninstalling Helm release to allow clean recreation..."
-      helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
-
-      # Wait for cleanup
-      log_info "Waiting for resources to be cleaned up..."
-      sleep 10
-
-      # Set flag to force install instead of upgrade
-      FORCE_HELM_INSTALL=true
-    else
-      log_info "✅ Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
-      # Delete unused PVCs safely
-      local old_pvcs=$(oc get pvc -l app.kubernetes.io/name=redis -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-      if [[ -n "$old_pvcs" ]]; then
-        for pvc in $old_pvcs; do
-          log_info "🗑️ Deleting unused PVC: $pvc"
-          oc delete pvc "$pvc" || log_error "Failed to delete PVC $pvc, continuing..."
+      if [[ -n "$active_pvcs" ]]; then
+        # Check if any PVCs are actually bound to the StatefulSet
+        for template in $active_pvcs; do
+          pvc_pattern="${template}-${redis_node_name}-"
+          log_debug "Checking for PVCs matching pattern: $pvc_pattern"
+          if echo "$existing_redis_pvcs" | grep -q "$pvc_pattern"; then
+            bound_pvcs="$bound_pvcs $pvc_pattern"
+            log_debug "Found bound PVC pattern: $pvc_pattern"
+          fi
         done
       fi
-      log_info "Performing standard scaling (no Helm reinstall needed)..."
+
+      if [[ -n "$bound_pvcs" ]]; then
+        log_info "Current StatefulSet is using PVCs: $bound_pvcs"
+        log_info "Helm reinstall required to disable persistence..."
+        log_info "Scaling down existing StatefulSet before Helm uninstall..."
+
+        scale_deployment "statefulset" "$redis_node_name" "0" "0"
+        if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+          log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+          exit 1
+        fi
+
+        # Use Helm to uninstall and reinstall to properly handle StatefulSet changes
+        log_info "Uninstalling Helm release to allow clean recreation..."
+        helm uninstall "$REDIS_NAME" || echo "Helm release may not exist, continuing..."
+
+        # Wait for cleanup
+        log_info "Waiting for resources to be cleaned up..."
+        sleep 10
+
+        # Set flag to force install instead of upgrade
+        FORCE_HELM_INSTALL=true
+      else
+        log_info "Old PVCs found but not bound to current StatefulSet. Cleaning them up..."
+        log_debug "PVCs to delete: $existing_redis_pvcs"
+        # Delete unused PVCs safely
+        for pvc in $existing_redis_pvcs; do
+          log_info "Deleting unused PVC: $pvc"
+          if oc delete pvc "$pvc"; then
+            log_debug "Successfully deleted PVC: $pvc"
+          else
+            log_error "Failed to delete PVC $pvc, continuing..."
+          fi
+        done
+        log_info "Performing standard scaling (no Helm reinstall needed)..."
+        scale_deployment "statefulset" "$redis_node_name" "0" "0"
+        if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
+          log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
+          exit 1
+        fi
+      fi
+    else
+      log_debug "No Redis PVCs found. Performing standard scaling..."
       scale_deployment "statefulset" "$redis_node_name" "0" "0"
       if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
         log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
         exit 1
       fi
-    fi
-  else
-    log_info "Image tags unchanged and no persistence detected. Performing standard scaling..."
-    scale_deployment "statefulset" "$redis_node_name" "0" "0"
-    if ! wait_for "statefulset/$redis_node_name" "ready" "120s" "down"; then
-      log_error "Failed to scale $redis_node_name to 0 replicas. Exiting..."
-      exit 1
     fi
   fi
 fi
@@ -351,7 +441,8 @@ create_or_update_configmap "$REDIS_PROXY_NAME-config" \
 # Deploy the Redis proxy
 deploy_resource_from_template ./openshift/redis-proxy.yml \
   DEPLOY_IMAGE=${REDIS_PROXY_IMAGE} \
-  REDIS_PROXY_NAME=$REDIS_PROXY_NAME
+  REDIS_PROXY_NAME=$REDIS_PROXY_NAME \
+  ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET
 if ! wait_for "deployment/$REDIS_PROXY_NAME"; then
   log_error "Failed to deploy Redis Proxy. Exiting..."
   exit 1
@@ -368,4 +459,27 @@ if ! wait_for_redis_proxy_ready "$REDIS_PROXY_NAME" "$OC_PROJECT" 60 10; then
   exit 1
 fi
 log_info "Redis Proxy is fully functional."
+
+# Verify Artifactory image pull secrets are configured
+log_info "Verifying Artifactory access for Redis deployments..."
+failed_count=0
+
+if ensure_image_pull_secrets "statefulset" "$redis_node_name"; then
+  log_info "✅ Redis StatefulSet has Artifactory access confirmed"
+else
+  log_warn "⚠️ Redis StatefulSet may have imagePullSecrets issues (this should have been configured during Helm deployment)"
+  ((failed_count++))
+fi
+
+if ensure_image_pull_secrets "deployment" "$REDIS_PROXY_NAME"; then
+  log_info "✅ Redis Proxy deployment has Artifactory access confirmed"
+else
+  log_warn "⚠️ Redis Proxy may have imagePullSecrets issues (this should have been configured during Helm deployment)"
+  ((failed_count++))
+fi
+
+if [[ $failed_count -eq 0 ]]; then
+  log_info "🎉 All Redis components have Artifactory access confirmed"
+fi
+
 log_success "Redis deployment completed successfully!"

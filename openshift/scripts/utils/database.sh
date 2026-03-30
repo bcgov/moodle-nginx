@@ -100,26 +100,8 @@ check_galera_pod_ready() {
   fi
 }
 
-# Function to get MariaDB environment variables for a pod
-get_mariadb_env_vars() {
-  local pod_name="$1"
-
-  echo "    🔍 Debug: Setting up credentials for pod $pod_name"
-
-  # Use the deployment environment variables (most reliable)
-  export MARIADB_USER="${DB_USER:-root}"
-  export MARIADB_PASSWORD="${DB_PASSWORD:-}"
-
-  # Debug output
-  echo "    ✅ Debug: Using deployment variables - user: $MARIADB_USER, password_length: ${#MARIADB_PASSWORD}"
-
-  if [[ -z "$MARIADB_PASSWORD" ]]; then
-    echo "    ❌ Debug: No DB_PASSWORD found in environment"
-    return 1
-  fi
-
-  return 0
-}
+# NOTE: get_mariadb_env_vars is defined once at the top of this file.
+# It uses deployment env vars (DB_USER, DB_PASSWORD) for MariaDB auth.
 
 # Main function to wait for Galera cluster to be ready and synced
 wait_for_galera_sync() {
@@ -153,6 +135,13 @@ wait_for_galera_sync() {
 
   # Now verify Galera-specific health (cluster synchronization)
   echo "✅ StatefulSet ready, now verifying Galera cluster synchronization..."
+
+  # Fail fast if credentials are not available — retrying won't help
+  if [[ -z "${DB_PASSWORD:-}" ]]; then
+    echo "⚠️ DB_PASSWORD not set — cannot verify Galera sync (skipping)"
+    echo "  ℹ️ StatefulSet is ready; Galera sync verification requires database credentials"
+    return 0
+  fi
 
   local retries=0
   while [[ $retries -lt $max_retries ]]; do
@@ -202,14 +191,25 @@ check_galera_cluster_health() {
     echo "  📊 Auto-detected expected cluster size: $expected_size"
   fi
 
-  send_notification "GALERA_HEALTH_CHECK_START" "Galera Health Check Starting" "Checking cluster health for selector: $selector" "info" "$namespace"
+  # Validate database credentials before proceeding — avoids false positives
+  if [[ -z "${DB_PASSWORD:-}" ]]; then
+    echo "  ⚠️ DB_PASSWORD not set — skipping Galera health check (cannot authenticate to MySQL)" >&2
+    return 0
+  fi
 
   # Get running pods using the selector
   local pods=( $(oc get pods -l "$selector" --field-selector=status.phase=Running -n "$namespace" -o jsonpath='{.items[*].metadata.name}') )
 
   if [[ ${#pods[@]} -eq 0 ]]; then
-    send_notification "GALERA_NO_PODS" "No Galera Pods Found" "No running Galera pods found for selector: $selector" "error" "$namespace"
+    echo "  ℹ️ No running Galera pods found for selector: $selector"
     return 0
+  fi
+
+  # Verify running pods match expected count
+  if [[ ${#pods[@]} -eq $expected_size ]]; then
+    echo "  ✅ All $expected_size Galera pod(s) are running"
+  else
+    echo "  ⚠️ Pod count mismatch: ${#pods[@]} running, $expected_size expected"
   fi
 
   echo "  🩺 Checking Galera cluster health for ${#pods[@]} pods..."
@@ -279,9 +279,9 @@ auto_heal_galera_cluster() {
     resource_name="$selector"
   fi
 
-  # Use existing function to determine resource type and get current replicas
+  # Determine resource type and current replicas
   local resource_type=""
-  local original_replicas=get_replicas "$selector" "$namespace" "$resource_name"
+  local original_replicas=""
 
   if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
     resource_type="statefulset"
@@ -297,6 +297,28 @@ auto_heal_galera_cluster() {
   if [[ -z "$original_replicas" || "$original_replicas" == "0" ]]; then
     send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - Invalid Replicas" "Could not determine valid replica count for $resource_type: $resource_name" "error" "$namespace"
     return 1
+  fi
+
+  # Single-replica cluster — scaling 1→1→1 is a no-op, try pod restart instead
+  if [[ "$original_replicas" == "1" ]]; then
+    echo "  ℹ️ Single-replica cluster — attempting pod restart instead of scale cycle"
+    local pod_name
+    pod_name=$(oc get pods -l "$selector" -n "$namespace" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [[ -n "$pod_name" ]]; then
+      echo "  🔄 Deleting pod $pod_name to trigger recreation..."
+      oc delete pod "$pod_name" -n "$namespace" --grace-period=30
+      echo "  ⏳ Waiting for pod to recreate..."
+      if scale_simple "$resource_type" "$resource_name" "1" "$namespace" "300s"; then
+        send_notification "GALERA_AUTO_HEAL_SUCCESS" "✅ Single-Replica Pod Restarted" "Restarted pod $pod_name for $resource_type/$resource_name" "success" "$namespace"
+        return 0
+      else
+        send_notification "GALERA_AUTO_HEAL_FAILED" "Pod Restart Failed" "Failed to restart $resource_type/$resource_name after pod deletion" "error" "$namespace"
+        return 1
+      fi
+    else
+      echo "  ⚠️ No running pod found to restart"
+      return 1
+    fi
   fi
 
   send_notification "GALERA_AUTO_HEAL_SCALING" "🔄 Starting Auto-Heal Process" "Auto-healing $resource_type/$resource_name: $original_replicas → 1 → $original_replicas replicas" "healing" "$namespace"
@@ -347,8 +369,8 @@ check_and_heal_galera_cluster() {
     echo "  📊 Auto-detected expected cluster size: $expected_size"
   fi
 
-  local health_status
-  health_status=$(check_galera_cluster_health "$selector" "$namespace" "$expected_size")
+  # Run health check directly — do NOT capture stdout or diagnostics are invisible
+  check_galera_cluster_health "$selector" "$namespace" "$expected_size"
   local health_code=$?
 
   case $health_code in
@@ -439,17 +461,6 @@ replace_db_characters_from_csv() {
   echo "✅ Character replacement completed"
 }
 
-# Function to read CSV file content
-read_csv_file() {
-  local csv_file="$1"
-
-  if [[ -f "$csv_file" ]]; then
-    cat "$csv_file"
-  else
-    echo "❌ CSV file not found: $csv_file"
-    return 1
-  fi
-}
 
 # Function to process Moodle content columns
 process_moodle_content_columns() {

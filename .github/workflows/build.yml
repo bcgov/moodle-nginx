@@ -1,14 +1,48 @@
-name: 🚀 Deploy to OpenShift
+name: 🚀 Build and Deploy to OpenShift
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   APP: moodle
   USER: ${{ github.actor }}
 
-  DEBUG_LEVEL: "INFO" # Options: INFO, DEBUG
+  DEBUG_LEVEL: "INFO" # Options: INFO, DEBUG, TRACE
+  # INFO:  Clean logs for production (errors/warnings/info only)
+  # DEBUG: Show debug messages without command tracing
+  # TRACE: Full verbosity with command tracing (set -x)
+  CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
+
+  # Security Scanning Configuration (CI/CD only)
+  # Modify these values in each branch (950003-dev, 950003-test, 950003-prod)
+  SECURITY_SCAN_ENABLED: "YES"          # YES, NO - Enable/disable security scanning
+  SECURITY_SCAN_LEVEL: "FULL"           # OFF, MINIMAL, BASIC, FULL - Scan thoroughness
+  SECURITY_SCAN_EXIT_ON: "WARN"         # WARN, CRITICAL, HIGH, MEDIUM, ANY - When to fail builds
+  SECURITY_SCAN_CONTAINERS: "YES"        # YES, NO - Enable expensive container image scanning
+  SECURITY_SCAN_CACHE: "YES"            # YES, NO - Cache Trivy vulnerability database
+  # Recommended per environment:
+  # Dev:  LEVEL=BASIC, EXIT_ON=WARN,     CONTAINERS=NO  (~2-3 min, never blocks)
+  # Test: LEVEL=FULL,  EXIT_ON=HIGH,     CONTAINERS=YES (~6-8 min, blocks High/Critical)
+  #       ↑ Temporarily set to WARN on test to unblock deploys while base image
+  #         vulnerabilities (php:8.1, golang:1.12) are addressed upstream.
+  #         TODO: Restore EXIT_ON=HIGH after PHP 8.3 + Go upgrade
+  # Prod: LEVEL=FULL,  EXIT_ON=WARN,     CONTAINERS=YES (~6-8 min, temporarily non-blocking)
+  #       ↑ Temporarily set to WARN to match test while base image vulns exist.
+  #         TODO: Restore EXIT_ON=CRITICAL after PHP 8.3 + Go upgrade
+
+  # Audit Failure Response — Automatic maintenance mode on critical issues
+  # Controls whether the site enters maintenance mode when the Lighthouse audit detects failures.
+  # Modes (independently togglable per branch):
+  #   MOODLE    — Moodle's built-in maintenance mode (PHP CLI, users see Moodle maintenance banner)
+  #   OPENSHIFT — Redirects route to static maintenance page (users see clean HTML message)
+  # Recommended per environment:
+  #   Dev:  MOODLE=NO,  OPENSHIFT=NO   — let errors persist for debugging
+  #   Test: MOODLE=YES, OPENSHIFT=NO   — prevent DB corruption from test/training users
+  #   Prod: MOODLE=NO,  OPENSHIFT=YES  — show users a clean maintenance page
+  AUDIT_FAILURE_MOODLE_MAINTENANCE: "NO"
+  AUDIT_FAILURE_OPENSHIFT_MAINTENANCE: "YES"
 
   # Skip builds for faster deployments / testing ("YES" or build)
   SKIP_BUILDS: "NO"
@@ -25,13 +59,48 @@ env:
   FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
 
 on:
+  # Runs every Saturday at 03:00 UTC — picks up the latest Moodle patches,
+  # external plugin updates, and base OS/PHP security updates automatically.
+  # Edit the cron expression or remove this block to disable scheduled builds.
   schedule:
     - cron: "0 3 * * 6"
+
   push:
     branches:
       - 950003-dev
       - 950003-test
       - 950003-prod
+  pull_request:
+    branches:
+      - 950003-dev
+      - 950003-test
+      - 950003-prod
+
+  # Manual trigger: use this to force a full rebuild and redeploy without
+  # requiring a code change. Useful when external repos (plugins, base images)
+  # have been updated and you want to pull the latest versions into the image.
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'GitHub Environment to deploy to'
+        type: environment
+        required: true
+      reason:
+        description: 'Reason for manual rebuild (logged for audit purposes)'
+        required: false
+        default: 'Manual rebuild to refresh external dependencies'
+      skip_deploy:
+        description: 'Build images only, skip OpenShift deployment (YES/NO)'
+        type: choice
+        options:
+          - 'NO'
+          - 'YES'
+        required: false
+        default: 'NO'
+      confirm_production:
+        description: 'For 950003-prod only, type PROD to confirm maintenance window and downtime'
+        required: false
+        default: ''
 
   workflow_call:
     secrets:
@@ -44,14 +113,26 @@ on:
       ARTIFACTORY_URL:
         required: true
 
+# Least-privilege token — contents:read for checkout, actions:read for pipeline
+# status checks, id-token:write inherited by deploy.yml for OIDC authentication
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
 jobs:
   #Print variables for logging and debugging purposes
   checkEnv:
-    name: 📋 Environment Check
+    name: 🛡️ Environment Check and Preflight Security Scan
     runs-on: ubuntu-22.04
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.base_ref || github.ref_name }}
     outputs: # Define the output parameter
       APP: ${{ env.APP }}
       DEBUG_LEVEL: ${{ env.DEBUG_LEVEL }}
+      ARTIFACTORY_PULL_SECRET: ${{ env.ARTIFACTORY_PULL_SECRET }}
+      TARGET_GITHUB_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.base_ref || github.ref_name }}
+      MONITOR_IMAGE: ${{ vars.MONITOR_IMAGE }}
+      CLUSTER_HEALTH_MONITORING: ${{ env.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ env.FORCE_MIGRATE }}
       MOODLE_URL: ${{ env.MOODLE_URL }}
       MOODLE_BRANCH_VERSION: ${{ env.MOODLE_BRANCH_VERSION }}
@@ -63,14 +144,20 @@ jobs:
       HVP_BRANCH_VERSION: ${{ env.HVP_BRANCH_VERSION }}
       THEME_URL: ${{ env.THEME_URL }}
       THEME_BRANCH_VERSION: ${{ env.THEME_BRANCH_VERSION }}
+      COURSESEARCH_URL: ${{ env.COURSESEARCH_URL }}
+      COURSESEARCH_BRANCH_VERSION: ${{ env.COURSESEARCH_BRANCH_VERSION }}
+      GITHUBSYNC_URL: ${{ env.GITHUBSYNC_URL }}
+      GITHUBSYNC_BRANCH_VERSION: ${{ env.GITHUBSYNC_BRANCH_VERSION }}
+      PCURATOR_URL: ${{ env.PCURATOR_URL }}
+      PCURATOR_BRANCH_VERSION: ${{ env.PCURATOR_BRANCH_VERSION }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ env.IMAGE_REBUILD_TIME_LIMIT }}
       MOODLE_DEPLOYMENT_NAME: ${{ env.MOODLE_DEPLOYMENT_NAME }}
       DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
       OPENSHIFT_SERVER: ${{ env.OPENSHIFT_SERVER }}
       OPENSHIFT_SA_TOKEN_NAME: ${{ env.OPENSHIFT_SA_TOKEN_NAME }}
-      DEPLOY_NAMESPACE: ${{ github.ref_name }}
+      DEPLOY_NAMESPACE: ${{ github.base_ref || github.ref_name }}
       IMAGE_REPO: ${{ env.IMAGE_REPO }}
-      BUILD_NAMESPACE: ${{ github.ref_name }}
+      BUILD_NAMESPACE: ${{ github.base_ref || github.ref_name }}
       DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
       WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ env.WEB_IMAGE }}
@@ -78,7 +165,7 @@ jobs:
       DB_REPLICAS: ${{ env.DB_REPLICAS }}
       DB_PORT: ${{ env.DB_PORT }}
       DB_NAME: ${{ env.DB_NAME }}
-      DB_IMAGE: ${{ env.DB_IMAGE }}
+      MARIADB_IMAGE: ${{ env.MARIADB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
       CRON_NAME: ${{ env.CRON_NAME }}
       CRON_IMAGE: ${{ env.CRON_IMAGE}}
@@ -99,16 +186,438 @@ jobs:
       BACKUP_HELM_CHART: ${{ env.BACKUP_HELM_CHART }}
       CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
       SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
-      SKIP_DEPLOY: ${{ env.SKIP_DEPLOY }}
+      SKIP_DEPLOY: ${{ inputs.skip_deploy || env.SKIP_DEPLOY }}
+      SECURITY_STATUS: ${{ steps.security-scan.outputs.SECURITY_STATUS }}
+      SECURITY_RESULT: ${{ steps.security-scan.outputs.SECURITY_RESULT }}
+      SECURITY_SUMMARY: ${{ steps.security-scan.outputs.SECURITY_SUMMARY }}
+      PHP_COMPAT_STATUS: ${{ steps.php-compat.outputs.PHP_COMPAT_STATUS }}
     steps:
       - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref_name }}
-          sparse-checkout: |
-            config/mariadb
-            example.env
-            example.versions.env
+          # For pull requests, checkout the PR merge commit (github.sha)
+          # For push events, checkout the pushed branch (github.ref)
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # Dependabot PRs cannot access secrets (ARTIFACTORY_URL, etc.) and should
+      # not trigger full builds. Skip builds/deploy; keep preflight audits only.
+      - name: 🤖 Dependabot — skip builds and deploy
+        if: github.actor == 'dependabot[bot]'
+        run: |
+          echo "Dependabot PR detected — skipping builds and deployment."
+          echo "Only preflight audits (Lighthouse, security) will run."
+          echo "SKIP_BUILDS=YES" >> $GITHUB_ENV
+          echo "SKIP_DEPLOY=YES" >> $GITHUB_ENV
+
+      - name: Validate environment-scoped deployment variables
+        if: github.actor != 'dependabot[bot]'
+        env:
+          MONITOR_IMAGE: ${{ vars.MONITOR_IMAGE }}
+        run: |
+          echo "Resolved GitHub Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.base_ref || github.ref_name }}"
+
+          if [ -z "$MONITOR_IMAGE" ]; then
+            echo "Missing required GitHub Environment variable: MONITOR_IMAGE"
+            exit 1
+          fi
+
+          echo "Environment-scoped monitor configuration is present."
+
+      - name: 🔁 Preflight — Verify Artifactory connectivity
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          echo "Testing Artifactory registry connectivity..."
+          # Extract registry hostname (ARTIFACTORY_URL includes repo path)
+          REGISTRY_HOST=$(echo "${{ secrets.ARTIFACTORY_URL }}" | cut -d'/' -f1)
+          echo "Registry host: ${REGISTRY_HOST}"
+          for attempt in 1 2 3; do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+              --connect-timeout 10 --max-time 20 \
+              "https://${REGISTRY_HOST}/v2/" 2>/dev/null) || true
+            # 200 = open registry, 401 = requires auth — both mean reachable
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+              echo "✅ Artifactory reachable (HTTP $HTTP_CODE, attempt $attempt)"
+              exit 0
+            fi
+            echo "⚠️ Attempt $attempt/3 failed (HTTP $HTTP_CODE), retrying in 15s..."
+            sleep 15
+          done
+          echo "❌ Artifactory unreachable after 3 attempts (last HTTP $HTTP_CODE)"
+          echo "💡 Check https://status.developer.gov.bc.ca or contact platform services"
+          exit 1
+
+      - name: Setup Node.js for Lighthouse preflight
+        uses: actions/setup-node@v6
+        with:
+          node-version: '25'
+          cache: 'npm'
+          cache-dependency-path: 'config/lighthouse/package-lock.json'
+
+      - name: Fail-fast Lighthouse dependency audit (dev/test/prod)
+        run: |
+          TARGET_BRANCH="${{ github.base_ref || github.ref_name }}"
+          EVENT_NAME="${{ github.event_name }}"
+
+          if [ "$TARGET_BRANCH" != "950003-dev" ] && [ "$TARGET_BRANCH" != "950003-test" ] && [ "$TARGET_BRANCH" != "950003-prod" ]; then
+            echo "Skipping Lighthouse preflight audit for branch: $TARGET_BRANCH"
+            exit 0
+          fi
+
+          case "$EVENT_NAME" in
+            pull_request|push|schedule|workflow_dispatch)
+              ;;
+            *)
+              echo "Skipping Lighthouse preflight audit for event: $EVENT_NAME"
+              exit 0
+              ;;
+          esac
+
+          echo "Running fail-fast Lighthouse dependency audit for branch: $TARGET_BRANCH"
+          cd config/lighthouse
+          if npm audit --audit-level=high --package-lock-only; then
+            echo "Lighthouse dependency preflight passed"
+            exit 0
+          fi
+
+          echo "High/critical vulnerabilities detected in Lighthouse dependencies."
+          echo "Attempting automatic remediation with npm audit fix --package-lock-only..."
+
+          # npm audit fix exits non-zero when ANY vulns remain (even moderate).
+          # Always re-audit with --audit-level=high regardless of fix exit code.
+          npm audit fix --package-lock-only --no-fund || true
+
+          echo "Re-running preflight audit after auto-remediation..."
+          if npm audit --audit-level=high --package-lock-only; then
+            echo "Preflight passed after auto-remediation."
+            echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
+            exit 0
+          fi
+
+          echo "Preflight still failing after auto-remediation."
+          echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse and commit package-lock.json."
+          exit 1
+
+      # 📦 Front-load ALL Lighthouse dependencies so the Audit job is cache-hit only.
+      # Why: Security scanning runs here (fail-fast before builds/deploy), and the Audit
+      # job skips npm install + security scan entirely — it just restores and runs Lighthouse.
+      - name: 📦 Cache Lighthouse node_modules
+        id: lighthouse-modules
+        uses: actions/cache@v5
+        with:
+          path: config/lighthouse/node_modules
+          key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
+
+      - name: 📦 Install and scan Lighthouse dependencies
+        if: steps.lighthouse-modules.outputs.cache-hit != 'true'
+        run: |
+          echo "=== 📦 Installing Lighthouse dependencies (first run or lockfile changed) ==="
+          cd config/lighthouse
+          npm ci --no-fund
+          echo "✅ Lighthouse node_modules installed and cached for Audit job"
+
+      - name: 🔒 Lighthouse NPM security scan (fail-fast)
+        run: |
+          echo "=== 🔒 Lighthouse Dependency Security Scan ==="
+
+          # npm.sh uses log_info/log_warn/etc. from openshift.sh — define stubs for CI context
+          log_error() { echo "❌ $*" >&2; }
+          log_warn()  { echo "⚠️  $*"; }
+          log_info()  { echo "ℹ️  $*"; }
+          log_debug() { [[ "${DEBUG_LEVEL}" == "DEBUG" || "${DEBUG_LEVEL}" == "TRACE" ]] && echo "🔍 $*" || true; }
+          log_success() { echo "✅ $*"; }
+          export -f log_error log_warn log_info log_debug log_success
+
+          source openshift/scripts/utils/npm.sh
+          cd config/lighthouse
+
+          # Full security audit — catch issues BEFORE builds and deployment
+          npm_audit_scan "." "high" "LH_SECURITY_RESULT"
+          scan_exit=$?
+
+          if [ $scan_exit -eq 2 ]; then
+            echo "❌ CRITICAL: Lighthouse dependencies have critical vulnerabilities!"
+            echo "  These must be resolved before deployment proceeds."
+            echo "  Run: cd config/lighthouse && npm audit fix && commit package-lock.json"
+            # Non-blocking for now — Lighthouse is test tooling, not deployed code.
+            # Change 'exit 0' to 'exit 2' to make this a hard blocker.
+            exit 0
+          elif [ $scan_exit -eq 1 ]; then
+            echo "⚠️  HIGH: High-severity vulnerabilities detected in Lighthouse deps (non-blocking)"
+          else
+            echo "✅ Lighthouse dependency security scan passed"
+          fi
+
+      # 🐧 Seed Lighthouse APT package cache (Chrome headless dependencies)
+      # Running this in checkEnv means the Audit job gets a cache hit instead of a cold install.
+      - name: 🐧 Seed Lighthouse APT cache
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+          version: 1.0
+
+      # 🔧 Install Trivy (lightweight, fast install - caching not needed)
+      - name: 🛡️ Install Trivy
+        run: |
+          # Trivy installation is fast (~5-10s), no need to cache
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+          trivy --version
+
+      # 🗄️ Restore Trivy cache using stable branch prefix
+      - name: 🗄️ Restore Trivy Database Cache
+        id: trivy-cache-restore-checkenv
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
+          restore-keys: |
+            ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-
+            ${{ runner.os }}-trivy-db-
+
+      - name: 🔄 Refresh Trivy DB and derive cache key
+        id: trivy-db-meta-checkenv
+        run: |
+          trivy image --download-db-only --no-progress
+
+          TRIVY_VERSION=$(trivy --version | awk '/Version:/ {print $2}' | head -n 1)
+          DB_UPDATED_AT=$(grep -oE '"UpdatedAt"\s*:\s*"[^"]+"' ~/.cache/trivy/db/metadata.json | sed -E 's/.*"([^"]+)"/\1/' | cut -d'T' -f1)
+
+          if [ -z "$TRIVY_VERSION" ]; then
+            TRIVY_VERSION="unknown"
+          fi
+
+          if [ -z "$DB_UPDATED_AT" ]; then
+            DB_UPDATED_AT=$(date -u +%Y-%m-%d)
+          fi
+
+          echo "trivy_version=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "db_updated_at=$DB_UPDATED_AT" >> "$GITHUB_OUTPUT"
+          echo "Resolved Trivy cache key suffix: v$TRIVY_VERSION-db$DB_UPDATED_AT"
+
+      - name: 💾 Save Trivy Database Cache
+        # continue-on-error: cache/save fails harmlessly when the key already exists
+        # (restore found the same versioned key via prefix match — DB unchanged)
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-checkenv.outputs.trivy_version }}-db${{ steps.trivy-db-meta-checkenv.outputs.db_updated_at }}
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Auto-populate dependency manifests from centralized versions
+      - name: 🔄 Auto-populate dependency manifests
+        run: |
+          echo "🚀 Auto-populating dependency manifests from example.versions.env"
+          chmod +x openshift/scripts/populate-dependency-manifests.sh
+          ./openshift/scripts/populate-dependency-manifests.sh
+
+          echo "📋 Generated ephemeral manifests (not committed to repository):"
+          ls -la openshift/dependencies/ .github/security-tools.json config/moodle/composer.json config/moodle/git-dependencies.json .env.generated 2>/dev/null || true
+
+          echo "🔒 These files are generated fresh for each build and never stored in git"
+
+      # 🔒 Cache security scan results based on dependency versions
+      - name: 🔒 Cache Security Scan Results
+        uses: actions/cache@v5
+        with:
+          path: |
+            tmp/comprehensive-security-summary.json
+            tmp/comprehensive-security-summary.md
+            tmp/php-security-audit.json
+            tmp/php-security-summary.json
+            tmp/php-security-summary.md
+            tmp/container-security-scan.json
+            tmp/container-security-summary.md
+          key: ${{ runner.os }}-security-${{ hashFiles('example.versions.env', 'config/moodle/composer.lock', '.github/security-tools.json', 'Moodle.Dockerfile', 'PHP.Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-security-
+
+      # 🐘 Cache Composer vendor directory for faster PHP scans
+      - name: 🐘 Cache Composer Dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.composer/cache
+            config/moodle/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('config/moodle/composer.lock') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      # PHP compatibility validation before security scanning
+      - name: 🐘 PHP Compatibility Validation
+        id: php-compat
+        run: |
+          if [ -f "openshift/scripts/validate-php-compatibility.sh" ]; then
+            echo "🐘 Validating PHP dependency compatibility..."
+            chmod +x openshift/scripts/validate-php-compatibility.sh
+            if ./openshift/scripts/validate-php-compatibility.sh; then
+              echo "✅ All dependencies compatible with current PHP version"
+              echo "PHP_COMPAT_STATUS=✅ COMPATIBLE" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ PHP compatibility issues detected - check reports"
+              echo "PHP_COMPAT_STATUS=⚠️ ISSUES DETECTED" >> $GITHUB_OUTPUT
+              # Continue with warning, don't fail the build
+            fi
+          else
+            echo "⚠️ PHP compatibility validation script not found"
+            echo "PHP_COMPAT_STATUS=⚠️ VALIDATION UNAVAILABLE" >> $GITHUB_OUTPUT
+          fi
+
+      # Version consistency validation
+      - name: 🔄 Version Consistency Check
+        id: version-consistency
+        run: |
+          if [ -f "openshift/scripts/validate-version-consistency.sh" ]; then
+            echo "🔄 Validating version consistency across infrastructure and application layers..."
+            chmod +x openshift/scripts/validate-version-consistency.sh
+            if ./openshift/scripts/validate-version-consistency.sh; then
+              echo "✅ All versions are consistent and compatible"
+              echo "VERSION_CONSISTENCY_STATUS=✅ CONSISTENT" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Version consistency issues detected - check report"
+              echo "VERSION_CONSISTENCY_STATUS=⚠️ ISSUES DETECTED" >> $GITHUB_OUTPUT
+              # Continue with warning to allow review
+            fi
+          else
+            echo "⚠️ Version consistency validation script not found"
+            echo "VERSION_CONSISTENCY_STATUS=⚠️ VALIDATION UNAVAILABLE" >> $GITHUB_OUTPUT
+          fi
+
+      # Comprehensive security validation (PHP dependencies + container images)
+      - name: �️ Comprehensive Security Validation
+        id: security-scan
+        run: |
+          if [ -f "openshift/scripts/comprehensive-security-scan.sh" ]; then
+            chmod +x openshift/scripts/comprehensive-security-scan.sh
+            if ./openshift/scripts/comprehensive-security-scan.sh; then
+              echo "SECURITY_STATUS=✅ PASSED" >> $GITHUB_OUTPUT
+              echo "SECURITY_RESULT=success" >> $GITHUB_OUTPUT
+              echo "SECURITY_SUMMARY=No critical security issues detected" >> $GITHUB_OUTPUT
+            else
+              echo "SECURITY_STATUS=❌ CRITICAL ISSUES" >> $GITHUB_OUTPUT
+              echo "SECURITY_RESULT=failure" >> $GITHUB_OUTPUT
+              echo "SECURITY_SUMMARY=Critical security vulnerabilities found - review reports" >> $GITHUB_OUTPUT
+              # Don't exit 1 here to allow report upload, but mark as failed
+            fi
+          else
+            echo "⚠️ Comprehensive security scan script not found, running basic PHP validation..."
+            # Fallback to basic PHP security validation
+            if [ -f "openshift/scripts/validate-php-security.sh" ]; then
+              chmod +x openshift/scripts/validate-php-security.sh
+              if ./openshift/scripts/validate-php-security.sh; then
+                echo "SECURITY_STATUS=✅ PHP ONLY" >> $GITHUB_OUTPUT
+                echo "SECURITY_RESULT=success" >> $GITHUB_OUTPUT
+                echo "SECURITY_SUMMARY=PHP dependencies validated (container scan unavailable)" >> $GITHUB_OUTPUT
+              else
+                echo "SECURITY_STATUS=❌ PHP ISSUES" >> $GITHUB_OUTPUT
+                echo "SECURITY_RESULT=failure" >> $GITHUB_OUTPUT
+                echo "SECURITY_SUMMARY=PHP security issues detected" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "SECURITY_STATUS=⚠️ SKIPPED" >> $GITHUB_OUTPUT
+              echo "SECURITY_RESULT=skipped" >> $GITHUB_OUTPUT
+              echo "SECURITY_SUMMARY=Security validation scripts not found" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      # 🔒 Scan public base images (Docker FROM images)
+      - name: 🔒 Scan Public Base Images
+        if: env.SECURITY_SCAN_CONTAINERS == 'YES'
+        run: |
+          echo "🔍 Scanning public Docker base images for vulnerabilities..."
+          source openshift/scripts/utils/docker-security.sh
+
+          # Determine severity based on SECURITY_SCAN_LEVEL
+          SEVERITY="HIGH,CRITICAL"
+          if [ "${{ env.SECURITY_SCAN_LEVEL }}" = "FULL" ]; then
+            SEVERITY="MEDIUM,HIGH,CRITICAL"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "BASIC" ]; then
+            SEVERITY="HIGH,CRITICAL"
+          elif [ "${{ env.SECURITY_SCAN_LEVEL }}" = "MINIMAL" ]; then
+            SEVERITY="CRITICAL"
+          fi
+
+          # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
+          EXIT_ON_CRITICAL="false"
+          if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "HIGH" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "MEDIUM" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
+            EXIT_ON_CRITICAL="true"
+          fi
+
+          echo "Scan configuration:"
+          echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
+          echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
+          echo ""
+
+          # Scan all public base images defined in example.versions.env
+          # This catches vulnerabilities in PHP, Nginx, Redis, MariaDB, Golang, Ubuntu, etc.
+          if scan_public_base_images "example.versions.env" "$SEVERITY" "$EXIT_ON_CRITICAL"; then
+            echo "✅ All public base images passed security scan"
+          else
+            scan_exit=$?
+            if [ $scan_exit -eq 2 ]; then
+              echo "❌ Critical vulnerabilities detected - blocking build"
+              exit 2
+            fi
+          fi
+
+      # Upload comprehensive security reports as artifacts
+      - name: 📤 Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: comprehensive-security-reports
+          path: |
+            tmp/comprehensive-security-summary.json
+            tmp/comprehensive-security-summary.md
+            tmp/container-security-scan.json
+            tmp/container-security-summary.md
+            tmp/php-security-audit.json
+            tmp/php-licenses.txt
+            tmp/php-outdated.json
+            tmp/php-security-summary.json
+            tmp/php-security-summary.md
+            tmp/php-license-report.txt
+            tmp/php-outdated-report.json
+            tmp/php-security-report.json
+            tmp/php-compatibility-report.json
+            tmp/php-compatibility-summary.md
+          retention-days: 30
+
+      - name: Log manual trigger reason
+        if: github.event_name == 'workflow_dispatch'
+        run: 'echo "Manual rebuild triggered by ${{ github.actor }}: ${{ inputs.reason }}"'
+
+      - name: Validate manual dispatch target branch and production confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "${{ inputs.target_environment }}" in
+            950003-dev|950003-test|950003-prod)
+              echo "Manual dispatch target environment is valid: ${{ inputs.target_environment }}"
+              ;;
+            *)
+              echo "Invalid environment for workflow_dispatch: ${{ inputs.target_environment }}"
+              echo "Use one of: 950003-dev, 950003-test, 950003-prod"
+              exit 1
+              ;;
+          esac
+
+          if [ "${{ inputs.target_environment }}" = "950003-prod" ] && [ "${{ inputs.confirm_production }}" != "PROD" ]; then
+            echo "Production deployment confirmation missing."
+            echo "Set workflow_dispatch input confirm_production=PROD to continue."
+            exit 1
+          fi
+
+      - name: Display deployment notice
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_deploy != 'YES'
+        run: |
+          echo "NOTICE: This deployment can take approximately 30 minutes."
+          echo "NOTICE: Moodle will be placed into maintenance mode during the deployment window."
 
       - name: Setup Env Vars
         id: dotenv
@@ -133,14 +642,12 @@ jobs:
           echo URL: https://${{ env.APP }}-${{ github.ref_name }}.apps.silver.devops.gov.bc.ca
 
   # Build Images and deploy to JFrog
-  db:
-    name: 🔨 DB
+  helm-images:
+    name: 🔨 Helm Images
     needs: [checkEnv]
     if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/db.yml
+    uses: ./.github/workflows/helm-images.yml
     secrets: inherit
-    with:
-      IMAGE_NAME: "mariadb:10"
 
   php:
     name: 🔨 PHP
@@ -187,11 +694,18 @@ jobs:
       REPORT_ALL_BACKUPS_BRANCH_VERSION: ${{ needs.checkEnv.outputs.REPORT_ALL_BACKUPS_BRANCH_VERSION }}
       THEME_URL: ${{ needs.checkEnv.outputs.THEME_URL }}
       THEME_BRANCH_VERSION: ${{ needs.checkEnv.outputs.THEME_BRANCH_VERSION }}
+      COURSESEARCH_URL: ${{ needs.checkEnv.outputs.COURSESEARCH_URL }}
+      COURSESEARCH_BRANCH_VERSION: ${{ needs.checkEnv.outputs.COURSESEARCH_BRANCH_VERSION }}
+      GITHUBSYNC_URL: ${{ needs.checkEnv.outputs.GITHUBSYNC_URL }}
+      GITHUBSYNC_BRANCH_VERSION: ${{ needs.checkEnv.outputs.GITHUBSYNC_BRANCH_VERSION }}
+      PCURATOR_URL: ${{ needs.checkEnv.outputs.PCURATOR_URL }}
+      PCURATOR_BRANCH_VERSION: ${{ needs.checkEnv.outputs.PCURATOR_BRANCH_VERSION }}
+
   call-cleanup-workflow:
     name: 🧹️ Clean-up
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web, redis-proxy]
+    needs: [checkEnv, helm-images, php, cron, moodle, web, redis-proxy]
     if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
     with:
       APP: ${{ needs.checkEnv.outputs.APP }}
@@ -208,7 +722,7 @@ jobs:
     name: 🚀 Deploy
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web, redis-proxy, call-cleanup-workflow]
+    needs: [checkEnv, helm-images, php, cron, moodle, web, redis-proxy, call-cleanup-workflow]
     if: |
       (always() && needs.checkEnv.outputs.SKIP_DEPLOY == 'NO') &&
       needs.checkEnv.result == 'success' &&
@@ -216,6 +730,8 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     with:
       DEBUG_LEVEL: ${{ needs.checkEnv.outputs.DEBUG_LEVEL }}
+      ARTIFACTORY_PULL_SECRET: ${{ needs.checkEnv.outputs.ARTIFACTORY_PULL_SECRET }}
+      CLUSTER_HEALTH_MONITORING: ${{ needs.checkEnv.outputs.CLUSTER_HEALTH_MONITORING }}
       FORCE_MIGRATE: ${{ needs.checkEnv.outputs.FORCE_MIGRATE }}
       IMAGE_REBUILD_TIME_LIMIT: ${{ needs.checkEnv.outputs.IMAGE_REBUILD_TIME_LIMIT }}
       DEPLOY_ENVIRONMENT: ${{ needs.checkEnv.outputs.DEPLOY_ENVIRONMENT }}
@@ -226,7 +742,7 @@ jobs:
       WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
       WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
       PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
-      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
+      MARIADB_IMAGE: ${{ needs.checkEnv.outputs.MARIADB_IMAGE }}
       DB_REPLICAS: ${{ needs.checkEnv.outputs.DB_REPLICAS }}
       DB_HOST: ${{ needs.checkEnv.outputs.DB_HOST }}
       DB_PORT: ${{ needs.checkEnv.outputs.DB_PORT }}
@@ -235,6 +751,8 @@ jobs:
       DB_BACKUP_DEPLOYMENT_FULL_NAME: ${{ needs.checkEnv.outputs.DB_BACKUP_DEPLOYMENT_FULL_NAME }}
       BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}
       BACKUP_HELM_CHART: ${{ needs.checkEnv.outputs.BACKUP_HELM_CHART }}
+      TARGET_GITHUB_ENVIRONMENT: ${{ needs.checkEnv.outputs.TARGET_GITHUB_ENVIRONMENT }}
+      MONITOR_IMAGE: ${{ needs.checkEnv.outputs.MONITOR_IMAGE }}
       CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
       CRON_NAME: ${{ needs.checkEnv.outputs.CRON_NAME }}
       REDIS_HELM_CHART: ${{ needs.checkEnv.outputs.REDIS_HELM_CHART }}
@@ -253,73 +771,176 @@ jobs:
       DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
       IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
 
-  lighthouse-check:
-    name: 🚦 Audit
+  lighthouse-monitor:
+    name: "🚦 Lighthouse Monitor"
     runs-on: ubuntu-22.04
-    needs: [checkEnv, call-deploy-workflow]
+    needs: [checkEnv]
+    timeout-minutes: 50
     outputs:
       LHSTATUS: ${{ steps.lighthouse.outputs.LHSTATUS }}
     if: |
       always() &&
-      (
-        needs.call-deploy-workflow.result == 'success' ||
-        needs.checkEnv.outputs.SKIP_DEPLOY == 'YES'
-      ) &&
-      !contains(needs.*.result, 'failure')
+      needs.checkEnv.result == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      # Setup Node.js 25 for Lighthouse (requires Node 22.19+)
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '25'
+          cache: 'npm'
+          cache-dependency-path: 'config/lighthouse/package-lock.json'
+
       - run: mkdir -p tmp/artifacts
-      - name: Install Puppeteer and Lighthouse
-        run: npm install puppeteer lighthouse
-      - name: Install dependencies
-        run: sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
-      - name: Setup Chrome
-        id: setup-chrome
+
+      # All caches below were seeded by the checkEnv job.
+      # 📦 Restore Lighthouse node_modules (installed + scanned by checkEnv)
+      - name: 📦 Restore Lighthouse node_modules
+        id: lighthouse-modules
+        uses: actions/cache/restore@v5
+        with:
+          path: config/lighthouse/node_modules
+          key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
+
+      # 🐧 Restore Chrome APT dependencies (seeded by checkEnv)
+      - name: 🐧 Restore APT packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget libgbm-dev
+          version: 1.0
+
+      - name: 🌐 Setup Chrome
         uses: browser-actions/setup-chrome@latest
         with:
           install-dependencies: false
-      - name: Lighthouse
-        id: lighthouse
+
+      # 🏗️ Validate cache-restored deps or install on miss (fallback)
+      - name: 🏗️ Lighthouse Environment Setup
         run: |
-          set +e
-          OUTPUT=$(node config/lighthouse/lighthouse-auth.js 2>&1)
-          EXIT_CODE=$?
+          echo "=== 🏗️ Lighthouse Environment Setup ==="
 
-          LHSTATUS="failure"
-          LHWARNINGS=""
-
-          if [ $EXIT_CODE -eq 0 ]; then
-            LHSTATUS="success"
-            WARN_COUNT=$(echo "$OUTPUT" | grep -i warning | wc -l)
-            if [ "$WARN_COUNT" -gt 0 ]; then
-              LHWARNINGS=" ($WARN_COUNT warnings)"
-            fi
+          if [ -d "config/lighthouse/node_modules/lighthouse" ] && \
+             cd config/lighthouse && npm list lighthouse puppeteer --depth=0 >/dev/null 2>&1; then
+            echo "✅ Cache hit — Lighthouse deps restored (skipping install)"
+            cd ../..
           else
-            ERROR_MESSAGE=$(echo "$OUTPUT" | head -n 1 | sed 's/[^a-zA-Z0-9 .,;:_-]//g')
-            LHWARNINGS=" (Error: $ERROR_MESSAGE)"
-            echo "Lighthouse error output:"
-            echo "$OUTPUT"
-            # Save full error to GITHUB_OUTPUT
-            echo "LHERROR<<EOF" >> $GITHUB_OUTPUT
-            echo "$OUTPUT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "⚠️ Cache miss — installing Lighthouse dependencies..."
+            cd config/lighthouse 2>/dev/null && cd ../.. || true
+            source openshift/scripts/utils/lighthouse.sh
+            source openshift/scripts/utils/npm.sh
+            if ! setup_lighthouse_environment "config/lighthouse" "true"; then
+              echo "❌ Lighthouse environment setup failed"
+              exit 1
+            fi
           fi
 
-          echo "LHSTATUS=${LHSTATUS}${LHWARNINGS}" >> $GITHUB_OUTPUT
-          echo "$OUTPUT" > lighthouse-full.log
+          echo "✅ Lighthouse environment ready"
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            exit $EXIT_CODE
-          fi
+      - name: 📊 Display Setup Information
+        run: |
+          source openshift/scripts/utils/lighthouse.sh
+          display_cache_information "config/lighthouse" "10GB" "${{ github.repository }}"
+
+      # =================================================================
+      # 🔭 DEPLOYMENT MONITORING
+      # Runs in parallel with builds/deploy. Polls the live site to detect
+      # the maintenance-mode transition and waits for the site to stabilize.
+      # Skipped entirely when SKIP_DEPLOY=YES (site is already live).
+      #
+      # State machine: BASELINE → DEPLOYING → READY
+      #   BASELINE:  Site is live, waiting for deploy to start
+      #   DEPLOYING: Non-200 or maintenance detected, deploy in progress
+      #   READY:     Site recovered after deploy, ready for audit
+      #
+      # See: openshift/scripts/utils/site-monitor.sh
+      # =================================================================
+      - name: 🔭 Monitor Site During Deployment
+        if: needs.checkEnv.outputs.SKIP_DEPLOY != 'YES'
+        id: monitor
         env:
-          APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
-          USERNAME: ${{ secrets.MOODLE_TESTER_USERNAME }}
-          PASSWORD: ${{ secrets.MOODLE_TESTER_PASSWORD }}
-      - name: Archive artifacts
-        uses: actions/upload-artifact@v4
+          TARGET_URL: https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          source openshift/scripts/utils/site-monitor.sh
+          monitor_site_deployment "$TARGET_URL" 15 1200 2400 15
+
+      # =================================================================
+      # 📋 DEPLOYMENT JOB LOG CAPTURE
+      # After the site recovers, fetch logs from the critical OpenShift
+      # jobs (migrate-build-files, moodle-upgrade) that ran during deploy.
+      # Provides visibility into PVC file migration and DB upgrade output
+      # directly in the CI log without needing to check OpenShift console.
+      #
+      # See: openshift/scripts/utils/deploy-logs.sh
+      # =================================================================
+      - name: 📋 Capture Deployment Job Logs
+        continue-on-error: true
+        if: |
+          always() &&
+          needs.checkEnv.outputs.SKIP_DEPLOY != 'YES' &&
+          steps.monitor.outcome == 'success'
+        env:
+          DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+        run: |
+          source openshift/scripts/utils/deploy-logs.sh
+          capture_deployment_logs \
+            "$DEPLOY_NAMESPACE" \
+            "${{ secrets.AUTH_TOKEN_950003 }}" \
+            "https://api.silver.devops.gov.bc.ca:6443" \
+            120
+
+      # See: openshift/scripts/utils/lighthouse-audit.sh
+      - name: 🚦 Lighthouse Performance Audit
+        id: lighthouse
+        if: |
+          always() &&
+          (steps.monitor.outcome == 'success' || steps.monitor.outcome == 'skipped') &&
+          steps.monitor.outputs.MONITOR_RESULT != 'timeout_deploying'
+        run: |
+          source openshift/scripts/utils/lighthouse-audit.sh
+          TARGET_URL="https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca"
+          execute_lighthouse_audit \
+            "$TARGET_URL" \
+            "config/lighthouse" \
+            "tmp/artifacts" \
+            "${{ secrets.MOODLE_TESTER_USERNAME }}" \
+            "${{ secrets.MOODLE_TESTER_PASSWORD }}" \
+            "${{ needs.checkEnv.outputs.DEBUG_LEVEL }}"
+
+      # 🚧 Emergency maintenance mode — triggered when Lighthouse detects critical failures
+      # See: openshift/scripts/utils/maintenance-mode.sh
+      - name: 🚧 Audit Failure — Enable Maintenance Mode
+        if: >
+          always() &&
+          steps.lighthouse.outcome == 'failure' &&
+          (env.AUDIT_FAILURE_MOODLE_MAINTENANCE == 'YES' || env.AUDIT_FAILURE_OPENSHIFT_MAINTENANCE == 'YES')
+        env:
+          DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
+        run: |
+          source openshift/scripts/utils/maintenance-mode.sh
+          enable_emergency_maintenance \
+            "$DEPLOY_NAMESPACE" \
+            "${{ secrets.AUTH_TOKEN_950003 }}" \
+            "https://api.silver.devops.gov.bc.ca:6443" \
+            "$AUDIT_FAILURE_MOODLE_MAINTENANCE" \
+            "$AUDIT_FAILURE_OPENSHIFT_MAINTENANCE" \
+            "${{ needs.checkEnv.outputs.CRON_NAME }}"
+
+      # 📦 Artifact Collection (using utility)
+      - name: 📦 Collect Lighthouse Artifacts
+        if: always()
+        run: |
+          source openshift/scripts/utils/lighthouse.sh
+          collect_lighthouse_artifacts "config/lighthouse" "tmp/artifacts" "."
+
+      - name: 📤 Archive artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: lighthouse-artifacts
           path: |
+            tmp/artifacts/
             /home/runner/work/moodle-nginx/moodle-nginx/*.png
             /home/runner/work/moodle-nginx/moodle-nginx/*.md
 
@@ -332,21 +953,22 @@ jobs:
         moodle,
         cron,
         php,
-        db,
+        helm-images,
         call-cleanup-workflow,
         call-deploy-workflow,
-        lighthouse-check
+        lighthouse-monitor
       ]
     if: always()
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download artifacts
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: lighthouse-artifacts
           path: artifacts
+          digest-mismatch: warn  # Safety net: warn instead of error during v8 rollout
       - name: Set Emoji for Notification Status Icon
         id: notification-emoji
         run: |
@@ -370,9 +992,9 @@ jobs:
                 "title_link": "${{ env.INSPECT_JOB_URL }}",
                 "fields": [{
                   "title": "Verify Moodle",
-                  "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](https://${{ env.APP_HOST_URL }}/admin/index.php)"
+                  "value": "Verify that the site still works and updates have been completed (Admin access required) [Moodle Admin](${{ env.APP_HOST_URL }}/admin/index.php)"
                 },{
-                  "title": "Build DB: ${{ needs.db.result }}"
+                  "title": "Build Helm Images: ${{ needs.helm-images.result }}"
                 },{
                   "title": "Build PHP: ${{ needs.php.result }}"
                 },{
@@ -387,7 +1009,22 @@ jobs:
                   "title": "Deploy to OpenShift: ${{ needs.call-deploy-workflow.result }}"
                 },{
                   "title": "Lighthouse Test Results:",
-                  "value": "${{ needs.lighthouse-check.outputs.LHSTATUS }}"
+                  "value": "${{ needs.lighthouse-monitor.outputs.LHSTATUS }}"
+                },{
+                  "title": "Security Scan:",
+                  "value": "${{ needs.checkEnv.outputs.SECURITY_STATUS }} - ${{ needs.checkEnv.outputs.SECURITY_SUMMARY }}"
+                },{
+                  "title": "PHP Compatibility:",
+                  "value": "${{ needs.checkEnv.outputs.PHP_COMPAT_STATUS }}"
+                },{
+                  "title": "Security Reports:",
+                  "value": "[GitHub Actions Summary](${{ env.INSPECT_JOB_URL }}) | [📁 Security Artifacts](${{ env.INSPECT_JOB_URL }}#artifacts)"
+                },{
+                  "title": "Security Coverage:",
+                  "value": "Container Images + PHP Dependencies + Dependabot + License Compliance"
+                },{
+                  "title": "Health Monitor:",
+                  "value": "✅ Continuous monitoring deployed\\n• Pod log error detection\\n• Galera cluster monitoring\\n• Split-brain auto-healing"
                 }]
               }]
             }

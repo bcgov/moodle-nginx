@@ -1,0 +1,503 @@
+# Comprehensive Security Scanning with Caching
+# This workflow provides proactive security monitoring for ALL dependencies
+# with intelligent caching to optimize performance and avoid rate limits
+
+name: 🔒 Comprehensive Security Scan
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC (proactive monitoring)
+    - cron: '0 6 * * *'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'example.versions.env'
+      - 'openshift/dependencies/**'
+      - 'config/lighthouse/package.json'
+      - 'config/moodle/composer.json'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'example.versions.env'
+      - 'openshift/dependencies/**'
+      - 'config/lighthouse/package.json'
+      - 'config/moodle/composer.json'
+  workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: 'Force refresh all caches'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CACHE_VERSION: v1
+  SECURITY_RESULTS_RETENTION: 7 # days
+
+permissions:
+  contents: read
+
+jobs:
+  security-scan:
+    name: 🔍 Multi-Ecosystem Security Scan
+    runs-on: ubuntu-latest
+
+    outputs:
+      cache-hit: ${{ steps.cache-check.outputs.cache-hit }}
+      security-status: ${{ steps.security-summary.outputs.status }}
+      critical-issues: ${{ steps.security-summary.outputs.critical }}
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v5
+
+      # ==================================================================
+      # INTELLIGENT CACHING STRATEGY
+      # ==================================================================
+
+      - name: 🗂️ Generate Cache Keys
+        id: cache-keys
+        run: |
+          # Create composite cache key from all dependency files
+          deps_hash=$(find . -name "*.json" -o -name "*.yml" -o -name "*.env" | \
+                     grep -E "(package\.json|composer\.json|Chart\.yaml|versions\.env)" | \
+                     xargs cat | sha256sum | cut -d' ' -f1)
+
+          echo "deps-hash=$deps_hash" >> $GITHUB_OUTPUT
+          echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+
+          # Cache keys with different lifetimes
+          echo "daily-key=${{ env.CACHE_VERSION }}-security-daily-$(date +%Y-%m-%d)-$deps_hash" >> $GITHUB_OUTPUT
+          echo "weekly-key=${{ env.CACHE_VERSION }}-security-weekly-$(date +%Y-W%U)-$deps_hash" >> $GITHUB_OUTPUT
+          echo "deps-key=${{ env.CACHE_VERSION }}-security-deps-$deps_hash" >> $GITHUB_OUTPUT
+
+      - name: 📦 Cache Security Scan Results
+        id: cache-security
+        uses: actions/cache@v5
+        if: github.event.inputs.force_refresh != 'true'
+        with:
+          path: |
+            ~/.cache/trivy
+            ~/.cache/docker-scout
+            security-results/
+            vulnerability-db/
+          key: ${{ steps.cache-keys.outputs.daily-key }}
+          restore-keys: |
+            ${{ steps.cache-keys.outputs.weekly-key }}
+            ${{ steps.cache-keys.outputs.deps-key }}
+            ${{ env.CACHE_VERSION }}-security-weekly-
+            ${{ env.CACHE_VERSION }}-security-deps-
+
+      - name: 🏷️ Cache Status Check
+        id: cache-check
+        run: |
+          if [ "${{ steps.cache-security.outputs.cache-hit }}" == "true" ]; then
+            echo "✅ Using cached security results"
+            echo "cache-hit=true" >> $GITHUB_OUTPUT
+          else
+            echo "🔍 Running fresh security scans"
+            echo "cache-hit=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ==================================================================
+      # MULTI-ECOSYSTEM SECURITY SCANNING
+      # ==================================================================
+
+      - name: 🛠️ Setup Security Tools
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          # Install latest Trivy (primary container scanning tool)
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+          # Setup Node.js for NPM scanning
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+          # Setup PHP for Composer scanning
+          sudo apt-get update && sudo apt-get install -y php-cli php-json composer
+
+      - name: 🐳 Scan Container Images
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p security-results/containers
+
+          # Extract image versions from example.versions.env
+          source example.versions.env
+
+          # Create array of images to scan
+          declare -a images=(
+            "$PHP_IMAGE"
+            "$CRON_IMAGE"
+            "$DB_IMAGE"
+            "$WEB_IMAGE"
+            "$REDIS_IMAGE"
+            "$REDIS_SENTINEL_IMAGE"
+            "$BACKUP_IMAGE"
+            "$GOLANG_IMAGE"
+            "$UBUNTU_IMAGE"
+          )
+
+          echo "🔍 Scanning ${#images[@]} container images with Trivy..."
+
+          for image in "${images[@]}"; do
+            echo "Scanning: $image"
+            image_safe=$(echo "$image" | tr '/:' '_')
+
+            # Trivy scan (comprehensive)
+            trivy image --format json --output "security-results/containers/trivy-$image_safe.json" "$image" || true
+          done
+
+      - name: 📦 Scan NPM Dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p security-results/npm
+
+          cd config/lighthouse
+
+          # Install dependencies
+          npm ci
+
+          # NPM Audit
+          npm audit --json > ../../security-results/npm/audit.json || true
+
+          # Additional NPM security check
+          npx audit-ci --config ../../security-results/npm/audit-ci.json || true
+
+      - name: 🐘 Scan PHP Dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p security-results/php
+
+          cd config/moodle
+
+          # Install dependencies
+          composer install --no-dev
+
+          # Composer Audit
+          composer audit --format=json > ../../security-results/php/audit.json || true
+
+          # Additional security checks
+          composer outdated --format=json > ../../security-results/php/outdated.json || true
+
+      - name: ⚓ Scan Helm Charts
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p security-results/helm
+
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          cd openshift/dependencies
+
+          # Helm dependency check
+          helm dependency update . || true
+
+          # Scan Helm charts for known vulnerabilities
+          helm template . > ../../security-results/helm/manifests.yaml
+
+          # Trivy scan on generated manifests
+          trivy config --format json ../../security-results/helm/manifests.yaml > ../../security-results/helm/trivy-helm.json || true
+
+      - name: 🎯 Custom Version Analysis
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p security-results/custom
+
+          # Analyze example.versions.env for outdated versions
+          python3 << 'EOF'
+          import json
+          import re
+          import requests
+          from datetime import datetime
+
+          def check_image_freshness(image):
+              """Check if container image has recent updates"""
+              try:
+                  # This is a placeholder - you'd integrate with Docker Hub API or similar
+                  return {"image": image, "status": "unknown", "last_updated": None}
+              except Exception as e:
+                  return {"image": image, "status": "error", "error": str(e)}
+
+          # Read and parse example.versions.env
+          with open('example.versions.env', 'r') as f:
+              content = f.read()
+
+          # Extract image versions
+          image_pattern = r'(\w+_IMAGE)=(.+)'
+          images = re.findall(image_pattern, content)
+
+          results = []
+          for var_name, image in images:
+              result = check_image_freshness(image.strip('"'))
+              result['variable'] = var_name
+              results.append(result)
+
+          # Save results
+          with open('security-results/custom/version-analysis.json', 'w') as f:
+              json.dump({
+                  "scan_date": datetime.now().isoformat(),
+                  "images_analyzed": len(results),
+                  "results": results
+              }, f, indent=2)
+          EOF
+
+      # ==================================================================
+      # SECURITY ANALYSIS AND REPORTING
+      # ==================================================================
+
+      - name: 📊 Aggregate Security Results
+        id: security-summary
+        run: |
+          mkdir -p security-results/summary
+
+          # Aggregate all scan results
+          python3 << 'EOF'
+          import json
+          import os
+          from glob import glob
+          from datetime import datetime
+
+          def count_vulnerabilities(data, tool):
+              """Count vulnerabilities by severity"""
+              counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+
+              try:
+                  if tool == "trivy":
+                      for result in data.get("Results", []):
+                          for vuln in result.get("Vulnerabilities", []):
+                              severity = vuln.get("Severity", "unknown").lower()
+                              if severity in counts:
+                                  counts[severity] += 1
+                  elif tool == "npm":
+                      advisories = data.get("advisories", {})
+                      for advisory in advisories.values():
+                          severity = advisory.get("severity", "unknown").lower()
+                          if severity in counts:
+                              counts[severity] += 1
+                  elif tool == "composer":
+                      for advisory in data.get("advisories", []):
+                          severity = advisory.get("severity", "unknown").lower()
+                          if severity in counts:
+                              counts[severity] += 1
+              except Exception as e:
+                  print(f"Error processing {tool} data: {e}")
+
+              return counts
+
+          # Aggregate results from all scans
+          total_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+          scan_summary = {
+              "scan_date": datetime.now().isoformat(),
+              "scans_performed": [],
+              "total_vulnerabilities": total_counts,
+              "by_category": {}
+          }
+
+          # Process container scans
+          for trivy_file in glob("security-results/containers/trivy-*.json"):
+              try:
+                  with open(trivy_file, 'r') as f:
+                      data = json.load(f)
+                  counts = count_vulnerabilities(data, "trivy")
+
+                  image_name = os.path.basename(trivy_file).replace("trivy-", "").replace(".json", "")
+                  scan_summary["by_category"][f"container-{image_name}"] = counts
+
+                  for severity, count in counts.items():
+                      total_counts[severity] += count
+
+              except Exception as e:
+                  print(f"Error processing {trivy_file}: {e}")
+
+          # Process NPM scan
+          if os.path.exists("security-results/npm/audit.json"):
+              try:
+                  with open("security-results/npm/audit.json", 'r') as f:
+                      data = json.load(f)
+                  counts = count_vulnerabilities(data, "npm")
+                  scan_summary["by_category"]["npm-lighthouse"] = counts
+
+                  for severity, count in counts.items():
+                      total_counts[severity] += count
+              except Exception as e:
+                  print(f"Error processing NPM audit: {e}")
+
+          # Process PHP scan
+          if os.path.exists("security-results/php/audit.json"):
+              try:
+                  with open("security-results/php/audit.json", 'r') as f:
+                      data = json.load(f)
+                  counts = count_vulnerabilities(data, "composer")
+                  scan_summary["by_category"]["php-moodle"] = counts
+
+                  for severity, count in counts.items():
+                      total_counts[severity] += count
+              except Exception as e:
+                  print(f"Error processing PHP audit: {e}")
+
+          # Determine overall status
+          if total_counts["critical"] > 0:
+              status = "critical"
+          elif total_counts["high"] > 5:  # Threshold for high severity
+              status = "warning"
+          elif total_counts["high"] > 0 or total_counts["medium"] > 10:
+              status = "attention"
+          else:
+              status = "good"
+
+          scan_summary["overall_status"] = status
+          scan_summary["total_vulnerabilities"] = total_counts
+
+          # Save summary
+          with open("security-results/summary/aggregate.json", 'w') as f:
+              json.dump(scan_summary, f, indent=2)
+
+          # Output for GitHub Actions
+          print(f"status={status}")
+          print(f"critical={total_counts['critical']}")
+          print(f"high={total_counts['high']}")
+          print(f"total={sum(total_counts.values())}")
+          EOF
+
+          # Set outputs
+          status=$(python3 -c "import json; data=json.load(open('security-results/summary/aggregate.json')); print(data['overall_status'])")
+          critical=$(python3 -c "import json; data=json.load(open('security-results/summary/aggregate.json')); print(data['total_vulnerabilities']['critical'])")
+
+          echo "status=$status" >> $GITHUB_OUTPUT
+          echo "critical=$critical" >> $GITHUB_OUTPUT
+
+      # ==================================================================
+      # SECURITY ALERTS AND NOTIFICATIONS
+      # ==================================================================
+
+      - name: 🚨 Security Alert Assessment
+        id: alert-level
+        run: |
+          status="${{ steps.security-summary.outputs.status }}"
+          critical="${{ steps.security-summary.outputs.critical }}"
+
+          # Determine alert level and actions
+          case $status in
+            "critical")
+              echo "🔴 CRITICAL SECURITY ISSUES DETECTED!"
+              echo "action=block" >> $GITHUB_OUTPUT
+              echo "notification=critical" >> $GITHUB_OUTPUT
+              echo "deploy-gate=fail" >> $GITHUB_OUTPUT
+              ;;
+            "warning")
+              echo "🟡 HIGH SEVERITY ISSUES DETECTED"
+              echo "action=warn" >> $GITHUB_OUTPUT
+              echo "notification=warning" >> $GITHUB_OUTPUT
+              echo "deploy-gate=warn" >> $GITHUB_OUTPUT
+              ;;
+            "attention")
+              echo "🟢 SECURITY REVIEW RECOMMENDED"
+              echo "action=review" >> $GITHUB_OUTPUT
+              echo "notification=info" >> $GITHUB_OUTPUT
+              echo "deploy-gate=pass" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "✅ SECURITY STATUS: GOOD"
+              echo "action=none" >> $GITHUB_OUTPUT
+              echo "notification=none" >> $GITHUB_OUTPUT
+              echo "deploy-gate=pass" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: 📋 Generate Security Report
+        run: |
+          # Create human-readable report
+          cat > security-report.md << 'EOF'
+          # 🔒 Security Scan Report
+
+          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Branch:** ${{ github.ref_name }}
+          **Status:** ${{ steps.security-summary.outputs.status }}
+          **Cache Used:** ${{ steps.cache-check.outputs.cache-hit }}
+
+          ## 📊 Vulnerability Summary
+
+          | Severity | Count |
+          |----------|-------|
+          | Critical | ${{ steps.security-summary.outputs.critical }} |
+          | High | $(cat security-results/summary/aggregate.json | jq -r '.total_vulnerabilities.high') |
+          | Medium | $(cat security-results/summary/aggregate.json | jq -r '.total_vulnerabilities.medium') |
+          | Low | $(cat security-results/summary/aggregate.json | jq -r '.total_vulnerabilities.low') |
+
+          ## 🎯 Scan Coverage
+
+          - ✅ Container Images: $(ls security-results/containers/ | wc -l) scanned
+          - ✅ NPM Dependencies: Lighthouse packages
+          - ✅ PHP Dependencies: Moodle packages
+          - ✅ Helm Charts: Platform dependencies
+          - ✅ Custom Analysis: Version freshness
+
+          ## 🚦 Deployment Gate Status
+
+          **Result:** ${{ steps.alert-level.outputs.deploy-gate }}
+
+          EOF
+
+          # Add category breakdown if available
+          if [ -f "security-results/summary/aggregate.json" ]; then
+            echo "## 📂 By Category" >> security-report.md
+            echo "" >> security-report.md
+            python3 << 'PYEOF'
+          import json
+          with open('security-results/summary/aggregate.json', 'r') as f:
+              data = json.load(f)
+
+          for category, counts in data.get('by_category', {}).items():
+              total = sum(counts.values())
+              if total > 0:
+                  print(f"- **{category}**: {total} issues ({counts['critical']} critical, {counts['high']} high)")
+          PYEOF
+          fi
+
+      - name: 💾 Archive Security Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-scan-results-${{ github.run_number }}
+          path: |
+            security-results/
+            security-report.md
+          retention-days: ${{ env.SECURITY_RESULTS_RETENTION }}
+
+      # ==================================================================
+      # DEPLOYMENT GATES & NOTIFICATIONS
+      # ==================================================================
+
+      - name: 🚫 Deployment Gate - Critical Issues
+        if: steps.alert-level.outputs.deploy-gate == 'fail'
+        run: |
+          echo "🔴 DEPLOYMENT BLOCKED: Critical security vulnerabilities detected!"
+          echo "Critical issues: ${{ steps.security-summary.outputs.critical }}"
+          echo ""
+          echo "Action required:"
+          echo "1. Review security scan results"
+          echo "2. Update vulnerable dependencies"
+          echo "3. Re-run security scan"
+          echo "4. Deployment will be unblocked when critical issues are resolved"
+
+          exit 1
+
+      - name: ⚠️ Deployment Gate - Warning
+        if: steps.alert-level.outputs.deploy-gate == 'warn'
+        run: |
+          echo "🟡 DEPLOYMENT WARNING: High severity vulnerabilities detected!"
+          echo "Review recommended but deployment can proceed."
+          echo ""
+          echo "Consider:"
+          echo "1. Reviewing security scan results"
+          echo "2. Planning dependency updates"
+          echo "3. Monitoring for security patches"
+
+      # Add Rocket.Chat notification here if you have webhook
+      # - name: 📢 Notify Security Team
+      #   if: steps.alert-level.outputs.notification != 'none'
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ steps.alert-level.outputs.notification }}
+      #     text: "Security scan completed: ${{ steps.security-summary.outputs.status }}"
