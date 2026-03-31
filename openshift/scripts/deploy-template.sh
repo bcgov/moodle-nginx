@@ -192,6 +192,31 @@ clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "bcgovp
 log_info "🔧 Updating Redis proxy configuration after right-sizing..."
 update_redis_proxy_after_scaling "$REDIS_NAME" "$REDIS_PROXY_NAME" "$DEPLOY_NAMESPACE"
 
+# =============================================================================
+# DATABASE READINESS GATE
+# Verify MariaDB/Galera cluster is healthy BEFORE restoring routes.
+# Specifically checks for split-brain (multiple cluster UUIDs), which causes
+# "Error reading from database" when pods serve from divergent data sets.
+# =============================================================================
+log_info "🔍 Verifying Galera cluster health before restoring user-facing routes..."
+check_galera_cluster_health "app.kubernetes.io/name=$DB_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE"
+GALERA_HEALTH=$?
+if [[ $GALERA_HEALTH -eq 2 ]]; then
+  log_error "🚨 SPLIT-BRAIN DETECTED — aborting route restoration to protect users"
+  log_error "Site remains in maintenance mode. Manual intervention required:"
+  log_error "  1. Identify the primary node (highest seqno in grastate.dat)"
+  log_error "  2. Scale galera to 1 replica (keep primary only)"
+  log_error "  3. Delete PVCs for secondary nodes"
+  log_error "  4. Scale back up — secondaries will SST from primary"
+  exit 1
+elif [[ $GALERA_HEALTH -eq 1 ]]; then
+  log_error "Database cluster is unhealthy — aborting route restoration to protect users"
+  log_error "Site remains in maintenance mode. Investigate MariaDB/Galera health:"
+  log_error "  oc get pods -l app.kubernetes.io/name=$DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE"
+  log_error "  oc exec <galera-pod> -- mariadb -u\$DB_USER -p\$DB_PASSWORD -e \"SHOW STATUS LIKE 'wsrep%';\""
+  exit 1
+fi
+
 # Disable maintenance mode with integrated verification and scaling
 log_info "🔄 Disabling maintenance mode with automatic verification and cleanup..."
 manage_maintenance_mode "disable" "web" "auto"

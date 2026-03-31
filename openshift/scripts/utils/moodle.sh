@@ -775,8 +775,11 @@ manage_maintenance_mode() {
     enable_maintenance_mode $deployment_name ${route_name:-auto}
     expected_output="Your site is currently in CLI maintenance mode"
   else
-    # For disable mode, the deployment_name parameter is actually the target service name
-    disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
+    # For disable mode: we run the PHP CLI command FIRST (while routes still
+    # point to maintenance) to confirm the database is accessible. Only after
+    # PHP confirms success do we redirect routes to the live application.
+    # This prevents users from seeing "Error reading from database" when Galera
+    # is still recovering.
     expected_output="Maintenance mode has been disabled"
   fi
 
@@ -823,9 +826,12 @@ manage_maintenance_mode() {
     sleep $wait_time
   done
 
-  # Additional steps for disable mode: verify application response and scale down maintenance service
+  # For disable mode: NOW redirect routes (after PHP CLI confirmed DB is healthy)
   if [[ $action == "disable" ]]; then
     echo ""
+    echo "🔄 PHP maintenance mode disabled — now redirecting routes to application..."
+    disable_maintenance_mode "$deployment_name" "maintenance-message" ${route_name:-auto}
+
     echo "🔍 Verifying application response before scaling down maintenance service..."
 
     # Verify application response
