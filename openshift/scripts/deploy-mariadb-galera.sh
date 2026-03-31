@@ -144,10 +144,10 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set galera.mariabackup.password=$DB_PASSWORD \
     --set galera.bootstrap.forceBootstrap=false \
     --set galera.bootstrap.forceSafeToBootstrap=false \
-    --set podManagementPolicy=OrderedReady \
     --set replicaCount=0 \
     --reuse-values 2>&1)
-    # -f ./config/mariadb/galera-values.yaml 2>&1)
+    # NOTE: podManagementPolicy is immutable on existing StatefulSets.
+    # It is only set to OrderedReady on helm install (fresh deployments).
 
   # Output the response for debugging purposes
   # echo "$helm_upgrade_response"
