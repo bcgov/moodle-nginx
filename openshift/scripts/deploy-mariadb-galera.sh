@@ -142,6 +142,9 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
     --set rootUser.password=$DB_PASSWORD \
     --set galera.mariabackup.password=$DB_PASSWORD \
+    --set galera.bootstrap.forceBootstrap=false \
+    --set galera.bootstrap.forceSafeToBootstrap=false \
+    --set podManagementPolicy=OrderedReady \
     --set replicaCount=0 \
     --reuse-values 2>&1)
     # -f ./config/mariadb/galera-values.yaml 2>&1)
@@ -174,7 +177,7 @@ else
     --set image.pullPolicy=Always \
     --set global.security.allowInsecureImages=true \
     --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET:-artifactory-m950-learning}" \
-    --set podManagementPolicy=Parallel \
+    --set podManagementPolicy=OrderedReady \
     --set galera.bootstrap.forceSafeToBootstrap=true \
     --set galera.bootstrap.forceBootstrap=true \
     --set galera.bootstrap.bootstrapFromNode=0 \
@@ -326,6 +329,29 @@ if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 30 $DB_REPLICAS; then
   exit 1
 fi
 echo "✔️ MariaDB Galera nodes are synchronized."
+
+# Split-brain detection: verify all pods share the same cluster UUID.
+# wait_for_galera_sync checks per-pod state (Synced + cluster_size) but does
+# NOT compare UUIDs across pods.  A split-brain can pass that check when each
+# independent cluster reports Synced with size=1.
+echo "🔍 Verifying Galera cluster consistency (split-brain detection)..."
+check_galera_cluster_health "app.kubernetes.io/name=$DB_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "$DB_REPLICAS"
+GALERA_HEALTH=$?
+if [[ $GALERA_HEALTH -eq 2 ]]; then
+  echo "🚨 SPLIT-BRAIN DETECTED after scale-up!"
+  echo "   Pods have divergent cluster UUIDs — data integrity is at risk."
+  echo "   The deployment will NOT proceed. Manual recovery steps:"
+  echo "   1. oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1   (keep galera-0)"
+  echo "   2. Delete PVCs for secondary nodes (data-$DB_DEPLOYMENT_NAME-1, -2, ...)"
+  echo "   3. Verify galera-0 has production data: SELECT COUNT(*) FROM user;"
+  echo "   4. oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS"
+  exit 1
+elif [[ $GALERA_HEALTH -eq 1 ]]; then
+  echo "⚠️ Some Galera pods are unhealthy after scale-up."
+  echo "   Deployment will NOT proceed. Check pod logs for details."
+  exit 1
+fi
+echo "✅ Galera cluster is consistent — no split-brain detected."
 
 echo "🔍 Verifying pods are using correct image..."
 # Get all pod names for the StatefulSet

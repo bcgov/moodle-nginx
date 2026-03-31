@@ -74,6 +74,29 @@ do
       echo "FAILED:$Type/$Deployment" >> /tmp/right-sizing-failures.txt
     fi
 
+    # Galera-specific: verify cluster synchronization and consistency after scaling.
+    # scale_deployment only checks pod logs — it doesn't verify Galera state.
+    # Pods can appear "healthy" while in split-brain (independent clusters).
+    if [[ "$Type" == "sts" && "$Deployment" == *"galera"* ]]; then
+      echo "🔍 Verifying Galera cluster synchronization for $Deployment..."
+      if ! wait_for_galera_sync "$Deployment" 30 10 "$PodCount"; then
+        echo "❌ $Deployment Galera cluster failed to synchronize after right-sizing"
+        echo "FAILED:$Type/$Deployment (Galera sync)" >> /tmp/right-sizing-failures.txt
+      else
+        echo "✅ $Deployment Galera cluster is synchronized ($PodCount nodes)"
+        # Additional split-brain check — verify all pods share the same cluster UUID
+        check_galera_cluster_health "app.kubernetes.io/name=$Deployment" "$DEPLOY_NAMESPACE" "$PodCount"
+        GALERA_HEALTH=$?
+        if [[ $GALERA_HEALTH -eq 2 ]]; then
+          echo "🚨 SPLIT-BRAIN DETECTED in $Deployment after right-sizing!"
+          echo "FAILED:$Type/$Deployment (split-brain)" >> /tmp/right-sizing-failures.txt
+        elif [[ $GALERA_HEALTH -eq 1 ]]; then
+          echo "⚠️ $Deployment has unhealthy pods after right-sizing"
+          echo "FAILED:$Type/$Deployment (unhealthy pods)" >> /tmp/right-sizing-failures.txt
+        fi
+      fi
+    fi
+
     # Check if MaxPods is greater than PodCount before creating the HPA
     if [[ $MaxPods -gt $PodCount ]]; then
       create_hpa "$Deployment" "$Type/$Deployment" "$PodCount" "$MaxPods" "$CPUScaleValue"
