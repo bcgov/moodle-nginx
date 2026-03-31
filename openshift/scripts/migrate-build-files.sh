@@ -64,8 +64,25 @@ source /usr/local/bin/_utils.sh
 src_dir='/app/public'
 dest_dir='/var/www/html'
 
+# Extract Moodle release versions from version.php in source and destination.
+# Moodle version.php contains: $release = '4.5.1 (Build: 20250113)';
+# We extract just the semver portion (e.g., "4.5.1") for comparison.
+extract_moodle_version() {
+  local version_file="$1/version.php"
+  if [[ -f "$version_file" ]]; then
+    grep -oP "\\\$release\s*=\s*'\K[0-9]+\.[0-9]+(\.[0-9]+)?" "$version_file" || echo ""
+  else
+    echo ""
+  fi
+}
+
+src_version=$(extract_moodle_version "$src_dir")
+dest_version=$(extract_moodle_version "$dest_dir")
+log_info "Source version: ${src_version:-<not found>}"
+log_info "Destination version: ${dest_version:-<not found>}"
+
 # Check if the build is newer than the last migration
-should_migrate_by_version
+should_migrate_by_version "$dest_version" "$src_version" "patch"
 migration_result=$?
 
 if [ $migration_result -eq 0 ]; then
@@ -83,7 +100,7 @@ else
   log_debug "Source file count: $src_count"
   log_debug "Destination file count: $dest_count"
   if [ "$src_count" -ne "$dest_count" ]; then
-    log_info "File counts not not match. Checking if files are missing..."
+    log_info "File counts do not match. Checking if files are missing..."
     count_difference=$((src_count - dest_count))
     if [ $count_difference -gt 2 ]; then
       log_info "Source has $count_difference more files than destination. Proceeding with migration..."
