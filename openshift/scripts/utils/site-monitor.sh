@@ -88,16 +88,25 @@ monitor_site_deployment() {
       esac
     fi
 
-    # ── Check sibling job status during BASELINE (every 120s) ──
-    # If builds/deploy have failed, there's no deployment coming — exit early
-    if [ "$STATE" = "BASELINE" ] && [ $(( now - last_job_check )) -ge $job_check_interval ]; then
+    # ── Check sibling job status (every 120s) ──
+    # If builds/deploy have failed, there's no point waiting for the site
+    # BASELINE: no deployment will occur — exit early to audit the live site
+    # DEPLOYING: deploy failed mid-flight — site won't recover on its own
+    if [ $(( now - last_job_check )) -ge $job_check_interval ]; then
       last_job_check=$now
       if _check_pipeline_failed; then
         echo ""
-        echo "🛑 Pipeline failure detected — builds or deploy have failed/been cancelled"
-        echo "   No deployment will occur. Proceeding to audit the current live site."
-        _monitor_output "MONITOR_RESULT" "pipeline_failed"
-        _monitor_print_summary "$transition_count" "BASELINE (pipeline_failed)" "$elapsed" "$baseline_checks"
+        if [ "$STATE" = "BASELINE" ]; then
+          echo "🛑 Pipeline failure detected — builds or deploy have failed/been cancelled"
+          echo "   No deployment will occur. Proceeding to audit the current live site."
+          _monitor_output "MONITOR_RESULT" "pipeline_failed"
+          _monitor_print_summary "$transition_count" "BASELINE (pipeline_failed)" "$elapsed" "$baseline_checks"
+        else
+          echo "🛑 Pipeline failure detected during deployment — deploy job failed/cancelled"
+          echo "   Site will not recover automatically. Skipping further monitoring."
+          _monitor_output "MONITOR_RESULT" "pipeline_failed"
+          _monitor_print_summary "$transition_count" "DEPLOYING (pipeline_failed)" "$elapsed" "$baseline_checks"
+        fi
         return 0
       fi
     fi

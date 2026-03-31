@@ -891,7 +891,8 @@ jobs:
         if: |
           always() &&
           (steps.monitor.outcome == 'success' || steps.monitor.outcome == 'skipped') &&
-          steps.monitor.outputs.MONITOR_RESULT != 'timeout_deploying'
+          steps.monitor.outputs.MONITOR_RESULT != 'timeout_deploying' &&
+          steps.monitor.outputs.MONITOR_RESULT != 'pipeline_failed'
         run: |
           source openshift/scripts/utils/lighthouse-audit.sh
           TARGET_URL="https://${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}.apps.silver.devops.gov.bc.ca"
