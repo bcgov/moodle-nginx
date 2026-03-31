@@ -160,7 +160,7 @@ async function runLighthouse(url, options, config = null) {
     // Get the scores
     // const accessibilityScore = lhr.categories.accessibility.score * 100;
     // const performanceScore = lhr.categories.performance.score * 100;
-    // const bestPracticesScore = lhr.categories['best-practices'].score * 100;
+    // const bestPracticesScore = lhr.categories['best_practices'].score * 100;
     // const filename = pathsPassed.toString() + '_' + path.replace(/\W+/g, "_");
 
     // const pageContent = await page.content();

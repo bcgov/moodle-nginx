@@ -5,7 +5,7 @@ const testURL = process.env.APP_HOST_URL + '/login/index.php'
 const options = {
   chromeFlags: ['--headless'],
   output: 'json',
-  onlyCategories: ['accessibility', 'performance', 'best-practices'],
+  onlyCategories: ['accessibility', 'performance', 'best_practices'],
 };
 
 // Lighthouse config: disable simulated throttling for CI — use real network speed.
@@ -354,7 +354,7 @@ async function runLighthouse(url, options, config = null) {
       const hasNullScores = lhr && (
         lhr.categories.accessibility.score === null ||
         lhr.categories.performance.score === null ||
-        lhr.categories['best-practices'].score === null
+        lhr.categories['best_practices'].score === null
       );
 
       if (!lhr || hasRuntimeError || hasNullScores) {
@@ -379,7 +379,7 @@ async function runLighthouse(url, options, config = null) {
     const hasValidScores = lhr
       && lhr.categories.accessibility.score !== null
       && lhr.categories.performance.score !== null
-      && lhr.categories['best-practices'].score !== null
+      && lhr.categories['best_practices'].score !== null
       && !(lhr.runtimeError && lhr.runtimeError.code);
 
     if (!hasValidScores) {
@@ -402,7 +402,7 @@ async function runLighthouse(url, options, config = null) {
     // Get the scores
     const accessibilityScore = Math.round(lhr.categories.accessibility.score * 100);
     const performanceScore = Math.round(lhr.categories.performance.score * 100);
-    const bestPracticesScore = Math.round(lhr.categories['best-practices'].score * 100);
+    const bestPracticesScore = Math.round(lhr.categories['best_practices'].score * 100);
 
     // Verify the scores
     const scoreFailed = accessibilityScore < 90 || performanceScore < 35 || bestPracticesScore < 80;
