@@ -301,34 +301,97 @@ else
 fi
 
 # Now scale up to the desired number of replicas with patched configuration
-echo "📈 Scaling StatefulSet to $DB_REPLICAS replicas with patched configuration..."
-oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$DB_REPLICAS
+# First, fix the Galera cluster address env var.
+# helm upgrade with replicaCount=0 causes the chart to render
+# MARIADB_GALERA_CLUSTER_ADDRESS=gcomm:// (empty — no members for 0 replicas).
+# --reuse-values preserves this empty address across upgrades.
+# We must inject the real cluster address before pods start, or every pod
+# bootstraps its own independent cluster (split-brain).
+HEADLESS_SVC="${DB_DEPLOYMENT_NAME}-headless.${DEPLOY_NAMESPACE}.svc.cluster.local"
+WSREP_NODES=""
+for i in $(seq 0 $((DB_REPLICAS - 1))); do
+  [ -n "$WSREP_NODES" ] && WSREP_NODES="${WSREP_NODES},"
+  WSREP_NODES="${WSREP_NODES}${DB_DEPLOYMENT_NAME}-${i}.${HEADLESS_SVC}"
+done
+GALERA_CLUSTER_ADDRESS="gcomm://${WSREP_NODES}"
+echo "📡 Setting Galera cluster address: $GALERA_CLUSTER_ADDRESS"
+oc set env statefulset/$DB_DEPLOYMENT_NAME \
+  "MARIADB_GALERA_CLUSTER_ADDRESS=${GALERA_CLUSTER_ADDRESS}" \
+  "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+  -n "$DEPLOY_NAMESPACE"
 
-# Wait for the StatefulSet to show the desired number of replicas
-echo "⏳ Waiting for StatefulSet to update replica count..."
-ATTEMPTS=0
-MAX_ATTEMPTS=30
-while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}') -ne $DB_REPLICAS && $ATTEMPTS -lt $MAX_ATTEMPTS ]]; do
-  WAITED=$((ATTEMPTS * 2))
-  echo "   Waiting for spec.replicas to update... $WAITED seconds"
-  sleep 2
-  ATTEMPTS=$((ATTEMPTS + 1))
+# Scale up incrementally to emulate OrderedReady behaviour.
+# The StatefulSet uses podManagementPolicy=Parallel (immutable — can't be
+# changed on an existing STS), so scaling directly to N starts ALL pods at once.
+# Fresh secondary pods create grastate.dat with safe_to_bootstrap: 1, which
+# makes each one bootstrap its own independent cluster (--wsrep-new-cluster).
+# When these discover galera-0's established cluster, a Galera PC protocol
+# race condition determines if they merge or crash with "conflicting prims".
+# Incremental scaling (1 → 2 → ... → N) ensures each secondary starts AFTER
+# the previous one has synced, so galera-0's cluster is always the sole primary.
+echo "📈 Scaling StatefulSet incrementally to $DB_REPLICAS replicas..."
+for SCALE_TARGET in $(seq 1 $DB_REPLICAS); do
+  CURRENT_REPLICAS=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}' -n "$DEPLOY_NAMESPACE")
+  if [[ "$CURRENT_REPLICAS" -ge "$SCALE_TARGET" ]]; then
+    echo "   ✅ Already at $CURRENT_REPLICAS replicas (target: $SCALE_TARGET)"
+    continue
+  fi
+
+  echo "   📈 Scaling to $SCALE_TARGET/$DB_REPLICAS replicas..."
+  oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$SCALE_TARGET -n "$DEPLOY_NAMESPACE"
+
+  # Wait for the new pod to become Ready
+  NEW_POD="${DB_DEPLOYMENT_NAME}-$((SCALE_TARGET - 1))"
+  echo "   ⏳ Waiting for $NEW_POD to be Ready..."
+  READY_ATTEMPTS=0
+  MAX_READY_ATTEMPTS=60
+  while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
+    POD_READY=$(oc get pod "$NEW_POD" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+    if [[ "$POD_READY" == "True" ]]; then
+      echo "   ✅ $NEW_POD is Ready"
+      break
+    fi
+    sleep 10
+    READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
+    if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
+      WAITED=$((READY_ATTEMPTS * 10))
+      echo "   ⏳ Still waiting for $NEW_POD... ${WAITED}s elapsed"
+    fi
+  done
+
+  if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
+    echo "   ❌ $NEW_POD failed to become Ready within 600s"
+    # Check if it's CrashLooping due to safe_to_bootstrap
+    RESTART_COUNT=$(oc get pod "$NEW_POD" -o jsonpath='{.status.containerStatuses[0].restartCount}' -n "$DEPLOY_NAMESPACE" 2>/dev/null || echo "0")
+    if [[ "$RESTART_COUNT" -gt 1 ]]; then
+      echo "   🔄 $NEW_POD is CrashLooping (restarts=$RESTART_COUNT) — attempting safe_to_bootstrap fix..."
+      for attempt in $(seq 1 30); do
+        if oc exec "$NEW_POD" -n "$DEPLOY_NAMESPACE" -- \
+          sed -i 's/safe_to_bootstrap: 1/safe_to_bootstrap: 0/' /bitnami/mariadb/data/grastate.dat 2>/dev/null; then
+          echo "   ✅ Reset safe_to_bootstrap on $NEW_POD (attempt $attempt)"
+          echo "   ⏳ Waiting for $NEW_POD to recover..."
+          sleep 30
+          # Re-check readiness
+          for recovery_check in $(seq 1 30); do
+            POD_READY=$(oc get pod "$NEW_POD" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+            if [[ "$POD_READY" == "True" ]]; then
+              echo "   ✅ $NEW_POD recovered and is Ready"
+              break 2
+            fi
+            sleep 10
+          done
+          echo "   ❌ $NEW_POD did not recover after safe_to_bootstrap fix."
+          exit 1
+        fi
+        sleep 5
+      done
+    fi
+    echo "❌ Failed to scale to $SCALE_TARGET replicas. Exiting..."
+    exit 1
+  fi
 done
 
-if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
-  echo "⚠️  Warning: StatefulSet spec.replicas did not update to $DB_REPLICAS within expected time"
-else
-  echo "✅ StatefulSet spec.replicas set to $DB_REPLICAS"
-fi
-
-sleep 10
-
-echo "Waiting for MariaDB Galera nodes to synchronize..."
-if ! wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 30 $DB_REPLICAS; then
-  echo "❌ MariaDB Galera nodes failed to synchronize. Exiting..."
-  exit 1
-fi
-echo "✔️ MariaDB Galera nodes are synchronized."
+echo "✅ All $DB_REPLICAS replicas scaled and Ready."
 
 # Split-brain detection: verify all pods share the same cluster UUID.
 # wait_for_galera_sync checks per-pod state (Synced + cluster_size) but does
