@@ -1,6 +1,17 @@
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
-
+#
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  ⚠️  REFERENCE ONLY — NOT CONSUMED BY HELM                         ║
+# ║                                                                    ║
+# ║  This file documents the Bitnami MariaDB Galera chart defaults.    ║
+# ║  Helm values are set exclusively via --set flags in:               ║
+# ║    openshift/scripts/deploy-mariadb-galera.sh                      ║
+# ║                                                                    ║
+# ║  Do NOT edit values here expecting them to take effect.            ║
+# ║  The --set flags are the single source of truth.                   ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
 ## @section Global parameters
 ## Global Docker image parameters
 ## Please, note that this will override the image parameters, including dependencies, configured to use the global value
@@ -374,6 +385,12 @@ galera:
   name: galera
   ## Bootstraping options
   ## ref: https://github.com/bitnami/containers/tree/main/bitnami/mariadb-galera#bootstraping
+  ##
+  ## ⚠️  AUTHORITATIVE SOURCE: --set flags in openshift/scripts/deploy-mariadb-galera.sh
+  ##     Values below are chart defaults for reference only.
+  ##     helm upgrade uses: --set galera.bootstrap.forceBootstrap=false
+  ##                        --set galera.bootstrap.forceSafeToBootstrap=false
+  ##     helm install uses: --set galera.bootstrap.forceBootstrap=true (first deploy only)
   ##
   bootstrap:
     ## @param galera.bootstrap.forceBootstrap Option to force the boostraping from the indicated node in `galera.bootstarp.bootstrapFromNode`

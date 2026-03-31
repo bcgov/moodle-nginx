@@ -68,10 +68,53 @@ do
   if [[ $PodCount -eq 0 ]]; then
     echo "Skipping optional / temporary resource... no pods required to be running."
   else
-    if ! scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"; then
-      echo "❌ $Type/$Deployment failed to stabilize after scaling"
-      # Signal failure to parent shell via temp file (pipe subshell can't set vars)
-      echo "FAILED:$Type/$Deployment" >> /tmp/right-sizing-failures.txt
+    # Galera StatefulSets require incremental scaling (1→2→...→N) because
+    # podManagementPolicy=Parallel (immutable) starts ALL pods at once.
+    # Fresh secondary pods bootstrap independent clusters, which causes
+    # split-brain or "conflicting prims" crashes.
+    if [[ "$Type" == "sts" && "$Deployment" == *"galera"* && $PodCount -gt 1 ]]; then
+      echo "📈 Incremental Galera scaling for $Deployment to $PodCount replicas..."
+      GALERA_SCALE_FAILED=false
+      for SCALE_TARGET in $(seq 1 $PodCount); do
+        CURRENT=$(oc get sts/$Deployment -o jsonpath='{.spec.replicas}' -n "$DEPLOY_NAMESPACE" 2>/dev/null || echo "0")
+        if [[ "$CURRENT" -ge "$SCALE_TARGET" ]]; then
+          echo "   ✅ Already at $CURRENT replicas (target: $SCALE_TARGET)"
+          continue
+        fi
+        echo "   📈 Scaling $Deployment to $SCALE_TARGET/$PodCount..."
+        oc scale sts/$Deployment --replicas=$SCALE_TARGET -n "$DEPLOY_NAMESPACE"
+        NEW_POD="${Deployment}-$((SCALE_TARGET - 1))"
+        echo "   ⏳ Waiting for $NEW_POD to be Ready..."
+        READY_ATTEMPTS=0
+        MAX_READY_ATTEMPTS=60
+        while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
+          POD_READY=$(oc get pod "$NEW_POD" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+          if [[ "$POD_READY" == "True" ]]; then
+            echo "   ✅ $NEW_POD is Ready"
+            break
+          fi
+          sleep 10
+          READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
+          if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
+            echo "   ⏳ Still waiting for $NEW_POD... $((READY_ATTEMPTS * 10))s elapsed"
+          fi
+        done
+        if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
+          echo "   ❌ $NEW_POD failed to become Ready within 600s"
+          GALERA_SCALE_FAILED=true
+          break
+        fi
+      done
+      if [[ "$GALERA_SCALE_FAILED" == "true" ]]; then
+        echo "❌ $Type/$Deployment incremental scaling failed"
+        echo "FAILED:$Type/$Deployment (incremental scaling)" >> /tmp/right-sizing-failures.txt
+      fi
+    else
+      if ! scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"; then
+        echo "❌ $Type/$Deployment failed to stabilize after scaling"
+        # Signal failure to parent shell via temp file (pipe subshell can't set vars)
+        echo "FAILED:$Type/$Deployment" >> /tmp/right-sizing-failures.txt
+      fi
     fi
 
     # Check if MaxPods is greater than PodCount before creating the HPA
