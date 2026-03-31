@@ -446,7 +446,7 @@ analyze_lighthouse_results() {
     if command -v jq >/dev/null 2>&1; then
       local performance=$(jq -r '.categories.performance.score // "unknown"' "$report" 2>/dev/null)
       local accessibility=$(jq -r '.categories.accessibility.score // "unknown"' "$report" 2>/dev/null)
-      local best_practices=$(jq -r '.categories["best-practices"].score // "unknown"' "$report" 2>/dev/null)
+      local best_practices=$(jq -r '.categories["best_practices"].score // .categories["best-practices"].score // "unknown"' "$report" 2>/dev/null)
       local seo=$(jq -r '.categories.seo.score // "unknown"' "$report" 2>/dev/null)
 
       # Convert scores to percentages
