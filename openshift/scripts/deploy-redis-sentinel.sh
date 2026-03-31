@@ -303,12 +303,12 @@ fi
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 
-log_debug "Redis Helm chart information:"
+log_info "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
+log_debug "ℹ️  Note: Deploying from bitnamilegacy (archived) images, not current bitnami repo."
+log_debug "   Current bitnami/redis versions (for reference only — not deployed):"
 if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
   helm search repo bitnami/redis --versions | head -5
 fi
-
-log_info "🔧 Using Redis chart version: $REDIS_CHART_VERSION"
 
 log_debug "Checking generated redis-values.yaml file..."
 log_debug "--- FIPS Configuration ---"
@@ -317,10 +317,10 @@ if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
 fi
 log_debug "--- End FIPS Configuration ---"
 
-log_debug "Redis deployment info:"
-log_debug "  Redis: bitnamilegacy/redis:8.0.2-debian-12-r2"
-log_debug "  Sentinel: bitnamilegacy/redis-sentinel:8.0.2-debian-12-r1"
-log_debug "Chart: $REDIS_CHART_VERSION"
+log_debug "Redis deployment info (authoritative):"
+log_debug "  Redis: ${REDIS_IMAGE_REPOSITORY}:${REDIS_IMAGE_TAG}"
+log_debug "  Sentinel: ${SENTINEL_IMAGE_REPOSITORY}:${SENTINEL_IMAGE_TAG}"
+log_debug "  Chart: $REDIS_CHART_VERSION"
 
 log_debug "Helm deployment arguments:"
 if [[ "${DEBUG_LEVEL}" == "DEBUG" ]]; then
@@ -349,7 +349,7 @@ else
   REDIS_ARGS_STRING="${REDIS_ARGS[*]}"
   create_or_update_helm_deployment "$REDIS_NAME" "$REDIS_HELM_CHART" \
     "redis-values.yaml" \
-    "redis-values.yaml" \
+    "/dev/null" \
     "$REDIS_ARGS_STRING"
 fi
 
