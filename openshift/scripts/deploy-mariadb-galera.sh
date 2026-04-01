@@ -40,6 +40,96 @@
 # Source the utility script
 source ./openshift/scripts/_utils.sh
 
+# =============================================================================
+# FAILURE CLEANUP — trap handler for safe rollback on exit 1
+# =============================================================================
+# Tracks deployment phase so cleanup knows what to undo.
+# Environment-aware:
+#   Dev/Test: restore previous replica count (best-effort site recovery)
+#   Prod:     leave site in maintenance mode for manual review
+# Always:     restore RollingUpdate strategy + BOOTSTRAP=no if we changed them
+# =============================================================================
+GALERA_DEPLOY_PHASE="init"      # Tracks where we are in the deployment
+PRE_DEPLOY_REPLICAS=""          # Captured before scale-down
+
+galera_cleanup() {
+  local exit_code=$?
+  if [[ $exit_code -eq 0 ]]; then
+    return 0
+  fi
+
+  echo ""
+  echo "🔴 ============================================="
+  echo "🔴 GALERA DEPLOYMENT FAILED (phase: $GALERA_DEPLOY_PHASE)"
+  echo "🔴 ============================================="
+
+  # Always restore safe template state if we touched it
+  if [[ "$GALERA_DEPLOY_PHASE" =~ ^(ondelete|bootstrap|env-flip|scale-up|refresh|restore)$ ]]; then
+    echo "🔧 Cleanup: restoring safe StatefulSet template state..."
+
+    # Restore BOOTSTRAP=no to prevent accidental bootstrap on next pod restart
+    oc set env statefulset/$DB_DEPLOYMENT_NAME \
+      "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+      "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=no" \
+      -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+
+    # Restore RollingUpdate strategy (OnDelete left in place is dangerous)
+    oc patch statefulset/$DB_DEPLOYMENT_NAME -n "$DEPLOY_NAMESPACE" \
+      -p '{"spec":{"updateStrategy":{"type":"RollingUpdate"}}}' 2>/dev/null || true
+
+    echo "   ✅ Template restored: BOOTSTRAP=no, RollingUpdate strategy"
+  fi
+
+  # Environment-aware recovery
+  if [[ "$DEPLOY_NAMESPACE" == *"-prod"* ]]; then
+    # Production: leave in maintenance mode for manual review
+    echo ""
+    echo "🔴 PRODUCTION — site left in maintenance mode for manual review."
+    echo "   Database may be partially deployed. Check cluster state:"
+    echo "   oc get pods -l app.kubernetes.io/name=$DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE"
+    echo "   oc get sts/$DB_DEPLOYMENT_NAME -n $DEPLOY_NAMESPACE -o jsonpath='{.spec.replicas}'"
+    echo ""
+    echo "   To restore manually:"
+    echo "   1. Verify galera-0 PVC has production data"
+    echo "   2. oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1 -n $DEPLOY_NAMESPACE"
+    echo "   3. Wait for galera-0 Ready, then scale to $DB_REPLICAS incrementally"
+  else
+    # Dev/Test: attempt best-effort recovery
+    if [[ -n "$PRE_DEPLOY_REPLICAS" && "$PRE_DEPLOY_REPLICAS" -gt 0 ]]; then
+      echo ""
+      echo "🔄 Dev/Test — attempting to restore previous state ($PRE_DEPLOY_REPLICAS replicas)..."
+      oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1 -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+      echo "   ⏳ Waiting for galera-0..."
+      local restore_wait=0
+      while [[ $restore_wait -lt 30 ]]; do
+        local pod_ready
+        pod_ready=$(oc get pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+        if [[ "$pod_ready" == "True" ]]; then
+          echo "   ✅ galera-0 restored"
+          # Scale back to previous count if > 1
+          if [[ "$PRE_DEPLOY_REPLICAS" -gt 1 ]]; then
+            oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$PRE_DEPLOY_REPLICAS -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+            echo "   📈 Scaled to $PRE_DEPLOY_REPLICAS (previous count)"
+          fi
+          break
+        fi
+        sleep 10
+        restore_wait=$((restore_wait + 1))
+      done
+      if [[ $restore_wait -eq 30 ]]; then
+        echo "   ❌ Could not restore galera-0 — manual intervention required"
+      fi
+    else
+      echo "⚠️  No previous replica state to restore (was 0 or unknown)"
+    fi
+  fi
+
+  echo ""
+  echo "🔴 Deploy script exiting with code $exit_code"
+}
+trap galera_cleanup EXIT
+
 # Load environment variables from versions file
 if [[ -f "./example.versions.env" ]]; then
     source ./example.versions.env
@@ -54,6 +144,22 @@ source ./openshift/scripts/helm-image-resolver.sh
 initialize_utility_arrays
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
+
+# Preflight: validate DB_REPLICAS matches the sizing CSV
+SIZING_CSV="./openshift/${DEPLOY_NAMESPACE}-sizing.csv"
+if [[ -f "$SIZING_CSV" ]]; then
+  CSV_POD_COUNT=$(awk -F',' '$1 == "'"$DB_DEPLOYMENT_NAME"'" { print $3 }' "$SIZING_CSV" | tr -d ' ')
+  if [[ -n "$CSV_POD_COUNT" && "$CSV_POD_COUNT" != "$DB_REPLICAS" ]]; then
+    echo "❌ CONFIG MISMATCH: DB_REPLICAS=$DB_REPLICAS but $SIZING_CSV has PodCount=$CSV_POD_COUNT"
+    echo "   The deploy script builds gcomm:// for $DB_REPLICAS nodes, but right-sizing.sh"
+    echo "   will later scale to $CSV_POD_COUNT — extra nodes get an incomplete cluster address."
+    echo "   Fix: set DB_REPLICAS=$CSV_POD_COUNT in GitHub Environment or example.env"
+    exit 1
+  fi
+  echo "✅ DB_REPLICAS=$DB_REPLICAS matches sizing CSV ($SIZING_CSV)"
+else
+  echo "⚠️  Sizing CSV not found: $SIZING_CSV — skipping replica count validation"
+fi
 
 log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"
 log_debug "DEBUG: HELM_REPO=$HELM_REPO"
@@ -96,22 +202,102 @@ create_or_update_configmap "${DB_DEPLOYMENT_NAME}-prestop-script" "mariadb-prest
 if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
   echo "$DB_DEPLOYMENT_NAME installation found"
 
-  # Scale the StatefulSet to 0
-  echo "Scaling $DB_DEPLOYMENT_NAME to 0..."
-  oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
+  # =========================================================================
+  # GRACEFUL INCREMENTAL SCALE-DOWN
+  # =========================================================================
+  # With podManagementPolicy: Parallel, scaling to 0 in one step terminates
+  # all pods simultaneously — safe_to_bootstrap lands on a random node.
+  # Scaling one-at-a-time guarantees galera-0 is last to leave, giving it
+  # safe_to_bootstrap=1 in its PVC grastate.dat. Defense-in-depth for the
+  # OnDelete bootstrap pattern that follows.
+  # =========================================================================
+  CURRENT_REPLICAS=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+  PRE_DEPLOY_REPLICAS="$CURRENT_REPLICAS"  # Capture for rollback
+  GALERA_DEPLOY_PHASE="scale-down"
+  if [[ "${CURRENT_REPLICAS:-0}" -gt 1 ]]; then
+    # Multi-replica: scale secondaries down first, leaving galera-0 last
+    echo "📉 Scaling $DB_DEPLOYMENT_NAME to 1 (removing secondaries)..."
+    for SCALE_TARGET in $(seq $((CURRENT_REPLICAS - 1)) -1 1); do
+      echo "   📉 $((SCALE_TARGET + 1)) → $SCALE_TARGET replicas (removing ${DB_DEPLOYMENT_NAME}-${SCALE_TARGET})..."
+      oc scale sts/$DB_DEPLOYMENT_NAME --replicas=$SCALE_TARGET
 
-  # Wait for the StatefulSet to scale to 0
-  ATTEMPTS=0
-  MAX_ATTEMPTS=120
-  while [[ $(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}') -ne 0 && $ATTEMPTS -ne $MAX_ATTEMPTS ]]; do
-    WAITED=$((ATTEMPTS * 10))
-    echo "Waiting... $WAITED seconds"
-    sleep 10
-    ATTEMPTS=$((ATTEMPTS + 1))
-  done
-  if [[ $ATTEMPTS -eq $MAX_ATTEMPTS ]]; then
-    echo "Timeout waiting for $DB_DEPLOYMENT_NAME to scale to 0"
-    exit 1
+      # Wait for pod count to reach target
+      ATTEMPTS=0
+      while true; do
+        ACTUAL=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}' 2>/dev/null)
+        [[ "${ACTUAL:-0}" -le "$SCALE_TARGET" ]] && break
+        sleep 10
+        ATTEMPTS=$((ATTEMPTS + 1))
+        if [[ $ATTEMPTS -ge 60 ]]; then
+          echo "   ❌ Timeout scaling to $SCALE_TARGET replicas"
+          exit 1
+        fi
+      done
+    done
+
+    # =========================================================================
+    # VALIDATE: galera-0 sees itself as sole primary before final shutdown.
+    # wsrep_cluster_size=1 confirms all departures were processed by Galera.
+    # Without this check, we scale to 0 while Galera still thinks peers exist,
+    # which can leave safe_to_bootstrap=0 in grastate.dat.
+    # (FORCE_SAFETOBOOTSTRAP=yes in step 2 handles this anyway, but belt+suspenders.)
+    # =========================================================================
+    echo "🔍 Validating galera-0 is sole primary before shutdown..."
+    VALIDATION_ATTEMPTS=0
+    MAX_VALIDATION_ATTEMPTS=18  # 3 minutes
+    while [[ $VALIDATION_ATTEMPTS -lt $MAX_VALIDATION_ATTEMPTS ]]; do
+      CLUSTER_SIZE=$(oc exec "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" -- \
+        bash -c "mariadb -u'root' -p'$DB_PASSWORD' -Nse \"SHOW STATUS LIKE 'wsrep_cluster_size';\" 2>/dev/null | awk '{print \$2}'" 2>/dev/null || echo "")
+      STATE_COMMENT=$(oc exec "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" -- \
+        bash -c "mariadb -u'root' -p'$DB_PASSWORD' -Nse \"SHOW STATUS LIKE 'wsrep_local_state_comment';\" 2>/dev/null | awk '{print \$2}'" 2>/dev/null || echo "")
+
+      if [[ "$CLUSTER_SIZE" == "1" && "$STATE_COMMENT" == "Synced" ]]; then
+        echo "   ✅ galera-0: wsrep_cluster_size=1, state=Synced (sole primary confirmed)"
+        break
+      fi
+      echo "   ⏳ galera-0: cluster_size=${CLUSTER_SIZE:-?}, state=${STATE_COMMENT:-?} — waiting for departures to process..."
+      sleep 10
+      VALIDATION_ATTEMPTS=$((VALIDATION_ATTEMPTS + 1))
+    done
+    if [[ $VALIDATION_ATTEMPTS -eq $MAX_VALIDATION_ATTEMPTS ]]; then
+      echo "   ⚠️  galera-0 didn't converge to sole primary (size=${CLUSTER_SIZE:-?})"
+      echo "   Proceeding anyway — FORCE_SAFETOBOOTSTRAP=yes in step 2 covers this"
+    fi
+
+    # Now scale galera-0 to 0
+    echo "   📉 1 → 0 replicas (shutting down galera-0)..."
+    oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
+    ATTEMPTS=0
+    while true; do
+      ACTUAL=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}' 2>/dev/null)
+      [[ "${ACTUAL:-0}" -eq 0 ]] && break
+      sleep 10
+      ATTEMPTS=$((ATTEMPTS + 1))
+      if [[ $ATTEMPTS -ge 60 ]]; then
+        echo "   ❌ Timeout scaling to 0 replicas"
+        exit 1
+      fi
+    done
+    echo "✅ All pods terminated — galera-0 was last (sole primary, safe_to_bootstrap=1 in PVC)"
+
+  elif [[ "${CURRENT_REPLICAS:-0}" -eq 1 ]]; then
+    # Single replica: just scale to 0
+    echo "📉 Scaling $DB_DEPLOYMENT_NAME to 0 (single replica)..."
+    oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0
+    ATTEMPTS=0
+    while true; do
+      ACTUAL=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.status.replicas}' 2>/dev/null)
+      [[ "${ACTUAL:-0}" -eq 0 ]] && break
+      sleep 10
+      ATTEMPTS=$((ATTEMPTS + 1))
+      if [[ $ATTEMPTS -ge 60 ]]; then
+        echo "   ❌ Timeout scaling to 0 replicas"
+        exit 1
+      fi
+    done
+    echo "✅ Single pod terminated"
+  else
+    echo "$DB_DEPLOYMENT_NAME already at 0 replicas"
   fi
 
   # Delete resources
@@ -300,13 +486,37 @@ else
   echo "   Actual: $STS_TEMPLATE_IMAGE"
 fi
 
-# Now scale up to the desired number of replicas with patched configuration
-# First, fix the Galera cluster address env var.
-# helm upgrade with replicaCount=0 causes the chart to render
-# MARIADB_GALERA_CLUSTER_ADDRESS=gcomm:// (empty — no members for 0 replicas).
-# --reuse-values preserves this empty address across upgrades.
-# We must inject the real cluster address before pods start, or every pod
-# bootstraps its own independent cluster (split-brain).
+# =============================================================================
+# GALERA CLUSTER STARTUP — OnDelete strategy bootstrap pattern
+# =============================================================================
+# PROBLEM:
+#   helm upgrade --set replicaCount=0 renders MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://
+#   (empty — no members for 0 replicas). --reuse-values preserves this empty address.
+#   Without correction, every pod bootstraps its own independent cluster (split-brain).
+#   The Bitnami container requires CLUSTER_BOOTSTRAP=yes to add --wsrep-new-cluster;
+#   PVC safe_to_bootstrap=1 alone is NOT sufficient to trigger bootstrap.
+#
+# SOLUTION (OnDelete + incremental scale-down):
+#   Incremental scale-down above guarantees galera-0 has safe_to_bootstrap=1
+#   in its PVC (defense-in-depth). OnDelete strategy allows flipping the
+#   template from BOOTSTRAP=yes → BOOTSTRAP=no without restarting galera-0:
+#
+#   1. Switch to OnDelete update strategy (env changes don't auto-restart pods)
+#   2. Set BOOTSTRAP=yes + real cluster address on the template
+#   3. Scale to 1 — galera-0 bootstraps as primary with correct env
+#   4. Flip template to BOOTSTRAP=no (galera-0 keeps running — OnDelete!)
+#   5. Scale incrementally 2→N — secondaries get BOOTSTRAP=no and join galera-0
+#   6. Delete galera-0 pod to pick up BOOTSTRAP=no env from refreshed template
+#   7. Restore RollingUpdate strategy
+#
+# WHY OnDelete IS REQUIRED:
+#   galera-0 needs BOOTSTRAP=yes, secondaries need BOOTSTRAP=no, but both
+#   come from the same StatefulSet template. RollingUpdate would restart
+#   galera-0 when we flip to BOOTSTRAP=no (killing the primary). OnDelete
+#   lets the template change while galera-0 keeps running undisturbed.
+# =============================================================================
+
+# Build the full gcomm:// cluster address from replica count
 HEADLESS_SVC="${DB_DEPLOYMENT_NAME}-headless.${DEPLOY_NAMESPACE}.svc.cluster.local"
 WSREP_NODES=""
 for i in $(seq 0 $((DB_REPLICAS - 1))); do
@@ -314,23 +524,61 @@ for i in $(seq 0 $((DB_REPLICAS - 1))); do
   WSREP_NODES="${WSREP_NODES}${DB_DEPLOYMENT_NAME}-${i}.${HEADLESS_SVC}"
 done
 GALERA_CLUSTER_ADDRESS="gcomm://${WSREP_NODES}"
+
+# Step 1: Switch to OnDelete so env changes don't trigger rolling restarts
+GALERA_DEPLOY_PHASE="ondelete"
+echo "🔧 Switching to OnDelete update strategy..."
+oc patch statefulset/$DB_DEPLOYMENT_NAME -n "$DEPLOY_NAMESPACE" \
+  -p '{"spec":{"updateStrategy":{"type":"OnDelete"}}}'
+
+# Step 2: Set bootstrap=yes + real cluster address for galera-0 startup
 echo "📡 Setting Galera cluster address: $GALERA_CLUSTER_ADDRESS"
+echo "🔧 Setting bootstrap=yes for galera-0 initial startup..."
 oc set env statefulset/$DB_DEPLOYMENT_NAME \
   "MARIADB_GALERA_CLUSTER_ADDRESS=${GALERA_CLUSTER_ADDRESS}" \
-  "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+  "MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes" \
+  "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=yes" \
   -n "$DEPLOY_NAMESPACE"
 
-# Scale up incrementally to emulate OrderedReady behaviour.
-# The StatefulSet uses podManagementPolicy=Parallel (immutable — can't be
-# changed on an existing STS), so scaling directly to N starts ALL pods at once.
-# Fresh secondary pods create grastate.dat with safe_to_bootstrap: 1, which
-# makes each one bootstrap its own independent cluster (--wsrep-new-cluster).
-# When these discover galera-0's established cluster, a Galera PC protocol
-# race condition determines if they merge or crash with "conflicting prims".
-# Incremental scaling (1 → 2 → ... → N) ensures each secondary starts AFTER
-# the previous one has synced, so galera-0's cluster is always the sole primary.
+# Step 3: Scale to 1 — galera-0 bootstraps as primary
+GALERA_DEPLOY_PHASE="bootstrap"
+echo "📈 Scaling galera-0 as bootstrap node..."
+oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1 -n "$DEPLOY_NAMESPACE"
+
+# Wait for galera-0 to be Ready
+echo "⏳ Waiting for ${DB_DEPLOYMENT_NAME}-0 to be Ready..."
+READY_ATTEMPTS=0
+MAX_READY_ATTEMPTS=60
+while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
+  POD_READY=$(oc get pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+  if [[ "$POD_READY" == "True" ]]; then
+    echo "✅ ${DB_DEPLOYMENT_NAME}-0 is Ready (bootstrapped as primary)"
+    break
+  fi
+  sleep 10
+  READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
+  if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
+    echo "   ⏳ Still waiting... $((READY_ATTEMPTS * 10))s elapsed"
+  fi
+done
+if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
+  echo "❌ ${DB_DEPLOYMENT_NAME}-0 failed to bootstrap within 600s"
+  exit 1
+fi
+
+# Step 4: Flip template to BOOTSTRAP=no — galera-0 keeps running (OnDelete!)
+GALERA_DEPLOY_PHASE="env-flip"
+echo "🔧 Disabling bootstrap on template (galera-0 unaffected — OnDelete strategy)..."
+oc set env statefulset/$DB_DEPLOYMENT_NAME \
+  "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+  "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=no" \
+  -n "$DEPLOY_NAMESPACE"
+
+# Step 5: Scale incrementally — secondaries join galera-0's cluster
+GALERA_DEPLOY_PHASE="scale-up"
 echo "📈 Scaling StatefulSet incrementally to $DB_REPLICAS replicas..."
-for SCALE_TARGET in $(seq 1 $DB_REPLICAS); do
+for SCALE_TARGET in $(seq 2 $DB_REPLICAS); do
   CURRENT_REPLICAS=$(oc get sts/$DB_DEPLOYMENT_NAME -o jsonpath='{.spec.replicas}' -n "$DEPLOY_NAMESPACE")
   if [[ "$CURRENT_REPLICAS" -ge "$SCALE_TARGET" ]]; then
     echo "   ✅ Already at $CURRENT_REPLICAS replicas (target: $SCALE_TARGET)"
@@ -392,6 +640,41 @@ for SCALE_TARGET in $(seq 1 $DB_REPLICAS); do
 done
 
 echo "✅ All $DB_REPLICAS replicas scaled and Ready."
+
+GALERA_DEPLOY_PHASE="refresh"
+# Step 6: Refresh galera-0 to pick up BOOTSTRAP=no env from the updated template.
+# Under OnDelete, galera-0 still has BOOTSTRAP=yes from its original creation.
+# With secondaries synced, galera-0 rejoins the cluster after restart.
+if [[ $DB_REPLICAS -gt 1 ]]; then
+  echo "🔄 Refreshing ${DB_DEPLOYMENT_NAME}-0 to pick up BOOTSTRAP=no env..."
+  oc delete pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE"
+  echo "   ⏳ Waiting for ${DB_DEPLOYMENT_NAME}-0 to rejoin cluster..."
+  READY_ATTEMPTS=0
+  MAX_READY_ATTEMPTS=60
+  while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
+    POD_READY=$(oc get pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+    if [[ "$POD_READY" == "True" ]]; then
+      echo "   ✅ ${DB_DEPLOYMENT_NAME}-0 rejoined cluster with BOOTSTRAP=no"
+      break
+    fi
+    sleep 10
+    READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
+    if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
+      echo "   ⏳ Still waiting... $((READY_ATTEMPTS * 10))s elapsed"
+    fi
+  done
+  if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
+    echo "   ❌ ${DB_DEPLOYMENT_NAME}-0 failed to rejoin cluster within 600s"
+    exit 1
+  fi
+fi
+
+# Step 7: Restore RollingUpdate strategy for normal operation
+GALERA_DEPLOY_PHASE="restore"
+echo "🔧 Restoring RollingUpdate update strategy..."
+oc patch statefulset/$DB_DEPLOYMENT_NAME -n "$DEPLOY_NAMESPACE" \
+  -p '{"spec":{"updateStrategy":{"type":"RollingUpdate"}}}'
 
 # Split-brain detection: verify all pods share the same cluster UUID.
 # wait_for_galera_sync checks per-pod state (Synced + cluster_size) but does
@@ -519,4 +802,5 @@ else
   echo "⚠️ MariaDB StatefulSet may have imagePullSecrets issues (this should have been configured during Helm deployment)"
 fi
 
+GALERA_DEPLOY_PHASE="complete"  # Cleanup trap will see exit 0 + complete phase → no-op
 echo "$DB_NAME Database deployment is complete."
