@@ -502,6 +502,131 @@ moodle_content_cleanup() {
 # MIGRATION AND VERSION MANAGEMENT
 # =============================================================================
 
+# Detect breaking changes between two container image references.
+# Compares repository path and major version to determine safety level.
+# Uses should_migrate_by_version() for semver parsing (DRY).
+#
+# Arguments:
+#   $1 - Live image   (e.g., artifacts.example.com/bitnamilegacy/mariadb-galera:10.6.20)
+#   $2 - Desired image (e.g., artifacts.example.com/bitnamilegacy/mariadb-galera:11.0)
+#   $3 - (optional) "yes" to allow major upgrades (bypass abort)
+#
+# Returns:
+#   0 = compatible (same repo, same or minor version change)
+#   1 = minor version change detected (safe for rolling update)
+#   2 = major version change (requires manual intervention)
+#   3 = repository/image name change (different product entirely)
+#   4 = downgrade detected (dangerous — should never auto-proceed)
+detect_breaking_image_change() {
+  local live_image="$1"
+  local desired_image="$2"
+  local allow_major="${3:-no}"
+
+  # Strip registry prefix for repository comparison
+  # e.g., "artifacts.example.com/bitnamilegacy/mariadb-galera:10.6" → "bitnamilegacy/mariadb-galera:10.6"
+  local live_path="${live_image#*/}"    # strip first path segment (registry)
+  local desired_path="${desired_image#*/}"
+
+  # Separate repository and tag
+  local live_repo="${live_path%:*}"
+  local live_tag="${live_path##*:}"
+  local desired_repo="${desired_path%:*}"
+  local desired_tag="${desired_path##*:}"
+
+  echo "🔍 Image change analysis:"
+  echo "   Live:    $live_image"
+  echo "   Desired: $desired_image"
+
+  # Check 1: Repository/product change (e.g., bitnamilegacy/mariadb-galera → bitnami/mariadb)
+  if [[ "$live_repo" != "$desired_repo" ]]; then
+    echo ""
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "🚨 BREAKING CHANGE: Image repository changed"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "   Live repository:    $live_repo"
+    echo "   Desired repository: $desired_repo"
+    echo ""
+    echo "   This indicates a fundamentally different image (e.g., vendor change,"
+    echo "   product rename, or architecture migration). Automated deployment"
+    echo "   cannot safely handle this."
+    echo ""
+    echo "   📋 Manual steps required:"
+    echo "   1. Review the new image's compatibility with existing PVCs and data"
+    echo "   2. Back up all Galera PVCs (data-${DB_DEPLOYMENT_NAME:-mariadb-galera}-*)"
+    echo "   3. Test the migration in a non-production environment first"
+    echo "   4. If compatible, set ALLOW_MAJOR_DB_UPGRADE=yes and re-run"
+    echo "   5. If not compatible, plan a full data migration"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    return 3
+  fi
+
+  # Check 2: Version comparison using existing should_migrate_by_version()
+  # Extract comparable version from tags (strip non-numeric suffixes like "-debian-12")
+  local live_ver=$(echo "$live_tag" | grep -oP '^[\d.]+' || echo "$live_tag")
+  local desired_ver=$(echo "$desired_tag" | grep -oP '^[\d.]+' || echo "$desired_tag")
+
+  if [[ "$live_ver" == "$desired_ver" ]]; then
+    echo "   ✅ Same version ($live_ver) — compatible"
+    return 0
+  fi
+
+  # Use should_migrate_by_version to detect major change + downgrade
+  local migration_result
+  migration_result=$(should_migrate_by_version "$live_ver" "$desired_ver" "major" 2>&1)
+  local migration_code=$?
+
+  if [[ $migration_code -eq 2 ]]; then
+    # Downgrade detected
+    echo ""
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "🚨 DOWNGRADE DETECTED: $live_ver → $desired_ver"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "   Database downgrades risk data corruption and are NOT supported"
+    echo "   by automated deployment."
+    echo ""
+    echo "   📋 To resolve:"
+    echo "   1. Revert the image version in example.versions.env"
+    echo "   2. Re-run the deployment pipeline"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    return 4
+  fi
+
+  if [[ $migration_code -eq 0 ]]; then
+    # Major version migration required
+    echo ""
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "🚨 MAJOR VERSION CHANGE: $live_ver → $desired_ver"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+    echo "   Major database version upgrades require careful planning."
+    echo "   MariaDB major upgrades may include incompatible changes to:"
+    echo "   • System table schemas     • Replication protocol"
+    echo "   • Storage engine internals  • SQL syntax/behavior"
+    echo ""
+    echo "   📋 Manual upgrade procedure:"
+    echo "   1. Back up all Galera PVCs and take a logical dump (mysqldump)"
+    echo "   2. Review MariaDB release notes for $live_ver → $desired_ver"
+    echo "   3. Test the upgrade in dev/test with production data snapshot"
+    echo "   4. Scale Galera to 1 replica (single-node upgrade)"
+    echo "   5. Set ALLOW_MAJOR_DB_UPGRADE=yes in the pipeline environment"
+    echo "   6. Re-run the deployment — script will proceed with rolling upgrade"
+    echo "   7. Run mysql_upgrade on the primary node after version change"
+    echo "   8. Scale back to full replica count"
+    echo "🚨 ═══════════════════════════════════════════════════════════════════"
+
+    if [[ "$allow_major" == "yes" ]]; then
+      echo ""
+      echo "⚠️  ALLOW_MAJOR_DB_UPGRADE=yes — proceeding with major upgrade"
+      echo "   Ensure you have backups and have tested this in a lower environment."
+      return 2  # Still flag as major, but caller can proceed
+    fi
+    return 2
+  fi
+
+  # Minor/patch version change — safe for rolling update
+  echo "   📈 Version change: $live_ver → $desired_ver (minor/patch — safe for rolling update)"
+  return 1
+}
+
 # Function to check if migration should run based on version
 should_migrate_by_version() {
   local current_version="$1"
