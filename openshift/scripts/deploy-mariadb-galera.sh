@@ -11,9 +11,19 @@
 #   +------------------------------------------------------------------------+
 #   | Tier 1 -- ConfigMaps          Always (cheap, no pod restart)           |
 #   | Tier 2 -- Version Guard       Abort on major/breaking image change     |
-#   | Tier 3 -- Helm Release        Fresh install OR skip OR rolling         |
+#   | Tier 3 -- Helm Release        Fresh install OR skip OR upgrade         |
 #   | Tier 4 -- Post-deploy         Patches, health checks, data verify     |
 #   +------------------------------------------------------------------------+
+#
+# UPGRADE STRATEGY (Tier 3 -- when changes detected):
+#   1. Scale StatefulSet to 1 (galera-0 stays running as primary)
+#   2. Delete secondary PVCs (eliminates stale grastate.dat / gcache)
+#   3. Helm upgrade with replicaCount=$DB_REPLICAS
+#   4. Secondaries get fresh PVCs and SST from galera-0
+#
+#   This prevents the Bitnami split-brain bug where safe_to_bootstrap: 1
+#   in a secondary's grastate.dat causes it to bootstrap a new cluster
+#   instead of joining the existing one.
 #
 # VERSION GUARD (Tier 2):
 #   Detects breaking changes before they reach the cluster:
@@ -50,10 +60,10 @@
 source ./openshift/scripts/_utils.sh
 
 # =============================================================================
-# FAILURE CLEANUP -- simplified trap for tiered deployment
+# FAILURE CLEANUP -- ensure the StatefulSet is in a safe, re-runnable state
 # =============================================================================
-# Since we no longer scale-to-0 or flip bootstrap env vars, the cleanup is
-# straightforward: ensure the StatefulSet is in a safe, re-runnable state.
+# If we fail mid-upgrade (possibly after scaling to 1), restore the cluster
+# to its target replica count so it remains operational.
 # =============================================================================
 galera_cleanup() {
   local exit_code=$?
@@ -73,6 +83,14 @@ galera_cleanup() {
       -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
     oc patch statefulset/${DB_DEPLOYMENT_NAME} -n "$DEPLOY_NAMESPACE" \
       -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":null}}}' 2>/dev/null || true
+
+    # If we failed after scaling to 1, try to scale back to target
+    CURRENT_REPLICAS=$(oc get sts/${DB_DEPLOYMENT_NAME} -n "$DEPLOY_NAMESPACE" \
+      -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+    if [[ "$CURRENT_REPLICAS" == "1" && "${DB_REPLICAS:-2}" -gt 1 ]]; then
+      echo "   Cluster was scaled to 1 before failure -- scaling back to ${DB_REPLICAS}..."
+      oc scale sts/${DB_DEPLOYMENT_NAME} --replicas=${DB_REPLICAS} -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+    fi
     echo "   Template restored: BOOTSTRAP=no, RollingUpdate strategy"
   fi
 
@@ -245,11 +263,61 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     done
     HELM_ACTION="upgrade"
 
-    # Perform Helm upgrade with rolling update (NOT scale-to-0)
-    # replicaCount=$DB_REPLICAS ensures the chart renders correct gcomm:// address
-    # --reuse-values preserves preStop hooks, bootstrap settings, etc.
+    # -----------------------------------------------------------------------
+    # UPGRADE STRATEGY: scale-to-1, delete secondary PVCs, helm upgrade
+    #
+    # Why not rolling update? Bitnami's entrypoint checks grastate.dat on
+    # the PVC. If it finds safe_to_bootstrap: 1 (set on the last pod to
+    # shut down cleanly), it bootstraps a NEW standalone cluster -- causing
+    # split-brain. Deleting secondary PVCs forces a clean SST from the
+    # primary, eliminating all stale state (grastate, gcache, redo logs).
+    #
+    # Sequence:
+    #   1. Scale StatefulSet to 1 (galera-0 stays running as primary)
+    #   2. Wait for secondary pods to terminate
+    #   3. Delete secondary PVCs
+    #   4. Helm upgrade with replicaCount=$DB_REPLICAS
+    #   5. Secondaries get fresh PVCs and SST from galera-0
+    # -----------------------------------------------------------------------
     echo ""
-    echo "Upgrading $DB_DEPLOYMENT_NAME..."
+    echo "Step 1: Scaling $DB_DEPLOYMENT_NAME to 1 replica (preserving galera-0)..."
+    oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1 -n "$DEPLOY_NAMESPACE"
+
+    # Wait for secondary pods to terminate
+    echo "Waiting for secondary pods to terminate..."
+    SCALE_WAIT=0
+    while [[ $SCALE_WAIT -lt 120 ]]; do
+      CURRENT_PODS=$(oc get sts/$DB_DEPLOYMENT_NAME -n "$DEPLOY_NAMESPACE" \
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+      CURRENT_PODS=${CURRENT_PODS:-0}
+      if [[ "$CURRENT_PODS" -le 1 ]]; then
+        echo "   Secondaries terminated (ready replicas: $CURRENT_PODS)"
+        break
+      fi
+      sleep 5
+      SCALE_WAIT=$((SCALE_WAIT + 5))
+      if [[ $((SCALE_WAIT % 30)) -eq 0 ]]; then
+        echo "   Still waiting... ${SCALE_WAIT}s elapsed (ready: $CURRENT_PODS)"
+      fi
+    done
+    if [[ $SCALE_WAIT -ge 120 ]]; then
+      echo "Warning: secondary pods did not terminate within 120s, continuing..."
+    fi
+
+    # Delete secondary PVCs to force clean SST on rejoin
+    echo "Step 2: Deleting secondary PVCs..."
+    for i in $(seq 1 $((DB_REPLICAS - 1))); do
+      PVC_NAME="data-${DB_DEPLOYMENT_NAME}-${i}"
+      if oc get pvc "$PVC_NAME" -n "$DEPLOY_NAMESPACE" &>/dev/null; then
+        echo "   Deleting PVC: $PVC_NAME"
+        oc delete pvc "$PVC_NAME" -n "$DEPLOY_NAMESPACE" --wait=true
+      else
+        echo "   PVC not found (OK): $PVC_NAME"
+      fi
+    done
+
+    # Helm upgrade with full replica count
+    echo "Step 3: Upgrading $DB_DEPLOYMENT_NAME (replicaCount=$DB_REPLICAS)..."
     helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
       oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
       --set image.registry=$RESOLVED_IMAGE_REGISTRY \
@@ -269,7 +337,7 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
       echo "$helm_upgrade_response"
       exit 1
     fi
-    echo "Helm upgrade submitted -- rolling update in progress"
+    echo "Helm upgrade submitted -- secondaries will SST from galera-0"
   fi
 
 else
