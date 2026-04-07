@@ -264,12 +264,14 @@ check_galera_cluster_health() {
   fi
 }
 
-# Function to auto-heal Galera cluster using existing utilities
+# Function to auto-heal Galera cluster using galera_safe_upgrade()
+# Delegates to the shared upgrade function for consistent behavior
+# across deploy scripts and health monitoring.
 auto_heal_galera_cluster() {
   local selector="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  send_notification "GALERA_AUTO_HEAL_START" "🔧 Galera Auto-Heal Starting" "Initiating Galera auto-heal for selector: $selector" "healing" "$namespace"
+  send_notification "GALERA_AUTO_HEAL_START" "Galera Auto-Heal Starting" "Initiating Galera auto-heal for selector: $selector" "healing" "$namespace"
 
   # Extract resource name from selector (e.g., "app.kubernetes.io/name=mariadb-galera" -> "mariadb-galera")
   local resource_name
@@ -279,75 +281,28 @@ auto_heal_galera_cluster() {
     resource_name="$selector"
   fi
 
-  # Determine resource type and current replicas
-  local resource_type=""
-  local original_replicas=""
-
-  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="statefulset"
-    original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
-  elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    resource_type="deployment"
-    original_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
-  else
-    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - No Resource" "Could not find StatefulSet or Deployment for selector: $selector (resource: $resource_name)" "error" "$namespace"
+  # Verify this is a StatefulSet (Galera runs as StatefulSet)
+  if ! oc get statefulset "$resource_name" -n "$namespace" &>/dev/null; then
+    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - No StatefulSet" "Could not find StatefulSet: $resource_name" "error" "$namespace"
     return 1
   fi
+
+  local original_replicas
+  original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
 
   if [[ -z "$original_replicas" || "$original_replicas" == "0" ]]; then
-    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - Invalid Replicas" "Could not determine valid replica count for $resource_type: $resource_name" "error" "$namespace"
+    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - Invalid Replicas" "Could not determine valid replica count for statefulset: $resource_name" "error" "$namespace"
     return 1
   fi
 
-  # Single-replica cluster — scaling 1→1→1 is a no-op, try pod restart instead
-  if [[ "$original_replicas" == "1" ]]; then
-    echo "  ℹ️ Single-replica cluster — attempting pod restart instead of scale cycle"
-    local pod_name
-    pod_name=$(oc get pods -l "$selector" -n "$namespace" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    if [[ -n "$pod_name" ]]; then
-      echo "  🔄 Deleting pod $pod_name to trigger recreation..."
-      oc delete pod "$pod_name" -n "$namespace" --grace-period=30
-      echo "  ⏳ Waiting for pod to recreate..."
-      if scale_simple "$resource_type" "$resource_name" "1" "$namespace" "300s"; then
-        send_notification "GALERA_AUTO_HEAL_SUCCESS" "✅ Single-Replica Pod Restarted" "Restarted pod $pod_name for $resource_type/$resource_name" "success" "$namespace"
-        return 0
-      else
-        send_notification "GALERA_AUTO_HEAL_FAILED" "Pod Restart Failed" "Failed to restart $resource_type/$resource_name after pod deletion" "error" "$namespace"
-        return 1
-      fi
-    else
-      echo "  ⚠️ No running pod found to restart"
-      return 1
-    fi
-  fi
+  send_notification "GALERA_AUTO_HEAL_SCALING" "Starting Auto-Heal Process" "Auto-healing statefulset/$resource_name: safe upgrade cycle to $original_replicas replicas" "healing" "$namespace"
 
-  send_notification "GALERA_AUTO_HEAL_SCALING" "🔄 Starting Auto-Heal Process" "Auto-healing $resource_type/$resource_name: $original_replicas → 1 → $original_replicas replicas" "healing" "$namespace"
-
-  # Step 1: Scale down to 1 replica (keeps one node as primary)
-  echo "🔽 Step 1: Scaling down to 1 replica to establish primary node..."
-  if ! scale_simple "$resource_type" "$resource_name" "1" "$namespace" "300s"; then
-    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed - Scale to 1" "Failed to scale $resource_type/$resource_name to 1 replica" "error" "$namespace"
-    return 1
-  fi
-
-  # Wait a bit for the remaining node to stabilize
-  echo "⏸️  Waiting 30 seconds for primary node to stabilize..."
-  sleep 30
-
-  # Step 2: Scale back up to original replica count
-  echo "🔼 Step 2: Scaling back up to $original_replicas replicas..."
-  if ! scale_simple "$resource_type" "$resource_name" "$original_replicas" "$namespace" "600s"; then
-    send_notification "GALERA_AUTO_HEAL_PARTIAL" "Auto-Heal Partial - Scale Up Failed" "Scaled to 1 but failed to scale back to $original_replicas replicas" "warning" "$namespace"
-    return 1
-  fi
-
-  # Step 3: Wait for Galera cluster to sync using enhanced utility
-  echo "🔄 Step 3: Waiting for Galera cluster synchronization..."
-  if wait_for_galera_sync "$resource_name" 60 15 "$original_replicas"; then
-    send_notification "GALERA_AUTO_HEAL_SUCCESS" "✅ Auto-Heal Successful" "Successfully auto-healed $resource_type/$resource_name: all $original_replicas replicas are healthy and synced" "success" "$namespace"
+  # Delegate to galera_safe_upgrade for the actual work
+  if galera_safe_upgrade "$resource_name" "$original_replicas" "$namespace"; then
+    send_notification "GALERA_AUTO_HEAL_SUCCESS" "Auto-Heal Successful" "Successfully auto-healed statefulset/$resource_name: all $original_replicas replicas are healthy and synced" "success" "$namespace"
     return 0
   else
-    send_notification "GALERA_AUTO_HEAL_PARTIAL" "⚠️ Auto-Heal Partial Success" "$resource_type/$resource_name scaled successfully but Galera sync verification failed" "warning" "$namespace"
+    send_notification "GALERA_AUTO_HEAL_FAILED" "Auto-Heal Failed" "galera_safe_upgrade failed for statefulset/$resource_name -- manual intervention required" "error" "$namespace"
     return 1
   fi
 }
@@ -393,10 +348,354 @@ check_and_heal_galera_cluster() {
       fi
       ;;
     *)
-      echo "❌ Unknown health check result"
+      echo "Unknown health check result"
       return 1
       ;;
   esac
+}
+
+# =============================================================================
+# GALERA SAFE UPGRADE -- shared upgrade/recovery orchestration
+# =============================================================================
+# These functions are used by BOTH the deploy script (via Helm) and the
+# health monitor (via oc commands) to ensure consistent, safe Galera
+# cluster operations.
+#
+# Key principle: galera-0's PVC (data-mariadb-galera-0) is ALWAYS preserved.
+# Secondary PVCs are expendable -- secondaries rebuild via SST from primary.
+# =============================================================================
+
+# Verify galera-0 is safe to bootstrap from.
+# Checks wsrep state to confirm galera-0 has authoritative data.
+#
+# Arguments:
+#   $1 - StatefulSet name (e.g., mariadb-galera)
+#   $2 - Namespace (optional, defaults to DEPLOY_NAMESPACE)
+#
+# Returns:
+#   0 = galera-0 is safe to bootstrap (Synced, or no pods running)
+#   1 = galera-0 is NOT safe (unhealthy, not synced, or split-brain)
+galera_verify_bootstrap_safe() {
+  local sts_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  echo "Verifying galera-0 is safe to bootstrap from..."
+
+  # Check if any pods are running
+  local running_pods
+  running_pods=$(oc get pods -l "app.kubernetes.io/name=$sts_name" \
+    --field-selector=status.phase=Running -n "$namespace" \
+    -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+  if [[ -z "$running_pods" ]]; then
+    echo "   No running Galera pods -- will bootstrap from galera-0 PVC data"
+    # Check if galera-0 PVC exists
+    if oc get pvc "data-${sts_name}-0" -n "$namespace" &>/dev/null; then
+      echo "   PVC data-${sts_name}-0 exists -- bootstrap will use existing data"
+      return 0
+    else
+      echo "   No PVC found -- fresh cluster (empty bootstrap)"
+      return 0
+    fi
+  fi
+
+  # If credentials aren't available, we can't check wsrep state
+  if [[ -z "${DB_PASSWORD:-}" ]]; then
+    echo "   DB_PASSWORD not set -- cannot verify Galera state (proceeding cautiously)"
+    return 0
+  fi
+
+  # Check galera-0 specifically
+  local pod_0="${sts_name}-0"
+  local pod_0_phase
+  pod_0_phase=$(oc get pod "$pod_0" -n "$namespace" \
+    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+
+  if [[ "$pod_0_phase" != "Running" ]]; then
+    echo "   galera-0 is not Running (phase: ${pod_0_phase:-NotFound})"
+    echo "   Other pods may have more recent data -- manual review needed"
+    echo ""
+    echo "   To identify the most recent node:"
+    echo "   for pod in $running_pods; do"
+    echo "     oc exec \$pod -n $namespace -- cat /bitnami/mariadb/data/grastate.dat"
+    echo "   done"
+    echo "   The node with the highest seqno has the most recent data."
+    return 1
+  fi
+
+  # Query galera-0 wsrep state
+  get_mariadb_env_vars "$pod_0"
+  local status_output
+  status_output=$(oc exec -n "$namespace" "$pod_0" -- \
+    mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
+    -e "SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_state_uuid'; SHOW STATUS LIKE 'wsrep_cluster_size'; SHOW STATUS LIKE 'wsrep_last_committed';" \
+    2>/dev/null) || {
+    echo "   Could not connect to MariaDB on galera-0"
+    echo "   Pod may be starting up or in crash loop -- check pod logs"
+    return 1
+  }
+
+  local state=$(echo "$status_output" | awk '/wsrep_local_state_comment/ {print $2}')
+  local uuid=$(echo "$status_output" | awk '/wsrep_cluster_state_uuid/ {print $2}')
+  local size=$(echo "$status_output" | awk '/wsrep_cluster_size/ {print $2}')
+  local seqno=$(echo "$status_output" | awk '/wsrep_last_committed/ {print $2}')
+
+  echo "   galera-0 state: $state, uuid: $uuid, cluster_size: $size, seqno: $seqno"
+
+  if [[ "$state" != "Synced" ]]; then
+    echo "   galera-0 is NOT Synced (state: $state)"
+    echo "   Cannot safely bootstrap from a non-synced node"
+    return 1
+  fi
+
+  # Check for split-brain: if cluster_size < expected, other pods may have diverged
+  local expected_replicas
+  expected_replicas=$(oc get sts/"$sts_name" -n "$namespace" \
+    -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+
+  if [[ "$size" -lt "$expected_replicas" && "$expected_replicas" -gt 1 ]]; then
+    echo "   Galera cluster_size ($size) < expected replicas ($expected_replicas)"
+    echo "   Some pods may not be part of the cluster -- checking for split-brain..."
+
+    # Get UUIDs from all running pods
+    local uuids=("$uuid")
+    for pod in $running_pods; do
+      [[ "$pod" == "$pod_0" ]] && continue
+      local pod_uuid
+      pod_uuid=$(oc exec -n "$namespace" "$pod" -- \
+        mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
+        -e "SHOW STATUS LIKE 'wsrep_cluster_state_uuid';" 2>/dev/null \
+        | awk '/wsrep_cluster_state_uuid/ {print $2}') || continue
+      if [[ -n "$pod_uuid" ]]; then
+        uuids+=("$pod_uuid")
+      fi
+    done
+
+    local unique_uuids=$(printf "%s\n" "${uuids[@]}" | sort -u | wc -l)
+    if [[ "$unique_uuids" -gt 1 ]]; then
+      echo ""
+      echo "   SPLIT-BRAIN DETECTED: $unique_uuids different cluster UUIDs"
+      echo "   UUIDs found: $(printf '%s\n' "${uuids[@]}" | sort -u | tr '\n' ' ')"
+      echo ""
+      echo "   galera-0 has uuid=$uuid seqno=$seqno"
+      echo "   Secondary PVCs will be deleted -- galera-0 data will be authoritative"
+      echo "   Verify galera-0 has production data after recovery."
+      # Still return 0 -- galera-0 is Synced (in its own cluster), and we'll
+      # delete secondary PVCs to resolve the split-brain
+      return 0
+    fi
+  fi
+
+  echo "   galera-0 is Synced and safe to bootstrap from"
+  return 0
+}
+
+# Delete all secondary PVCs for a Galera StatefulSet.
+# Preserves data-${sts_name}-0 (the primary's data).
+#
+# Arguments:
+#   $1 - StatefulSet name
+#   $2 - Target replica count (deletes PVCs 1..N-1)
+#   $3 - Namespace (optional)
+#
+# Returns:
+#   0 = success (all secondary PVCs deleted or not found)
+#   1 = error (PVC stuck in Terminating, etc.)
+galera_delete_secondary_pvcs() {
+  local sts_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if [[ "$target_replicas" -le 1 ]]; then
+    echo "   Single-replica cluster -- no secondary PVCs to delete"
+    return 0
+  fi
+
+  echo "Deleting secondary PVCs (preserving data-${sts_name}-0)..."
+  local failed=0
+  for i in $(seq 1 $((target_replicas - 1))); do
+    local pvc_name="data-${sts_name}-${i}"
+    if oc get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+      echo "   Deleting PVC: $pvc_name"
+      if ! oc delete pvc "$pvc_name" -n "$namespace" --wait=true --timeout=120s 2>/dev/null; then
+        echo "   Warning: PVC $pvc_name did not delete within 120s"
+        failed=1
+      fi
+    else
+      echo "   PVC not found (OK): $pvc_name"
+    fi
+  done
+
+  # Also delete any orphaned PVCs beyond the target count
+  local existing_pvcs
+  existing_pvcs=$(oc get pvc -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  for pvc in $existing_pvcs; do
+    if [[ "$pvc" =~ ^data-${sts_name}-([0-9]+)$ ]]; then
+      local idx="${BASH_REMATCH[1]}"
+      if [[ "$idx" -ge "$target_replicas" ]]; then
+        echo "   Deleting orphaned PVC: $pvc (index $idx >= target $target_replicas)"
+        oc delete pvc "$pvc" -n "$namespace" --wait=true --timeout=120s 2>/dev/null || true
+      fi
+    fi
+  done
+
+  return $failed
+}
+
+# Full safe upgrade/recovery cycle for Galera cluster using oc commands.
+# Used by auto_heal_galera_cluster() and can be called directly by
+# scripts that don't use Helm (e.g., health monitor).
+#
+# For Helm-based deployments (deploy-mariadb-galera.sh), use:
+#   galera_verify_bootstrap_safe() + galera_delete_secondary_pvcs()
+#   with Helm upgrade commands for the actual bootstrap/scale steps.
+#
+# Sequence:
+#   1. Pre-check: verify galera-0 is safe
+#   2. Scale to 0 (OrderedReady = galera-0 shuts down last)
+#   3. Delete secondary PVCs
+#   4. Set bootstrap env vars on StatefulSet template
+#   5. Scale to 1 (galera-0 bootstraps from its PVC)
+#   6. Wait for galera-0 Ready
+#   7. Clear bootstrap env vars
+#   8. Scale to target_replicas (OrderedReady = sequential)
+#   9. Wait for sync + health check
+#
+# Arguments:
+#   $1 - StatefulSet name
+#   $2 - Target replica count
+#   $3 - Namespace (optional)
+#
+# Returns:
+#   0 = success
+#   1 = failure (check logs for details)
+galera_safe_upgrade() {
+  local sts_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local selector="app.kubernetes.io/name=$sts_name"
+
+  echo ""
+  echo "======================================================================="
+  echo "GALERA SAFE UPGRADE: $sts_name -> $target_replicas replicas"
+  echo "======================================================================="
+
+  # Step 1: Pre-check
+  echo "Step 1: Pre-flight verification..."
+  if ! galera_verify_bootstrap_safe "$sts_name" "$namespace"; then
+    echo "ABORT: galera-0 is not safe to bootstrap from"
+    echo "   Manual intervention required before automated upgrade can proceed."
+    return 1
+  fi
+
+  # Step 2: Scale to 0
+  echo ""
+  echo "Step 2: Scaling $sts_name to 0 replicas..."
+  oc scale sts/"$sts_name" --replicas=0 -n "$namespace"
+
+  # Wait for all pods to terminate
+  local wait_count=0
+  while [[ $wait_count -lt 180 ]]; do
+    local current_pods
+    current_pods=$(oc get pods -l "$selector" -n "$namespace" \
+      -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    if [[ -z "$current_pods" ]]; then
+      echo "   All pods terminated"
+      break
+    fi
+    sleep 5
+    wait_count=$((wait_count + 5))
+    if [[ $((wait_count % 30)) -eq 0 ]]; then
+      echo "   Still waiting... ${wait_count}s elapsed (pods: $current_pods)"
+    fi
+  done
+  if [[ $wait_count -ge 180 ]]; then
+    echo "   Warning: pods did not terminate within 180s"
+  fi
+
+  # Step 3: Delete secondary PVCs
+  echo ""
+  echo "Step 3: Deleting secondary PVCs..."
+  galera_delete_secondary_pvcs "$sts_name" "$target_replicas" "$namespace"
+
+  # Step 4: Enable bootstrap on galera-0
+  echo ""
+  echo "Step 4: Enabling bootstrap mode on StatefulSet template..."
+  oc set env statefulset/"$sts_name" \
+    "MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes" \
+    "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=yes" \
+    -n "$namespace"
+
+  # Step 5: Scale to 1 (galera-0 bootstraps)
+  echo ""
+  echo "Step 5: Scaling to 1 replica (galera-0 bootstrap)..."
+  oc scale sts/"$sts_name" --replicas=1 -n "$namespace"
+
+  # Step 6: Wait for galera-0 Ready
+  echo "Waiting for ${sts_name}-0 to bootstrap and become Ready..."
+  local ready_wait=0
+  while [[ $ready_wait -lt 600 ]]; do
+    local pod_ready
+    pod_ready=$(oc get pod "${sts_name}-0" -n "$namespace" \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+    if [[ "$pod_ready" == "True" ]]; then
+      echo "   ${sts_name}-0 is Ready (bootstrapped as primary)"
+      break
+    fi
+    sleep 10
+    ready_wait=$((ready_wait + 10))
+    if [[ $((ready_wait % 60)) -eq 0 ]]; then
+      echo "   Still waiting... ${ready_wait}s elapsed"
+    fi
+  done
+  if [[ $ready_wait -ge 600 ]]; then
+    echo "   ${sts_name}-0 failed to bootstrap within 600s"
+    # Restore safe state before returning failure
+    oc set env statefulset/"$sts_name" \
+      "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+      "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=no" \
+      -n "$namespace" 2>/dev/null || true
+    return 1
+  fi
+
+  # Step 7: Disable bootstrap (so secondaries join, not bootstrap)
+  echo ""
+  echo "Step 7: Disabling bootstrap mode..."
+  oc set env statefulset/"$sts_name" \
+    "MARIADB_GALERA_CLUSTER_BOOTSTRAP=no" \
+    "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=no" \
+    -n "$namespace"
+
+  # Step 8: Scale to target (if > 1)
+  if [[ "$target_replicas" -gt 1 ]]; then
+    echo ""
+    echo "Step 8: Scaling to $target_replicas replicas..."
+    oc scale sts/"$sts_name" --replicas="$target_replicas" -n "$namespace"
+
+    # Step 9: Wait for sync
+    echo ""
+    echo "Step 9: Waiting for Galera cluster synchronization..."
+    if ! wait_for_galera_sync "$sts_name" 60 10 "$target_replicas"; then
+      echo "   Galera sync verification failed -- check pod logs"
+      return 1
+    fi
+
+    # Verify no split-brain
+    check_galera_cluster_health "$selector" "$namespace" "$target_replicas"
+    local health=$?
+    if [[ $health -ne 0 ]]; then
+      echo "   Post-upgrade health check failed (code: $health)"
+      return 1
+    fi
+  else
+    echo ""
+    echo "Single-replica cluster -- skipping sync verification"
+  fi
+
+  echo ""
+  echo "Galera safe upgrade completed successfully"
+  echo "======================================================================="
+  return 0
 }
 
 # =============================================================================

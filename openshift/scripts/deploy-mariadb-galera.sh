@@ -16,14 +16,16 @@
 #   +------------------------------------------------------------------------+
 #
 # UPGRADE STRATEGY (Tier 3 -- when changes detected):
-#   1. Scale StatefulSet to 1 (galera-0 stays running as primary)
-#   2. Delete secondary PVCs (eliminates stale grastate.dat / gcache)
-#   3. Helm upgrade with replicaCount=$DB_REPLICAS
-#   4. Secondaries get fresh PVCs and SST from galera-0
+#   1. Pre-check: verify galera-0 is safe to bootstrap from
+#   2. Scale StatefulSet to 0 (OrderedReady = galera-0 shuts down last)
+#   3. Delete secondary PVCs (eliminates all stale state)
+#   4. Helm upgrade: forceBootstrap=true, replicaCount=1 (galera-0 bootstraps)
+#   5. Wait for galera-0 Ready + data on its existing PVC
+#   6. Helm upgrade: forceBootstrap=false, replicaCount=$DB_REPLICAS
+#   7. OrderedReady ensures secondaries start sequentially and SST from primary
 #
-#   This prevents the Bitnami split-brain bug where safe_to_bootstrap: 1
-#   in a secondary's grastate.dat causes it to bootstrap a new cluster
-#   instead of joining the existing one.
+#   Uses galera_verify_bootstrap_safe() and galera_delete_secondary_pvcs()
+#   from utils/database.sh -- shared with the health monitor's auto-heal.
 #
 # VERSION GUARD (Tier 2):
 #   Detects breaking changes before they reach the cluster:
@@ -84,11 +86,19 @@ galera_cleanup() {
     oc patch statefulset/${DB_DEPLOYMENT_NAME} -n "$DEPLOY_NAMESPACE" \
       -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":null}}}' 2>/dev/null || true
 
-    # If we failed after scaling to 1, try to scale back to target
+    # If we failed after scaling to 0, try to bring the cluster back
     CURRENT_REPLICAS=$(oc get sts/${DB_DEPLOYMENT_NAME} -n "$DEPLOY_NAMESPACE" \
       -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
-    if [[ "$CURRENT_REPLICAS" == "1" && "${DB_REPLICAS:-2}" -gt 1 ]]; then
-      echo "   Cluster was scaled to 1 before failure -- scaling back to ${DB_REPLICAS}..."
+    if [[ "$CURRENT_REPLICAS" == "0" ]]; then
+      echo "   Cluster is at 0 replicas -- attempting bootstrap recovery..."
+      oc set env statefulset/${DB_DEPLOYMENT_NAME} \
+        "MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes" \
+        "MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=yes" \
+        -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+      oc scale sts/${DB_DEPLOYMENT_NAME} --replicas=1 -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
+      echo "   Scaled to 1 with bootstrap=yes -- verify galera-0 health manually"
+    elif [[ "$CURRENT_REPLICAS" == "1" && "${DB_REPLICAS:-2}" -gt 1 ]]; then
+      echo "   Cluster at 1 replica -- scaling to ${DB_REPLICAS}..."
       oc scale sts/${DB_DEPLOYMENT_NAME} --replicas=${DB_REPLICAS} -n "$DEPLOY_NAMESPACE" 2>/dev/null || true
     fi
     echo "   Template restored: BOOTSTRAP=no, RollingUpdate strategy"
@@ -257,67 +267,74 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     echo "   Live replicas: $LIVE_REPLICAS"
     HELM_ACTION="skip"
   else
-    echo "Changes detected -- performing rolling upgrade:"
+    echo "Changes detected -- performing safe upgrade:"
     for change in "${CHANGES[@]}"; do
       echo "   - $change"
     done
     HELM_ACTION="upgrade"
 
     # -----------------------------------------------------------------------
-    # UPGRADE STRATEGY: scale-to-1, delete secondary PVCs, helm upgrade
+    # UPGRADE STRATEGY: scale-to-0, delete secondary PVCs, Helm bootstrap
     #
-    # Why not rolling update? Bitnami's entrypoint checks grastate.dat on
-    # the PVC. If it finds safe_to_bootstrap: 1 (set on the last pod to
-    # shut down cleanly), it bootstraps a NEW standalone cluster -- causing
-    # split-brain. Deleting secondary PVCs forces a clean SST from the
-    # primary, eliminating all stale state (grastate, gcache, redo logs).
+    # Uses galera_verify_bootstrap_safe() and galera_delete_secondary_pvcs()
+    # from utils/database.sh for shared logic with the health monitor.
+    #
+    # Why scale-to-0? All config/image changes take effect on restart.
+    # Why delete secondary PVCs? Eliminates stale grastate.dat where
+    # safe_to_bootstrap: 1 causes Bitnami to create standalone clusters.
+    # Why two Helm upgrades? galera-0 must bootstrap alone (forceBootstrap)
+    # before secondaries start (forceBootstrap=false).
     #
     # Sequence:
-    #   1. Scale StatefulSet to 1 (galera-0 stays running as primary)
-    #   2. Wait for secondary pods to terminate
+    #   1. Pre-check: verify galera-0 is safe to bootstrap from
+    #   2. Scale to 0 (OrderedReady = galera-0 shuts down last)
     #   3. Delete secondary PVCs
-    #   4. Helm upgrade with replicaCount=$DB_REPLICAS
-    #   5. Secondaries get fresh PVCs and SST from galera-0
+    #   4. Helm upgrade: forceBootstrap=true, replicaCount=1
+    #   5. Wait for galera-0 Ready
+    #   6. Helm upgrade: forceBootstrap=false, replicaCount=$DB_REPLICAS
+    #   7. OrderedReady handles sequential secondary startup + SST
     # -----------------------------------------------------------------------
-    echo ""
-    echo "Step 1: Scaling $DB_DEPLOYMENT_NAME to 1 replica (preserving galera-0)..."
-    oc scale sts/$DB_DEPLOYMENT_NAME --replicas=1 -n "$DEPLOY_NAMESPACE"
 
-    # Wait for secondary pods to terminate
-    echo "Waiting for secondary pods to terminate..."
+    # Step 1: Pre-check
+    echo ""
+    echo "Step 1: Pre-flight verification..."
+    if ! galera_verify_bootstrap_safe "$DB_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE"; then
+      echo "ABORT: galera-0 is not safe to bootstrap from"
+      echo "   Manual intervention required before automated upgrade can proceed."
+      exit 1
+    fi
+
+    # Step 2: Scale to 0
+    echo ""
+    echo "Step 2: Scaling $DB_DEPLOYMENT_NAME to 0 replicas..."
+    oc scale sts/$DB_DEPLOYMENT_NAME --replicas=0 -n "$DEPLOY_NAMESPACE"
+
     SCALE_WAIT=0
-    while [[ $SCALE_WAIT -lt 120 ]]; do
-      CURRENT_PODS=$(oc get sts/$DB_DEPLOYMENT_NAME -n "$DEPLOY_NAMESPACE" \
-        -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
-      CURRENT_PODS=${CURRENT_PODS:-0}
-      if [[ "$CURRENT_PODS" -le 1 ]]; then
-        echo "   Secondaries terminated (ready replicas: $CURRENT_PODS)"
+    while [[ $SCALE_WAIT -lt 180 ]]; do
+      REMAINING_PODS=$(oc get pods -l "app.kubernetes.io/name=$DB_DEPLOYMENT_NAME" \
+        -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+      if [[ -z "$REMAINING_PODS" ]]; then
+        echo "   All pods terminated"
         break
       fi
       sleep 5
       SCALE_WAIT=$((SCALE_WAIT + 5))
       if [[ $((SCALE_WAIT % 30)) -eq 0 ]]; then
-        echo "   Still waiting... ${SCALE_WAIT}s elapsed (ready: $CURRENT_PODS)"
+        echo "   Still waiting... ${SCALE_WAIT}s elapsed (pods: $REMAINING_PODS)"
       fi
     done
-    if [[ $SCALE_WAIT -ge 120 ]]; then
-      echo "Warning: secondary pods did not terminate within 120s, continuing..."
+    if [[ $SCALE_WAIT -ge 180 ]]; then
+      echo "Warning: pods did not terminate within 180s, continuing..."
     fi
 
-    # Delete secondary PVCs to force clean SST on rejoin
-    echo "Step 2: Deleting secondary PVCs..."
-    for i in $(seq 1 $((DB_REPLICAS - 1))); do
-      PVC_NAME="data-${DB_DEPLOYMENT_NAME}-${i}"
-      if oc get pvc "$PVC_NAME" -n "$DEPLOY_NAMESPACE" &>/dev/null; then
-        echo "   Deleting PVC: $PVC_NAME"
-        oc delete pvc "$PVC_NAME" -n "$DEPLOY_NAMESPACE" --wait=true
-      else
-        echo "   PVC not found (OK): $PVC_NAME"
-      fi
-    done
+    # Step 3: Delete secondary PVCs
+    echo ""
+    echo "Step 3: Deleting secondary PVCs..."
+    galera_delete_secondary_pvcs "$DB_DEPLOYMENT_NAME" "$DB_REPLICAS" "$DEPLOY_NAMESPACE"
 
-    # Helm upgrade with full replica count
-    echo "Step 3: Upgrading $DB_DEPLOYMENT_NAME (replicaCount=$DB_REPLICAS)..."
+    # Step 4: Helm upgrade -- bootstrap galera-0 alone
+    echo ""
+    echo "Step 4: Bootstrapping galera-0 (forceBootstrap=true, replicaCount=1)..."
     helm_upgrade_response=$(helm upgrade $DB_DEPLOYMENT_NAME \
       oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
       --set image.registry=$RESOLVED_IMAGE_REGISTRY \
@@ -327,17 +344,67 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
       --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
       --set rootUser.password=$DB_PASSWORD \
       --set galera.mariabackup.password=$DB_PASSWORD \
-      --set galera.bootstrap.forceBootstrap=false \
-      --set galera.bootstrap.forceSafeToBootstrap=false \
-      --set replicaCount=$DB_REPLICAS \
+      --set galera.bootstrap.forceBootstrap=true \
+      --set galera.bootstrap.forceSafeToBootstrap=true \
+      --set galera.bootstrap.bootstrapFromNode=0 \
+      --set replicaCount=1 \
       --reuse-values 2>&1)
 
     if [[ $? -ne 0 ]]; then
-      echo "Helm upgrade failed:"
+      echo "Helm upgrade (bootstrap) failed:"
       echo "$helm_upgrade_response"
       exit 1
     fi
-    echo "Helm upgrade submitted -- secondaries will SST from galera-0"
+
+    # Step 5: Wait for galera-0 Ready
+    echo "Waiting for ${DB_DEPLOYMENT_NAME}-0 to bootstrap..."
+    READY_ATTEMPTS=0
+    MAX_READY_ATTEMPTS=60
+    while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
+      POD_READY=$(oc get pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+      if [[ "$POD_READY" == "True" ]]; then
+        echo "   ${DB_DEPLOYMENT_NAME}-0 is Ready (bootstrapped as primary)"
+        break
+      fi
+      sleep 10
+      READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
+      if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
+        echo "   Still waiting... $((READY_ATTEMPTS * 10))s elapsed"
+      fi
+    done
+    if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
+      echo "${DB_DEPLOYMENT_NAME}-0 failed to bootstrap within 600s"
+      exit 1
+    fi
+
+    # Step 6: Helm upgrade -- disable bootstrap, scale to target
+    if [[ "$DB_REPLICAS" -gt 1 ]]; then
+      echo ""
+      echo "Step 6: Scaling to $DB_REPLICAS replicas (forceBootstrap=false)..."
+      helm upgrade $DB_DEPLOYMENT_NAME \
+        oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+        --set galera.bootstrap.forceBootstrap=false \
+        --set galera.bootstrap.forceSafeToBootstrap=false \
+        --set replicaCount=$DB_REPLICAS \
+        --reuse-values
+
+      if [[ $? -ne 0 ]]; then
+        echo "Helm upgrade (scale) failed"
+        exit 1
+      fi
+      echo "Helm upgrade submitted -- secondaries will SST from galera-0"
+    else
+      # Single replica: just disable bootstrap
+      echo ""
+      echo "Step 6: Disabling bootstrap (single-replica cluster)..."
+      helm upgrade $DB_DEPLOYMENT_NAME \
+        oci://registry-1.docker.io/bitnamicharts/mariadb-galera \
+        --set galera.bootstrap.forceBootstrap=false \
+        --set galera.bootstrap.forceSafeToBootstrap=false \
+        --set replicaCount=1 \
+        --reuse-values
+    fi
   fi
 
 else
