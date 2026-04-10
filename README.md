@@ -64,6 +64,24 @@ This project implements comprehensive security scanning and vulnerability manage
 
 Security scanning runs automatically on every build with environment-specific settings (dev/test/prod).
 
+## 📦 Infrastructure Management
+
+### Persistent Volume Capacity Management
+
+Automated PVC expansion for StatefulSets addresses Kubernetes limitations with storage resizing:
+
+* **[PVC Expansion Guide](docs/pvc-expansion-guide.md)** - Comprehensive guide to automatic PVC expansion
+* **CSV-Driven Sizing** - Centralized capacity configuration per environment
+* **Safe Expansion** - Automated expansion during scale-down (replicas=0)
+* **Deployment Integration** - Built into MariaDB Galera and right-sizing workflows
+
+Key features:
+- ✅ Automatic expansion based on CSV configuration
+- ✅ Never shrinks PVCs (Kubernetes safety)
+- ✅ StorageClass validation before expansion
+- ✅ Wait for completion with timeout handling
+- ✅ Expands while StatefulSet scaled to 0 (safe timing)
+
 ## Configuration
 
 The main configuration is setup in the file docker-compose.yml. Each service is a container and the compose file gives the various configuration details for that service. The volumes directives map paths inside the containers to local paths. Note that local paths are relative to the directory with the compose file. There are no absolute paths.

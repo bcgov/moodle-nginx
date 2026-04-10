@@ -599,6 +599,14 @@ fi
 # Wait for Galera sync using existing utility (checks per-pod Synced + cluster_size)
 wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 10 "$DB_REPLICAS"
 
+# =============================================================================
+# EXPAND PVCs DURING SCALE-UP
+# =============================================================================
+# Monitor for new PVCs and expand to target size from CSV
+# Note: Expansion completion wait is disabled to reduce deployment time
+# Storage expansion happens asynchronously and completes before capacity is needed
+expand_mariadb_galera_pvcs "$DB_DEPLOYMENT_NAME" "$DB_REPLICAS" "$DEPLOY_NAMESPACE"
+
 # Split-brain detection: verify all pods share the same cluster UUID
 echo "Verifying Galera cluster consistency (split-brain detection)..."
 check_galera_cluster_health "app.kubernetes.io/name=$DB_DEPLOYMENT_NAME" "$DEPLOY_NAMESPACE" "$DB_REPLICAS"

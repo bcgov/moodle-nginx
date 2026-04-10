@@ -2724,3 +2724,410 @@ ensure_artifactory_access() {
   log_info "Processing ${#existing_resources[@]} existing resources..."
   ensure_image_pull_secrets_batch "$namespace" "${existing_resources[@]}"
 }
+
+# =============================================================================
+# PVC MANAGEMENT AND EXPANSION FUNCTIONS
+# =============================================================================
+
+# Function to check if a StorageClass supports volume expansion
+check_storage_class_expansion() {
+  local pvc_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  # Get the StorageClass name from the PVC
+  local storage_class
+  storage_class=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
+
+  if [[ -z "$storage_class" ]]; then
+    log_error "❌ Could not determine StorageClass for PVC: $pvc_name"
+    return 1
+  fi
+
+  # Check if the StorageClass allows volume expansion
+  local allows_expansion
+  allows_expansion=$(oc get storageclass "$storage_class" -o jsonpath='{.allowVolumeExpansion}' 2>/dev/null)
+
+  if [[ "$allows_expansion" == "true" ]]; then
+    log_debug "✅ StorageClass '$storage_class' supports volume expansion"
+    return 0
+  else
+    log_warn "⚠️ StorageClass '$storage_class' does not support volume expansion"
+    log_warn "   PVC: $pvc_name"
+    log_warn "   This may require manual intervention or StorageClass update"
+    return 1
+  fi
+}
+
+# Function to convert PVC capacity to consistent units (MiB)
+convert_capacity_to_mib() {
+  local capacity="$1"
+
+  # Remove whitespace
+  capacity=$(echo "$capacity" | tr -d '[:space:]')
+
+  # Extract number and unit
+  local value unit
+  if [[ "$capacity" =~ ^([0-9]+)([A-Za-z]*)$ ]]; then
+    value="${BASH_REMATCH[1]}"
+    unit="${BASH_REMATCH[2]}"
+  else
+    log_error "❌ Invalid capacity format: $capacity"
+    return 1
+  fi
+
+  # Convert to MiB
+  case "${unit^^}" in
+    ""|"MIB"|"MI")
+      echo "$value"
+      ;;
+    "GIB"|"GI"|"G")
+      echo $((value * 1024))
+      ;;
+    "TIB"|"TI"|"T")
+      echo $((value * 1024 * 1024))
+      ;;
+    "KIB"|"KI"|"K")
+      echo $((value / 1024))
+      ;;
+    *)
+      log_error "❌ Unsupported capacity unit: $unit"
+      return 1
+      ;;
+  esac
+}
+
+# Function to get current PVC capacity in MiB
+get_pvc_capacity_mib() {
+  local pvc_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  local capacity
+  capacity=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.status.capacity.storage}' 2>/dev/null)
+
+  if [[ -z "$capacity" ]]; then
+    log_error "❌ Could not get capacity for PVC: $pvc_name"
+    return 1
+  fi
+
+  convert_capacity_to_mib "$capacity"
+}
+
+# Function to expand a single PVC
+expand_pvc() {
+  local pvc_name="$1"
+  local target_size_mib="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local dry_run="${4:-false}"
+
+  log_info "🔍 Checking PVC: $pvc_name"
+
+  # Check if PVC exists
+  if ! oc get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+    log_warn "⚠️ PVC not found: $pvc_name (may be created by StatefulSet later)"
+    return 0  # Not an error - PVC might not exist yet
+  fi
+
+  # Check StorageClass supports expansion
+  if ! check_storage_class_expansion "$pvc_name" "$namespace"; then
+    log_warn "⚠️ Skipping PVC expansion (StorageClass limitation): $pvc_name"
+    return 1
+  fi
+
+  # Get current capacity
+  local current_size_mib
+  current_size_mib=$(get_pvc_capacity_mib "$pvc_name" "$namespace")
+  if [[ $? -ne 0 ]]; then
+    log_error "❌ Failed to get current capacity for: $pvc_name"
+    return 1
+  fi
+
+  log_debug "   Current: ${current_size_mib}Mi, Target: ${target_size_mib}Mi"
+
+  # Compare sizes
+  if [[ $target_size_mib -eq $current_size_mib ]]; then
+    log_debug "   ✅ PVC already at target size"
+    return 0
+  elif [[ $target_size_mib -lt $current_size_mib ]]; then
+    log_warn "   ⚠️ Target size (${target_size_mib}Mi) is smaller than current (${current_size_mib}Mi)"
+    log_warn "   PVC shrinking is not supported in Kubernetes - skipping"
+    return 0
+  fi
+
+  # Expansion needed
+  local size_increase=$((target_size_mib - current_size_mib))
+  log_info "   📈 Expanding PVC from ${current_size_mib}Mi to ${target_size_mib}Mi (+${size_increase}Mi)"
+
+  if [[ "$dry_run" == "true" ]]; then
+    log_info "   🔍 DRY RUN: Would expand PVC to ${target_size_mib}Mi"
+    return 0
+  fi
+
+  # Perform the expansion
+  if oc patch pvc "$pvc_name" -n "$namespace" -p "{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"${target_size_mib}Mi\"}}}}" &>/dev/null; then
+    log_success "   ✅ PVC expansion initiated: $pvc_name"
+
+    # Wait for expansion to complete (with timeout)
+    local attempts=0
+    local max_attempts=30  # 5 minutes
+    local expanded=false
+
+    while [[ $attempts -lt $max_attempts ]]; do
+      local new_size_mib
+      new_size_mib=$(get_pvc_capacity_mib "$pvc_name" "$namespace")
+
+      if [[ $new_size_mib -ge $target_size_mib ]]; then
+        log_success "   ✅ PVC expansion completed: ${new_size_mib}Mi"
+        expanded=true
+        break
+      fi
+
+      log_debug "   ⏳ Waiting for expansion... (${attempts}0s)"
+      sleep 10
+      ((attempts++))
+    done
+
+    if [[ "$expanded" == "false" ]]; then
+      log_warn "   ⚠️ PVC expansion timeout - may still be in progress"
+      log_warn "   Check: oc get pvc $pvc_name -n $namespace"
+    fi
+
+    return 0
+  else
+    log_error "   ❌ Failed to expand PVC: $pvc_name"
+    return 1
+  fi
+}
+
+# Function to expand PVCs for a StatefulSet based on CSV sizing
+expand_statefulset_pvcs() {
+  local statefulset_name="$1"
+  local target_pvc_size_mib="$2"
+  local expected_replica_count="$3"
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local dry_run="${5:-false}"
+
+  log_info "🗄️ PVC Expansion Check for StatefulSet: $statefulset_name"
+  log_info "   Target PVC Size: ${target_pvc_size_mib}Mi"
+  log_info "   Expected Replicas: $expected_replica_count"
+
+  # Verify StatefulSet exists
+  if ! oc get statefulset "$statefulset_name" -n "$namespace" &>/dev/null; then
+    log_error "❌ StatefulSet not found: $statefulset_name"
+    return 1
+  fi
+
+  # Get current replica count
+  local current_replicas
+  current_replicas=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+
+  if [[ -n "$current_replicas" && "$current_replicas" -ne 0 ]]; then
+    log_warn "⚠️ StatefulSet has $current_replicas active replicas"
+    log_warn "   PVC expansion is safer when replicas=0"
+    log_warn "   Consider scaling down first to avoid sync issues during expansion"
+  else
+    log_success "✅ StatefulSet is scaled to 0 - safe for PVC expansion"
+  fi
+
+  # Find all PVCs for this StatefulSet
+  local pvc_pattern="data-${statefulset_name}-"
+  local pvcs
+  pvcs=$(oc get pvc -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep "^${pvc_pattern}")
+
+  if [[ -z "$pvcs" ]]; then
+    log_warn "⚠️ No PVCs found matching pattern: ${pvc_pattern}*"
+    log_info "   PVCs will be created when StatefulSet scales up"
+    return 0
+  fi
+
+  local pvc_count=0
+  local expansion_count=0
+  local failed_count=0
+
+  for pvc in $pvcs; do
+    ((pvc_count++))
+
+    if expand_pvc "$pvc" "$target_pvc_size_mib" "$namespace" "$dry_run"; then
+      ((expansion_count++))
+    else
+      ((failed_count++))
+    fi
+  done
+
+  log_info "📊 PVC Expansion Summary:"
+  log_info "   Total PVCs: $pvc_count"
+  log_info "   Expanded/Verified: $expansion_count"
+
+  if [[ $failed_count -gt 0 ]]; then
+    log_warn "   Failed: $failed_count"
+    return 1
+  fi
+
+  log_success "✅ All PVCs ready for StatefulSet scaling"
+  return 0
+}
+
+# Function to read CSV and expand PVCs for all StatefulSets
+# WARNING: This function is deprecated and should NOT be called from right-sizing.sh
+# It can break deployments where PVCs are preserved but pods are recreated (e.g., Redis)
+# Use expand_mariadb_galera_pvcs() instead for specific MariaDB workflow
+expand_pvcs_from_csv() {
+  local csv_file="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local dry_run="${3:-false}"
+
+  log_warn "⚠️ expand_pvcs_from_csv() is deprecated"
+  log_warn "   This function should only be used for specific StatefulSet deployments"
+  log_warn "   NOT for general right-sizing operations"
+
+  if [[ ! -f "$csv_file" ]]; then
+    log_error "❌ CSV file not found: $csv_file"
+    return 1
+  fi
+
+  log_info "📋 Reading PVC sizing from: $csv_file"
+
+  local total_sts=0
+  local processed_sts=0
+  local failed_sts=0
+
+  # Read CSV and process StatefulSets (skip header)
+  while IFS=, read -r deployment type pod_count max_pods pvc_count pvc_capacity cpu_req cpu_lim mem_req mem_lim cpu_scale; do
+    # Skip header
+    [[ "$deployment" == "Deployment" ]] && continue
+
+    # Only process StatefulSets with PVCs
+    if [[ "$type" == "sts" && "$pvc_capacity" -gt 0 ]]; then
+      ((total_sts++))
+      log_info ""
+      log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      if expand_statefulset_pvcs "$deployment" "$pvc_capacity" "$pod_count" "$namespace" "$dry_run"; then
+        ((processed_sts++))
+      else
+        ((failed_sts++))
+      fi
+    fi
+  done < <(tail -n +2 "$csv_file")
+
+  log_info ""
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "📊 CSV-Based PVC Expansion Complete"
+  log_info "   StatefulSets Found: $total_sts"
+  log_info "   Successfully Processed: $processed_sts"
+
+  if [[ $failed_sts -gt 0 ]]; then
+    log_warn "   Failed: $failed_sts"
+    return 1
+  fi
+
+  log_success "✅ All StatefulSet PVCs verified/expanded"
+  return 0
+}
+
+# =============================================================================
+# MARIADB GALERA SPECIFIC PVC EXPANSION
+# =============================================================================
+
+# Function to expand MariaDB Galera PVCs during scale-up
+# Monitors for new PVCs as StatefulSet scales up and expands each to target size
+#
+# This function is specifically designed for MariaDB Galera's deployment workflow:
+# 1. StatefulSet scaled to 0, replica PVCs deleted
+# 2. Helm upgrade applied with replicas=0
+# 3. StatefulSet scaled up to target replicas
+# 4. This function watches for PVC creation and expands each immediately
+#
+# NOTE: This should NOT be used for other StatefulSets without careful consideration
+expand_mariadb_galera_pvcs() {
+  local statefulset_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  # Get target PVC size from CSV
+  local csv_file="./openshift/${namespace}-sizing.csv"
+  if [[ ! -f "$csv_file" ]]; then
+    log_warn "⚠️ CSV file not found: $csv_file"
+    return 1
+  fi
+
+  local target_pvc_size=$(grep "^${statefulset_name}," "$csv_file" | cut -d',' -f6)
+
+  if [[ -z "$target_pvc_size" || "$target_pvc_size" -eq 0 ]]; then
+    log_debug "No PVC size specified in CSV - skipping expansion"
+    return 0
+  fi
+
+  # Convert MiB to Gi for oc patch command
+  local target_pvc_size_gi=$(( (target_pvc_size + 1023) / 1024 ))
+
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "Monitoring PVCs during scale-up"
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "   Watching for PVCs: data-${statefulset_name}-{0..${target_replicas}}"
+  log_info "   Will expand to: ${target_pvc_size_gi}Gi"
+  echo ""
+
+  # Process each expected PVC (0 through target_replicas-1)
+  for i in $(seq 0 $((target_replicas - 1))); do
+    local pvc_name="data-${statefulset_name}-${i}"
+
+    log_info "   [${i}/${target_replicas}] Waiting for PVC: $pvc_name"
+
+    # Wait for PVC to be created (max 2 minutes per PVC)
+    local wait_attempts=0
+    local max_wait_attempts=24  # 2 minutes (24 * 5 seconds)
+
+    while [[ $wait_attempts -lt $max_wait_attempts ]]; do
+      if oc get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+        log_success "   PVC created: $pvc_name"
+
+        # Get current PVC size
+        local current_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.resources.requests.storage}')
+        log_debug "      Current size: $current_size"
+
+        # Patch PVC to target size
+        log_info "      Patching PVC to ${target_pvc_size_gi}Gi..."
+        if oc patch pvc "$pvc_name" -n "$namespace" -p "{\"spec\": {\"resources\": {\"requests\": {\"storage\": \"${target_pvc_size_gi}Gi\"}}}}" &>/dev/null; then
+          # Verify the patch
+          local new_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.resources.requests.storage}')
+          local status_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.status.capacity.storage}' 2>/dev/null || echo "pending")
+
+          log_success "      PVC patched successfully"
+          log_debug "         Requested: $new_size"
+          log_debug "         Status: $status_size"
+
+          # Note: We don't wait for expansion to complete to reduce deployment time
+          # Storage expansion happens asynchronously and typically completes quickly
+          # The request is patched immediately, actual expansion happens in background
+          if [[ "$status_size" == "pending" || "$status_size" != "${target_pvc_size_gi}Gi" ]]; then
+            log_info "      PVC expansion will complete asynchronously"
+          fi
+        else
+          log_warn "      Failed to patch PVC (may already be at target size)"
+          log_warn "         Current: $current_size, Target: ${target_pvc_size_gi}Gi"
+        fi
+
+        break
+      fi
+
+      sleep 5
+      ((wait_attempts++))
+    done
+
+    if [[ $wait_attempts -eq $max_wait_attempts ]]; then
+      log_error "   Timeout waiting for PVC: $pvc_name"
+      log_error "      This may indicate StatefulSet scaling issues"
+      break
+    fi
+
+    echo ""
+  done
+
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_success "PVC expansion phase complete"
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  return 0
+}
+

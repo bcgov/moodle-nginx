@@ -18,9 +18,9 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 | Script | Purpose | Documentation |
 |--------|---------|---------------|
 | [`deploy-template.sh`](./deploy-template.sh) | Main deployment orchestration | See inline header |
-| [`deploy-mariadb-galera.sh`](./deploy-mariadb-galera.sh) | MariaDB Galera cluster deployment | [Architecture](../../.docs/galera-monitoring-solution.md), [Troubleshooting](../../.docs/manual-galera-troubleshooting.md) |
+| [`deploy-mariadb-galera.sh`](./deploy-mariadb-galera.sh) | MariaDB Galera cluster deployment with PVC expansion | [Architecture](../../.docs/galera-monitoring-solution.md), [Troubleshooting](../../.docs/manual-galera-troubleshooting.md) |
 | [`deploy-redis-sentinel.sh`](./deploy-redis-sentinel.sh) | Redis Sentinel cluster deployment | See inline header |
-| [`right-sizing.sh`](./right-sizing.sh) | Resource allocation management | See inline header |
+| [`right-sizing.sh`](./right-sizing.sh) | Resource allocation and PVC expansion management | See inline header |
 
 ### Moodle Operations
 

@@ -5,10 +5,6 @@ include:
   # Comment the line below to disable the Moodle intermediate upgrade service (3x moodle instances)
   # - docker-upgrade-moodle.yml
 
-# Read environment variables directly from example.versions.env
-env_file:
-  - example.versions.env
-
 services:
   build-0:
     extends:
@@ -21,6 +17,8 @@ services:
       # Use environment variables from example.versions.env
       PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
+    env_file:
+      - example.versions.env
     build:
       args:
         DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
@@ -66,6 +64,8 @@ services:
       PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       DB_HOST: db-0
       IMAGE_REPO: ""
+    env_file:
+      - example.versions.env
     build:
       args:
         IMAGE_REPO: ""
@@ -101,6 +101,8 @@ services:
       DB_DEPLOYMENT_NAME: db-0
       DB_HOST: db-0
       IMAGE_REPO: ""
+    env_file:
+      - example.versions.env
     deploy:
       replicas: 1
     depends_on:
