@@ -617,12 +617,13 @@ deploy_resource_from_template() {
 # =============================================================================
 
 # Ensure openShift resource values are valid
+# Returns: "<value><unit>" for positive integers, "0" for zero, "null" for empty/invalid
 validate_and_format_resource_value() {
   local value=$1
   local unit=$2
 
-  # Check if the value is a valid number
-  if [[ $value =~ ^[1-9]+$ ]]; then
+  # Check if the value is a valid positive integer (1, 25, 50, 100, 1500, etc.)
+  if [[ $value =~ ^[1-9][0-9]*$ ]]; then
     echo "${value}${unit}"
   elif [[ $value == "0" || $value == 0 ]]; then
     echo "0"
@@ -903,6 +904,39 @@ set_resources() {
   mem_request=$(validate_and_format_resource_value "$mem_request" "Mi")
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
+
+  # Safety: if memory request is set but limit is unmanaged (0 or null), set
+  # the limit to at least match the request. A namespace LimitRange may inject
+  # a default limit lower than our request, causing pod creation failures:
+  #   "requests 256Mi must be less than or equal to memory limit of 192Mi"
+  # CPU limits are NOT auto-set — leaving them unmanaged allows CPU bursting.
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
+        ( "$mem_limit" == "null" || "$mem_limit" == "0" ) ]]; then
+    log_debug "Memory limit unset for $type/$deployment -- setting limit to match request (${mem_request})"
+    mem_limit="$mem_request"
+  fi
+
+  # Validate: request must not exceed limit when both are set.
+  # If request > limit, auto-correct by raising the limit to match.
+  local mem_req_num=${mem_request//[!0-9]/}
+  local mem_lim_num=${mem_limit//[!0-9]/}
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
+        "$mem_limit" != "null" && "$mem_limit" != "0" && \
+        -n "$mem_req_num" && -n "$mem_lim_num" && \
+        "$mem_req_num" -gt "$mem_lim_num" ]]; then
+    log_warn "Memory request (${mem_request}) exceeds limit (${mem_limit}) for $type/$deployment -- raising limit to match"
+    mem_limit="$mem_request"
+  fi
+
+  local cpu_req_num=${cpu_request//[!0-9]/}
+  local cpu_lim_num=${cpu_limit//[!0-9]/}
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" && \
+        "$cpu_limit" != "null" && "$cpu_limit" != "0" && \
+        -n "$cpu_req_num" && -n "$cpu_lim_num" && \
+        "$cpu_req_num" -gt "$cpu_lim_num" ]]; then
+    log_warn "CPU request (${cpu_request}) exceeds limit (${cpu_limit}) for $type/$deployment -- raising limit to match"
+    cpu_limit="$cpu_request"
+  fi
 
   # Construct the oc set resources command
   local cmd="oc set resources $type $deployment"

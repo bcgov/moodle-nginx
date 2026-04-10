@@ -41,11 +41,8 @@ updates:
     commit-message:
       prefix: "deps(php)"
       include: "scope"
-    # PHP 8.1 compatibility constraints
+    # PHP 8.3 compatibility constraints (version from example.versions.env)
     ignore:
-      # Block versions requiring PHP 8.2+
-      - dependency-name: "maennchen/zipstream-php"
-        versions: [">= 3.2.0"]
       # Block major version updates (often break compatibility)
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]

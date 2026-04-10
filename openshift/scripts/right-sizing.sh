@@ -60,9 +60,9 @@ tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Depl
 do
   echo "Right-sizing: $Type/$Deployment"
 
-  # Ignore if the type is not statefulset or deployemnt (mainly ignores jobs)
+  # Ignore if the type is not statefulset or deployment (mainly ignores jobs)
   if [[ "$Type" == "sts" || "$Type" == "deployment" ]]; then
-    set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest"
+    set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest" "$CPULimit" "$MemLimit"
   fi
 
   if [[ $PodCount -eq 0 ]]; then
