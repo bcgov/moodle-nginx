@@ -906,10 +906,14 @@ set_resources() {
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
   # Safety: if a resource request is set but the limit is unmanaged (0/null),
-  # set the limit to at least match the request. A namespace LimitRange may
-  # inject a default limit lower than our request, causing pod creation failures:
+  # set an explicit limit to prevent the namespace LimitRange from injecting
+  # a default limit lower than our request, causing pod creation failures:
   #   "requests 256Mi must be less than or equal to memory limit of 192Mi"
   #   "requests 50m must be less than or equal to cpu limit of 0"
+  #
+  # Memory (incompressible): limit = request (exceeding limit = OOM kill)
+  # CPU (compressible):      limit = request * burst multiplier (allows bursting)
+  local CPU_BURST_MULTIPLIER=4
   if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
         ( "$mem_limit" == "null" || "$mem_limit" == "0" ) ]]; then
     log_debug "Memory limit unset for $type/$deployment -- setting limit to match request (${mem_request})"
@@ -917,8 +921,10 @@ set_resources() {
   fi
   if [[ "$cpu_request" != "null" && "$cpu_request" != "0" && \
         ( "$cpu_limit" == "null" || "$cpu_limit" == "0" ) ]]; then
-    log_debug "CPU limit unset for $type/$deployment -- setting limit to match request (${cpu_request})"
-    cpu_limit="$cpu_request"
+    local cpu_req_val=${cpu_request//[!0-9]/}
+    local cpu_burst_limit=$(( cpu_req_val * CPU_BURST_MULTIPLIER ))
+    cpu_limit="${cpu_burst_limit}m"
+    log_debug "CPU limit unset for $type/$deployment -- setting limit to ${cpu_limit} (${cpu_request} x${CPU_BURST_MULTIPLIER} burst)"
   fi
 
   # Validate: request must not exceed limit when both are set.
