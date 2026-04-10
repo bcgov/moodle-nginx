@@ -905,15 +905,20 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  # Safety: if memory request is set but limit is unmanaged (0 or null), set
-  # the limit to at least match the request. A namespace LimitRange may inject
-  # a default limit lower than our request, causing pod creation failures:
+  # Safety: if a resource request is set but the limit is unmanaged (0/null),
+  # set the limit to at least match the request. A namespace LimitRange may
+  # inject a default limit lower than our request, causing pod creation failures:
   #   "requests 256Mi must be less than or equal to memory limit of 192Mi"
-  # CPU limits are NOT auto-set — leaving them unmanaged allows CPU bursting.
+  #   "requests 50m must be less than or equal to cpu limit of 0"
   if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
         ( "$mem_limit" == "null" || "$mem_limit" == "0" ) ]]; then
     log_debug "Memory limit unset for $type/$deployment -- setting limit to match request (${mem_request})"
     mem_limit="$mem_request"
+  fi
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" && \
+        ( "$cpu_limit" == "null" || "$cpu_limit" == "0" ) ]]; then
+    log_debug "CPU limit unset for $type/$deployment -- setting limit to match request (${cpu_request})"
+    cpu_limit="$cpu_request"
   fi
 
   # Validate: request must not exceed limit when both are set.
