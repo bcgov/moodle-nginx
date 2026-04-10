@@ -2,8 +2,8 @@ Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),
 php,deployment,3,10,1,1024,400,1500,128,0,400
 mariadb-galera,sts,5,5,5,6144,100,0,256,0,0
 redis-node,sts,5,5,12,3072,150,0,256,0,100
-redis-proxy,deployment,5,5,0,0,50,0,4,0,50
-web,deployment,3,3,0,0,150,0,128,0,3
+redis-proxy,deployment,5,5,0,0,50,0,32,0,50
+web,deployment,3,3,0,0,150,0,192,0,3
 cron,deployment,1,1,0,0,0,0,0,0,0
 moodle-db-backup-storage,deployment,0,1,1,15360,0,0,0,0,0
 maintenance-message,deployment,0,1,0,0,50,0,0,0,0
