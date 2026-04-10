@@ -60,9 +60,9 @@ tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Depl
 do
   echo "Right-sizing: $Type/$Deployment"
 
-  # Ignore if the type is not statefulset or deployemnt (mainly ignores jobs)
+  # Ignore if the type is not statefulset or deployment (mainly ignores jobs)
   if [[ "$Type" == "sts" || "$Type" == "deployment" ]]; then
-    set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest"
+    set_resources "$Type" "$Deployment" "$CPURequest" "$MemRequest" "$CPULimit" "$MemLimit"
   fi
 
   if [[ $PodCount -eq 0 ]]; then
@@ -114,6 +114,29 @@ do
         echo "❌ $Type/$Deployment failed to stabilize after scaling"
         # Signal failure to parent shell via temp file (pipe subshell can't set vars)
         echo "FAILED:$Type/$Deployment" >> /tmp/right-sizing-failures.txt
+      fi
+    fi
+
+    # Galera-specific: verify cluster synchronization and consistency after scaling.
+    # scale_deployment only checks pod logs — it doesn't verify Galera state.
+    # Pods can appear "healthy" while in split-brain (independent clusters).
+    if [[ "$Type" == "sts" && "$Deployment" == *"galera"* ]]; then
+      echo "🔍 Verifying Galera cluster synchronization for $Deployment..."
+      if ! wait_for_galera_sync "$Deployment" 30 10 "$PodCount"; then
+        echo "❌ $Deployment Galera cluster failed to synchronize after right-sizing"
+        echo "FAILED:$Type/$Deployment (Galera sync)" >> /tmp/right-sizing-failures.txt
+      else
+        echo "✅ $Deployment Galera cluster is synchronized ($PodCount nodes)"
+        # Additional split-brain check — verify all pods share the same cluster UUID
+        check_galera_cluster_health "app.kubernetes.io/name=$Deployment" "$DEPLOY_NAMESPACE" "$PodCount"
+        GALERA_HEALTH=$?
+        if [[ $GALERA_HEALTH -eq 2 ]]; then
+          echo "🚨 SPLIT-BRAIN DETECTED in $Deployment after right-sizing!"
+          echo "FAILED:$Type/$Deployment (split-brain)" >> /tmp/right-sizing-failures.txt
+        elif [[ $GALERA_HEALTH -eq 1 ]]; then
+          echo "⚠️ $Deployment has unhealthy pods after right-sizing"
+          echo "FAILED:$Type/$Deployment (unhealthy pods)" >> /tmp/right-sizing-failures.txt
+        fi
       fi
     fi
 

@@ -19,11 +19,11 @@ services:
       replicas: 1
     environment:
       # Use environment variables from example.versions.env
-      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
     build:
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
         MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
@@ -63,13 +63,13 @@ services:
       db-0:
         condition: service_healthy
     environment:
-      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       DB_HOST: db-0
       IMAGE_REPO: ""
     build:
       args:
         IMAGE_REPO: ""
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
       - ./temp/docker/moodledata-0:/var/www/moodledata:delegated
@@ -111,7 +111,7 @@ services:
       dockerfile: CRON.Dockerfile
       args:
         IMAGE_REPO: ""
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.1-cli}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.3-cli}
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated

@@ -1,4 +1,4 @@
-ARG DOCKER_FROM_IMAGE=php:8.1-fpm
+ARG DOCKER_FROM_IMAGE=php:8.3-fpm
 FROM ${DOCKER_FROM_IMAGE}
 
 # Moodle Configs
