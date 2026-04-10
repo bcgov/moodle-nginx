@@ -5,7 +5,7 @@ services:
     tty: true
     restart: no
     environment:
-      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       DEPLOY_ENVIRONMENT: local
       MOODLE_BRANCH_VERSION: MOODLE_405_STABLE
       HVP_URL: "https://github.com/h5p/moodle-mod_hvp"
@@ -27,7 +27,7 @@ services:
       dockerfile: Moodle.Dockerfile
       args:
         DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-local}
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
         MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
         HVP_URL: ${HVP_URL:-https://github.com/h5p/moodle-mod_hvp}
         HVP_BRANCH_VERSION: ${HVP_BRANCH_VERSION:-stable}
@@ -58,12 +58,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-moodle}
       DB_USER: ${DB_USER:-moodle}
       DB_NAME: ${DB_NAME:-moodle}
-      PHP_IMAGE: ${PHP_IMAGE:-php:8.1-fpm}
+      PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
     build:
       context: .
       dockerfile: PHP.Dockerfile
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.1-fpm}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     command: php-fpm
     healthcheck:
@@ -107,7 +107,7 @@ services:
       context: .
       dockerfile: CRON.Dockerfile
       args:
-        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.1-cli}
+        DOCKER_FROM_IMAGE: ${IMAGE_REPO}${CRON_IMAGE:-php:8.3-cli}
         PHP_INI_ENVIRONMENT: ${PHP_INI_ENVIRONMENT:-production}
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated

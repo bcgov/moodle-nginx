@@ -8,7 +8,7 @@
 #   avoiding runtime errors and compatibility issues.
 #
 # COMPATIBILITY CHECKS:
-#   1. PHP Runtime Version: From example.versions.env (PHP_RUNTIME_VERSION)
+#   1. PHP Runtime Version: Extracted from PHP_IMAGE in example.versions.env
 #   2. Composer Require: Minimum PHP version in composer.json
 #   3. Package Matrix: Known packages with specific PHP requirements
 #   4. Installed Packages: Checks composer.lock for incompatible versions
@@ -82,15 +82,18 @@ COMPATIBILITY_MATRIX=(
     "monolog/monolog:3.0.0:8.1:Monolog 3.0+ requires PHP 8.1+"
 )
 
-# Get current PHP runtime version
+# Get current PHP runtime version from PHP_IMAGE in example.versions.env
+# Extracts major.minor from image tag (e.g., "php:8.3-fpm" -> "8.3")
 get_php_runtime_version() {
-    # Source from centralized versions
     if [ -f "$PROJECT_ROOT/example.versions.env" ]; then
         source "$PROJECT_ROOT/example.versions.env"
-        echo "${PHP_RUNTIME_VERSION:-8.1}"
-    else
-        echo "8.1"  # Default fallback
+        if [[ "${PHP_IMAGE:-}" =~ php:([0-9]+\.[0-9]+) ]]; then
+            echo "${BASH_REMATCH[1]}"
+            return
+        fi
     fi
+    log_warn "Could not extract PHP version from PHP_IMAGE -- defaulting to 8.3"
+    echo "8.3"
 }
 
 # Parse semantic version for comparison
@@ -283,20 +286,14 @@ done)
 ## 🎯 Recommendations
 
 ### For Current PHP $php_version Environment
-- Keep maennchen/zipstream-php at ^3.1.1 (PHP 8.1 compatible)
+- Review the compatibility matrix above for version constraints
 - Use Dependabot ignore rules to block incompatible versions
 - Monitor security advisories for compatibility-constrained packages
 
-### For Future PHP Upgrades
-- **PHP 8.2 Upgrade** would unlock:
-  - maennchen/zipstream-php ^3.2.0 (latest features + security)
-  - Symfony 6.x components
-  - Other modern dependency versions
-
 ### Security Management
 - Critical security updates may require emergency PHP upgrade evaluation
-- Alternative packages may be needed for PHP 8.1 compatibility
 - Document compatibility constraints in centralized version management
+- PHP version is sourced from PHP_IMAGE in example.versions.env
 
 ## 🔄 Next Steps
 

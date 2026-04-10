@@ -144,13 +144,13 @@ generate_composer_manifest() {
     mkdir -p "$(dirname "$output_file")"
 
     # Generate composer.json with centralized versions for both production and Dependabot
-    # Extract PHP version from PHP_IMAGE (e.g., "php:8.1-fpm" -> "8.1")
+    # Extract PHP version from PHP_IMAGE (e.g., "php:8.3-fpm" -> "8.3")
     local php_version
     if [[ "${PHP_IMAGE}" =~ php:([0-9]+\.[0-9]+) ]]; then
         php_version="${BASH_REMATCH[1]}"
     else
-        log_warn "Could not extract PHP version from PHP_IMAGE: ${PHP_IMAGE}, defaulting to 8.1"
-        php_version="8.1"
+        log_warn "Could not extract PHP version from PHP_IMAGE: ${PHP_IMAGE}, defaulting to 8.3"
+        php_version="8.3"
     fi
 
     cat > "$output_file" << EOF

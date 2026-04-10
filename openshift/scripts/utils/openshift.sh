@@ -617,12 +617,13 @@ deploy_resource_from_template() {
 # =============================================================================
 
 # Ensure openShift resource values are valid
+# Returns: "<value><unit>" for positive integers, "0" for zero, "null" for empty/invalid
 validate_and_format_resource_value() {
   local value=$1
   local unit=$2
 
-  # Check if the value is a valid number
-  if [[ $value =~ ^[1-9]+$ ]]; then
+  # Check if the value is a valid positive integer (1, 25, 50, 100, 1500, etc.)
+  if [[ $value =~ ^[1-9][0-9]*$ ]]; then
     echo "${value}${unit}"
   elif [[ $value == "0" || $value == 0 ]]; then
     echo "0"
@@ -904,38 +905,141 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  # Construct the oc set resources command
-  local cmd="oc set resources $type $deployment"
-  local requests_set=false
-  local limits_set=false
-
-  if [[ "$cpu_request" != "null" ]]; then
-    cmd+=" --requests=cpu=${cpu_request}"
-    requests_set=true
-  fi
-  if [[ "$mem_request" != "null" ]]; then
-    if $requests_set; then
-      cmd+=",memory=${mem_request}"
-    else
-      cmd+=" --requests=memory=${mem_request}"
-    fi
-    requests_set=true
-  fi
-  if [[ "$cpu_limit" != "null" ]]; then
-    cmd+=" --limits=cpu=${cpu_limit}"
-    limits_set=true
-  fi
-  if [[ "$mem_limit" != "null" ]]; then
-    if $limits_set; then
-      cmd+=",memory=${mem_limit}"
-    else
-      cmd+=" --limits=memory=${mem_limit}"
-    fi
-    limits_set=true
+  # Safety: if memory request is set but limit is unmanaged (0/null), set
+  # limit = request. Memory is incompressible — exceeding limit = OOM kill.
+  #
+  # CPU limits are intentionally NOT set when unmanaged (0 in CSV).
+  # BC Gov Platform recommendation: do not set CPU limits, allowing containers
+  # to burst when node capacity allows. CPU is compressible — the kernel
+  # throttles (not kills) when contended. Requests guarantee scheduling.
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
+        ( "$mem_limit" == "null" || "$mem_limit" == "0" ) ]]; then
+    log_debug "Memory limit unset for $type/$deployment -- setting limit to match request (${mem_request})"
+    mem_limit="$mem_request"
   fi
 
-  log_debug "Set: $cmd"
-  $cmd
+  # Validate: request must not exceed limit when both are set.
+  # If request > limit, auto-correct by raising the limit to match.
+  local mem_req_num=${mem_request//[!0-9]/}
+  local mem_lim_num=${mem_limit//[!0-9]/}
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
+        "$mem_limit" != "null" && "$mem_limit" != "0" && \
+        -n "$mem_req_num" && -n "$mem_lim_num" && \
+        "$mem_req_num" -gt "$mem_lim_num" ]]; then
+    log_warn "Memory request (${mem_request}) exceeds limit (${mem_limit}) for $type/$deployment -- raising limit to match"
+    mem_limit="$mem_request"
+  fi
+
+  local cpu_req_num=${cpu_request//[!0-9]/}
+  local cpu_lim_num=${cpu_limit//[!0-9]/}
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" && \
+        "$cpu_limit" != "null" && "$cpu_limit" != "0" && \
+        -n "$cpu_req_num" && -n "$cpu_lim_num" && \
+        "$cpu_req_num" -gt "$cpu_lim_num" ]]; then
+    log_warn "CPU request (${cpu_request}) exceeds limit (${cpu_limit}) for $type/$deployment -- raising limit to match"
+    cpu_limit="$cpu_request"
+  fi
+
+  # Build the desired resources JSON object.
+  # Values of "0" or "null" are OMITTED — any resource field not listed here
+  # will be REMOVED from the pod spec (declarative, not incremental).
+  # This enables:
+  #   - BestEffort QoS: all zeros → resources: {} → no requests or limits
+  #   - CPU bursting:   cpu_limit=0 → no cpu limit → burst on spare capacity
+  #   - Guaranteed QoS: all values set → requests and limits explicit
+  local requests_parts=()
+  local limits_parts=()
+
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" ]]; then
+    requests_parts+=("\"cpu\":\"$cpu_request\"")
+  fi
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+    requests_parts+=("\"memory\":\"$mem_request\"")
+  fi
+  if [[ "$cpu_limit" != "null" && "$cpu_limit" != "0" ]]; then
+    limits_parts+=("\"cpu\":\"$cpu_limit\"")
+  fi
+  if [[ "$mem_limit" != "null" && "$mem_limit" != "0" ]]; then
+    limits_parts+=("\"memory\":\"$mem_limit\"")
+  fi
+
+  local resources_obj="{}"
+  local resources_parts=()
+  if [[ ${#requests_parts[@]} -gt 0 ]]; then
+    local req_json
+    req_json=$(IFS=,; echo "${requests_parts[*]}")
+    resources_parts+=("\"requests\":{$req_json}")
+  fi
+  if [[ ${#limits_parts[@]} -gt 0 ]]; then
+    local lim_json
+    lim_json=$(IFS=,; echo "${limits_parts[*]}")
+    resources_parts+=("\"limits\":{$lim_json}")
+  fi
+  if [[ ${#resources_parts[@]} -gt 0 ]]; then
+    local parts_json
+    parts_json=$(IFS=,; echo "${resources_parts[*]}")
+    resources_obj="{$parts_json}"
+  fi
+
+  # Determine QoS class for logging
+  local qos="Burstable"
+  if [[ ${#requests_parts[@]} -eq 0 && ${#limits_parts[@]} -eq 0 ]]; then
+    qos="BestEffort"
+  elif [[ "$cpu_request" == "$cpu_limit" && "$mem_request" == "$mem_limit" && \
+          "$cpu_request" != "null" && "$cpu_request" != "0" && \
+          "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+    qos="Guaranteed"
+  fi
+
+  # Apply declaratively via JSON patch — replaces the ENTIRE resources block
+  # on every container. This ensures stale limits from prior Helm deploys or
+  # manual patches are removed. Uses "add" op which creates-or-replaces.
+  local num_containers
+  num_containers=$(oc get "$type/$deployment" -n "$DEPLOY_NAMESPACE" \
+    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c . || echo "0")
+
+  if [[ "$num_containers" -eq 0 ]]; then
+    log_warn "No containers found for $type/$deployment — skipping resource update"
+    return 0
+  fi
+
+  local patch_ops=()
+  for ((i=0; i<num_containers; i++)); do
+    patch_ops+=("{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/$i/resources\",\"value\":$resources_obj}")
+  done
+  local patch_json="[$(IFS=,; echo "${patch_ops[*]}")]"
+
+  log_info "  Resources ($qos): $resources_obj (${num_containers} container(s))"
+  log_debug "  Patch: $patch_json"
+
+  if ! oc patch "$type/$deployment" -n "$DEPLOY_NAMESPACE" --type=json -p "$patch_json"; then
+    log_warn "JSON patch failed for $type/$deployment — falling back to oc set resources"
+    # Fallback: use oc set resources for positive values only (can't remove, but won't break)
+    local cmd="oc set resources $type $deployment"
+    local has_values=false
+    if [[ ${#requests_parts[@]} -gt 0 ]]; then
+      local req_csv=""
+      [[ "$cpu_request" != "null" && "$cpu_request" != "0" ]] && req_csv+="cpu=${cpu_request}"
+      if [[ "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+        [[ -n "$req_csv" ]] && req_csv+=","
+        req_csv+="memory=${mem_request}"
+      fi
+      [[ -n "$req_csv" ]] && cmd+=" --requests=$req_csv" && has_values=true
+    fi
+    if [[ ${#limits_parts[@]} -gt 0 ]]; then
+      local lim_csv=""
+      [[ "$cpu_limit" != "null" && "$cpu_limit" != "0" ]] && lim_csv+="cpu=${cpu_limit}"
+      if [[ "$mem_limit" != "null" && "$mem_limit" != "0" ]]; then
+        [[ -n "$lim_csv" ]] && lim_csv+=","
+        lim_csv+="memory=${mem_limit}"
+      fi
+      [[ -n "$lim_csv" ]] && cmd+=" --limits=$lim_csv" && has_values=true
+    fi
+    if $has_values; then
+      log_debug "  Fallback: $cmd"
+      $cmd
+    fi
+  fi
 }
 
 # Function to create HorizontalPodAutoscaler
