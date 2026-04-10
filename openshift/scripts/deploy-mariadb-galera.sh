@@ -134,20 +134,22 @@ initialize_utility_arrays
 
 echo "Deploying MariaDB Galera to: $DB_DEPLOYMENT_NAME..."
 
-# Preflight: validate DB_REPLICAS matches the sizing CSV
+# Resolve DB_REPLICAS from the per-environment sizing CSV (authoritative source).
+# The CSV is environment-specific (e.g., 950003-prod-sizing.csv has 5 replicas,
+# dev/test have 2), eliminating cross-environment merge conflicts in example.env.
+# Falls back to DB_REPLICAS from env var / example.env if CSV is unavailable.
 SIZING_CSV="./openshift/${DEPLOY_NAMESPACE}-sizing.csv"
 if [[ -f "$SIZING_CSV" ]]; then
   CSV_POD_COUNT=$(awk -F',' '$1 == "'"$DB_DEPLOYMENT_NAME"'" { print $3 }' "$SIZING_CSV" | tr -d ' ')
-  if [[ -n "$CSV_POD_COUNT" && "$CSV_POD_COUNT" != "$DB_REPLICAS" ]]; then
-    echo "CONFIG MISMATCH: DB_REPLICAS=$DB_REPLICAS but $SIZING_CSV has PodCount=$CSV_POD_COUNT"
-    echo "   The deploy script builds gcomm:// for $DB_REPLICAS nodes, but right-sizing.sh"
-    echo "   will later scale to $CSV_POD_COUNT -- extra nodes get an incomplete cluster address."
-    echo "   Fix: set DB_REPLICAS=$CSV_POD_COUNT in GitHub Environment or example.env"
-    exit 1
+  if [[ -n "$CSV_POD_COUNT" && "$CSV_POD_COUNT" -gt 0 ]]; then
+    if [[ "$CSV_POD_COUNT" != "$DB_REPLICAS" ]]; then
+      log_warn "DB_REPLICAS=$DB_REPLICAS (env) overridden by sizing CSV PodCount=$CSV_POD_COUNT"
+    fi
+    DB_REPLICAS="$CSV_POD_COUNT"
   fi
-  echo "DB_REPLICAS=$DB_REPLICAS matches sizing CSV ($SIZING_CSV)"
+  echo "DB_REPLICAS=$DB_REPLICAS (from $SIZING_CSV)"
 else
-  echo "Sizing CSV not found: $SIZING_CSV -- skipping replica count validation"
+  echo "Sizing CSV not found: $SIZING_CSV -- using DB_REPLICAS=$DB_REPLICAS from environment"
 fi
 
 log_debug "DEBUG: USE_ARTIFACTORY=$USE_ARTIFACTORY"

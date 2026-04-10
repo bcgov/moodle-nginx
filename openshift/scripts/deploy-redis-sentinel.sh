@@ -62,6 +62,22 @@ oc project $OC_PROJECT
 export REDIS_STS_NAME="$REDIS_NAME-node"
 export REDIS_STATS_NAME="$REDIS_NAME-stats"
 
+# Resolve REDIS_REPLICAS from the per-environment sizing CSV (authoritative source).
+# Falls back to REDIS_REPLICAS from env var / example.env if CSV is unavailable.
+SIZING_CSV="./openshift/${DEPLOY_NAMESPACE}-sizing.csv"
+if [[ -f "$SIZING_CSV" ]]; then
+  CSV_POD_COUNT=$(awk -F',' '$1 == "'"$REDIS_STS_NAME"'" { print $3 }' "$SIZING_CSV" | tr -d ' ')
+  if [[ -n "$CSV_POD_COUNT" && "$CSV_POD_COUNT" -gt 0 ]]; then
+    if [[ "$CSV_POD_COUNT" != "$REDIS_REPLICAS" ]]; then
+      log_warn "REDIS_REPLICAS=$REDIS_REPLICAS (env) overridden by sizing CSV PodCount=$CSV_POD_COUNT"
+    fi
+    REDIS_REPLICAS="$CSV_POD_COUNT"
+  fi
+  echo "REDIS_REPLICAS=$REDIS_REPLICAS (from $SIZING_CSV)"
+else
+  echo "Sizing CSV not found: $SIZING_CSV -- using REDIS_REPLICAS=$REDIS_REPLICAS from environment"
+fi
+
 # Create or update the ConfigMap
 create_or_update_configmap "$REDIS_STATS_NAME" \
   "./config/redis/redis-stats.php"
