@@ -58,8 +58,16 @@ if [ -z "$BASH_VERSION" ]; then
   exec /bin/bash "$0" "$@"
 fi
 
-# Source the utility script
-source /usr/local/bin/_utils.sh
+# Universal _utils.sh loader - works in all environments
+# Priority: same-dir > /scripts > /usr/local/bin > ./openshift/scripts
+for _util_path in \
+  "$(dirname "${BASH_SOURCE[0]}")/_utils.sh" \
+  "/scripts/_utils.sh" \
+  "/usr/local/bin/_utils.sh" \
+  "./openshift/scripts/_utils.sh"; do
+  [[ -f "$_util_path" ]] && source "$_util_path" && break
+done
+[[ "$(type -t log_info)" != "function" ]] && echo "FATAL: Cannot locate _utils.sh" && exit 1
 
 src_dir='/app/public'
 dest_dir='/var/www/html'

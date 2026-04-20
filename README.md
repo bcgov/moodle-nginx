@@ -13,6 +13,44 @@ This directory contains the docker setup to run an instance of Moodle (MOODLE_40
 All image versions are centrally managed in `example.versions.env`.
 Most relevant runtime variables can be found in `example.env`.
 
+## ⚠️ Critical: Galera Cluster Operations
+
+**NEVER use standard Kubernetes commands directly on MariaDB Galera clusters** - they bypass protections and cause split-brain.
+
+### ❌ UNSAFE Operations (NEVER USE):
+```bash
+oc scale sts/mariadb-galera --replicas=5          # Bypasses cluster address verification
+oc delete pod mariadb-galera-{1,2,3,4}            # Parallel restart causes split-brain
+oc delete pvc data-mariadb-galera-*               # Data loss + wrong bootstrap
+oc rollout restart sts/mariadb-galera             # Parallel restart
+kubectl scale ...                                  # Same issues as oc scale
+```
+
+### ✅ SAFE Operations (ALWAYS USE):
+```bash
+# Safe manual scaling (with protections)
+./scripts/scale-galera.sh mariadb-galera --replicas=5
+
+# CSV-driven scaling (automated right-sizing)
+./openshift/scripts/right-sizing.sh
+
+# Emergency bootstrap recovery
+./scripts/bootstrap-mariadb-galera.ps1 -Bootstrap
+
+# Full deployment with safety checks
+./openshift/scripts/deploy-mariadb-galera.sh
+```
+
+**Why This Matters:**
+- ❌ Standard scaling bypasses cluster address verification → split-brain
+- ❌ Parallel pod restarts cause multiple independent clusters → data divergence
+- ❌ PVC deletion without coordination → data loss
+- ✅ Safe wrappers provide incremental scaling, sync validation, and health checks
+
+📖 **See:** [Galera Deployment Best Practices](docs/galera-deployment-best-practices.md)
+
+---
+
 ## 🔄 Centralized Dependency Management
 
 This repository uses centralized dependency management:

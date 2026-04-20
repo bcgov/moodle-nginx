@@ -1,8 +1,16 @@
 #!/bin/bash
 #set -e # Exit on error
 
-# Source the utility script
-source ./openshift/scripts/_utils.sh
+# Universal _utils.sh loader - works in all environments
+# Priority: same-dir > /scripts > /usr/local/bin > ./openshift/scripts
+for _util_path in \
+  "$(dirname "${BASH_SOURCE[0]}")/_utils.sh" \
+  "/scripts/_utils.sh" \
+  "/usr/local/bin/_utils.sh" \
+  "./openshift/scripts/_utils.sh"; do
+  [[ -f "$_util_path" ]] && source "$_util_path" && break
+done
+[[ "$(type -t log_info)" != "function" ]] && echo "FATAL: Cannot locate _utils.sh" && exit 1
 
 # Initialize utility file arrays and show debug output
 # This ensures we always have the complete and up-to-date list of utility files
@@ -57,6 +65,8 @@ create_or_update_configmap "$CRON_NAME-shell" "cron.sh=./config/cron/cron.sh"
 create_or_update_configmap "check-pod-logs-script" \
   "check-pod-logs.sh=./openshift/scripts/check-pod-logs.sh" \
   "${UTILITY_CONFIGMAP_ARGS[@]}" \
+  "galera-inspect.sh=./openshift/scripts/galera-inspect.sh" \
+  "galera-recover.sh=./openshift/scripts/galera-recover.sh" \
   "content_replacement_columns.csv=./openshift/scripts/includes/content_replacement_columns.csv" \
   "find-courses-with-tag.php=./config/moodle/find-courses-with-tag.php"
 
@@ -113,7 +123,8 @@ while true; do
   # Ensure that the Redis proxy is deployed and error-free
   wait_for_deployment_without_errors "deployment/redis-proxy"
 
-    log_info "Create and run Moodle upgrade job..."
+  log_info "Create and run Moodle upgrade job..."
+
   deploy_resource_from_template ./openshift/moodle-upgrade.yml \
     IMAGE_REPO=$IMAGE_REPO \
     DEPLOY_NAMESPACE=$DEPLOY_NAMESPACE \

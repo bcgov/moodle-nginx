@@ -26,6 +26,7 @@ services:
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
       - ./openshift/scripts/migrate-build-files.sh:/usr/local/bin/migrate-build-files.sh:delegated
+      # _utils.sh path matches OpenShift Job initContainers (see migrate-build-files.yml, moodle-upgrade.yml)
       - ./openshift/scripts/_utils.sh:/usr/local/bin/_utils.sh:delegated
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated

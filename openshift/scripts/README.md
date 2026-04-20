@@ -4,6 +4,33 @@ Comprehensive collection of scripts for deploying and managing the Moodle applic
 
 ## 📋 Quick Reference
 
+### 🔧 Galera Cluster Management
+
+| Script | Purpose | Documentation |
+|--------|---------|---------------|
+| [`galera-inspect.sh`](./utils/galera-inspect.sh) | Inspect cluster health & diagnose split-brain | [RCA](../../docs/galera-split-brain-rca.md) |
+| [`galera-recover.sh`](./utils/galera-recover.sh) | Recover from split-brain with forced bootstrap | [Manual Override](../../docs/manual-mode-override.md) |
+| [`repair-mariadb-galera.sh`](./repair-mariadb-galera.sh) | Namespace-locked one-command safe recovery using sizing CSV target replicas | [Troubleshooting](../../docs/manual-galera-troubleshooting.md) |
+| [`update-galera-scripts.sh`](./update-galera-scripts.sh) | Deploy/update recovery scripts to pod-health-monitor | See inline header |
+
+**Quick Start**:
+```bash
+# Deploy scripts to pod-health-monitor (updates all utility scripts)
+.\scripts\update-pod-health-scripts.ps1 -Namespace 950003-prod
+
+# Inspect cluster health from inside pod
+oc exec -it deployment/pod-health-monitor -n 950003-prod -- bash /scripts/utils/galera-inspect.sh
+
+# Recover from split-brain (interactive)
+oc exec -it deployment/pod-health-monitor -n 950003-prod -- bash /scripts/utils/galera-recover.sh
+
+# Force recovery (no confirmation)
+oc exec deployment/pod-health-monitor -n 950003-prod -- bash /scripts/utils/galera-recover.sh --force
+
+# Namespace-locked safe recovery shortcut (reads replicas from sizing CSV)
+oc exec deployment/pod-health-monitor -n 950003-prod -- bash -lc "source /scripts/repair-mariadb-galera.sh"
+```
+
 ### Monitoring & Health
 
 | Script | Purpose | Documentation |

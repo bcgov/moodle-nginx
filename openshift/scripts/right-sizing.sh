@@ -3,61 +3,151 @@
 # right-sizing.sh
 #==============================================================================
 # PURPOSE:
-#   Apply resource allocation (CPU/memory requests and limits) and scaling
-#   configuration (pod count, HPA settings) to all deployments and StatefulSets
-#   in the namespace based on CSV configuration files.
+#   Apply resource allocation (CPU/memory requests and limits), scaling
+#   configuration (pod count, HPA settings), and Galera timeout tuning
+#   to all deployments and StatefulSets based on CSV configuration.
 #
 # CSV FORMAT:
-#   Deployment,Type,PodCount,MaxPods,PVCCount,PVCCapacity,CPURequest,CPULimit,MemRequest,MemLimit,CPUScaleValue
-#   moodle-php,deployment,3,10,0,0,500m,2000m,1Gi,4Gi,80
-#   mariadb-galera,sts,3,3,3,20Gi,1000m,4000m,4Gi,8Gi,80
+#   Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),
+#   CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB),
+#   CPU Scale Value,Galera Profile
+#
+#   Galera Profile: default|minimal|dev|test|production|full (empty = skip)
+#
+# CSV SOURCE:
+#   - Default: ./openshift/${DEPLOY_NAMESPACE}-sizing.csv (file)
+#   - ConfigMap: Set CSV_SOURCE=configmap to read from right-sizing-config
 #
 # ARCHITECTURE:
-#   Reads CSV file: ./openshift/${DEPLOY_NAMESPACE}-sizing.csv
+#   Reads CSV file or ConfigMap: right-sizing-config
 #   - Sets resource requests/limits for each deployment
-#   - Scales pods to specified count
+#   - Scales pods to specified count (incremental for Galera)
+#   - Applies Galera timeout configuration (if profile specified)
 #   - Creates HorizontalPodAutoscaler if MaxPods > PodCount
 #   - Skips resources with PodCount=0 (optional/temporary resources)
 #
 # QUICK CONFIG:
 #   DEPLOY_NAMESPACE         - Determines CSV file to use (required)
-#   CSV Location             - ./openshift/${DEPLOY_NAMESPACE}-sizing.csv
+#   CSV_SOURCE               - "file" (default) or "configmap"
 #
 # USAGE:
-#   # Apply sizing for dev namespace
-#   export DEPLOY_NAMESPACE="e66ac2-dev"
+#   # Apply sizing for dev namespace (from file)
+#   export DEPLOY_NAMESPACE="950003-dev"
 #   ./openshift/scripts/right-sizing.sh
 #
-#   # Apply sizing for prod namespace
+#   # Apply sizing from ConfigMap (in-cluster execution)
 #   export DEPLOY_NAMESPACE="950003-prod"
+#   export CSV_SOURCE="configmap"
 #   ./openshift/scripts/right-sizing.sh
+#
+# IN-CLUSTER USAGE:
+#   Called from pod-health-monitor after CSV uploaded to ConfigMap:
+#   oc exec deployment/pod-health-monitor -n 950003-dev -- \
+#     bash -c 'export DEPLOY_NAMESPACE=950003-dev; export CSV_SOURCE=configmap; bash /scripts/right-sizing.sh'
 #
 # CSV FILES:
-#   - Dev:  ./openshift/e66ac2-dev-sizing.csv
+#   - Dev:  ./openshift/950003-dev-sizing.csv
 #   - Test: ./openshift/950003-test-sizing.csv
 #   - Prod: ./openshift/950003-prod-sizing.csv
+#   - ConfigMap: right-sizing-config (when CSV_SOURCE=configmap)
 #
 # RELATED DOCS:
 #   - SharePoint source (manual export):
 #     "OpenShift Cluster Right-Sizing" spreadsheet
 #   - Future: Direct Microsoft Graph API integration
+#   - Galera timeout tuning: docs/galera-timeout-in-cluster-architecture.md
 #==============================================================================
 
 echo "Right-sizing cluster..."
 
-# Source the utility script
-source ./openshift/scripts/_utils.sh
+# Universal _utils.sh loader - works in all environments
+# Priority: same-dir > /scripts > /usr/local/bin > ./openshift/scripts
+for _util_path in \
+  "$(dirname "${BASH_SOURCE[0]}")/_utils.sh" \
+  "/scripts/_utils.sh" \
+  "/usr/local/bin/_utils.sh" \
+  "./openshift/scripts/_utils.sh"; do
+  [[ -f "$_util_path" ]] && source "$_util_path" && break
+done
+[[ "$(type -t log_info)" != "function" ]] && echo "FATAL: Cannot locate _utils.sh" && exit 1
 
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
+
+# Read deployment filter (optional - limits which deployments to process)
+DEPLOYMENT_FILTER="${DEPLOYMENT_FILTER:-}"
+
+# Function to check if a deployment should be processed
+should_process_deployment() {
+  local deployment=$1
+
+  # If no filter set, process all deployments
+  if [[ -z "$DEPLOYMENT_FILTER" ]]; then
+    return 0
+  fi
+
+  # Check if deployment is in the filter list (comma-separated)
+  IFS=',' read -ra FILTER_ARRAY <<< "$DEPLOYMENT_FILTER"
+  for filter_item in "${FILTER_ARRAY[@]}"; do
+    # Trim whitespace
+    filter_item=$(echo "$filter_item" | xargs)
+    if [[ "$deployment" == "$filter_item" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+if [[ -n "$DEPLOYMENT_FILTER" ]]; then
+  echo "📌 Deployment filter active: $DEPLOYMENT_FILTER"
+  echo "   Only filtered deployments will be processed"
+  echo ""
+fi
+
+# Determine CSV source (file or ConfigMap)
+CSV_SOURCE="${CSV_SOURCE:-file}"
+CSV_TEMP_FILE="/tmp/right-sizing-${DEPLOY_NAMESPACE}.csv"
+
+if [[ "$CSV_SOURCE" == "configmap" ]]; then
+  echo "Reading CSV from ConfigMap: right-sizing-config"
+
+  # Extract CSV from ConfigMap (in-cluster execution)
+  if ! oc get configmap right-sizing-config -n "$DEPLOY_NAMESPACE" -o jsonpath='{.data.sizing\.csv}' > "$CSV_TEMP_FILE" 2>/dev/null; then
+    echo "[ERROR] Failed to read CSV from ConfigMap"
+    echo "  Ensure ConfigMap 'right-sizing-config' exists with key 'sizing.csv'"
+    exit 1
+  fi
+
+  CSV_FILE="$CSV_TEMP_FILE"
+  echo "CSV loaded from ConfigMap ($(wc -l < "$CSV_FILE") lines)"
+else
+  # Use local file
+  CSV_FILE="./openshift/${DEPLOY_NAMESPACE}-sizing.csv"
+
+  if [[ ! -f "$CSV_FILE" ]]; then
+    echo "[ERROR] CSV file not found: $CSV_FILE"
+    exit 1
+  fi
+
+  echo "Using CSV file: $CSV_FILE"
+fi
+
+echo ""
 
 # Track failures across the pipe subshell
 rm -f /tmp/right-sizing-failures.txt
 
 # Read the CSV file line by line to set deployment resources
-# based on those values
-tail -n +2 ./openshift/${DEPLOY_NAMESPACE}-sizing.csv | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue
+# Header format: Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB),CPU Scale Value
+tail -n +2 "$CSV_FILE" | while IFS=, read -r Deployment Type PodCount MaxPods PVCCount PVCCapacity CPURequest CPULimit MemRequest MemLimit CPUScaleValue
 do
+  # Check deployment filter first
+  if ! should_process_deployment "$Deployment"; then
+    echo "⏭️  Skipping $Type/$Deployment (not in filter)"
+    continue
+  fi
+
   echo "Right-sizing: $Type/$Deployment"
 
   # Ignore if the type is not statefulset or deployment (mainly ignores jobs)
@@ -68,48 +158,20 @@ do
   if [[ $PodCount -eq 0 ]]; then
     echo "Skipping optional / temporary resource... no pods required to be running."
   else
-    # Galera StatefulSets require incremental scaling (1→2→...→N) because
-    # podManagementPolicy=Parallel (immutable) starts ALL pods at once.
-    # Fresh secondary pods bootstrap independent clusters, which causes
-    # split-brain or "conflicting prims" crashes.
-    if [[ "$Type" == "sts" && "$Deployment" == *"galera"* && $PodCount -gt 1 ]]; then
-      echo "📈 Incremental Galera scaling for $Deployment to $PodCount replicas..."
-      GALERA_SCALE_FAILED=false
-      for SCALE_TARGET in $(seq 1 $PodCount); do
-        CURRENT=$(oc get sts/$Deployment -o jsonpath='{.spec.replicas}' -n "$DEPLOY_NAMESPACE" 2>/dev/null || echo "0")
-        if [[ "$CURRENT" -ge "$SCALE_TARGET" ]]; then
-          echo "   ✅ Already at $CURRENT replicas (target: $SCALE_TARGET)"
-          continue
-        fi
-        echo "   📈 Scaling $Deployment to $SCALE_TARGET/$PodCount..."
-        oc scale sts/$Deployment --replicas=$SCALE_TARGET -n "$DEPLOY_NAMESPACE"
-        NEW_POD="${Deployment}-$((SCALE_TARGET - 1))"
-        echo "   ⏳ Waiting for $NEW_POD to be Ready..."
-        READY_ATTEMPTS=0
-        MAX_READY_ATTEMPTS=60
-        while [[ $READY_ATTEMPTS -lt $MAX_READY_ATTEMPTS ]]; do
-          POD_READY=$(oc get pod "$NEW_POD" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-          if [[ "$POD_READY" == "True" ]]; then
-            echo "   ✅ $NEW_POD is Ready"
-            break
-          fi
-          sleep 10
-          READY_ATTEMPTS=$((READY_ATTEMPTS + 1))
-          if [[ $((READY_ATTEMPTS % 6)) -eq 0 ]]; then
-            echo "   ⏳ Still waiting for $NEW_POD... $((READY_ATTEMPTS * 10))s elapsed"
-          fi
-        done
-        if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
-          echo "   ❌ $NEW_POD failed to become Ready within 600s"
-          GALERA_SCALE_FAILED=true
-          break
-        fi
-      done
-      if [[ "$GALERA_SCALE_FAILED" == "true" ]]; then
-        echo "❌ $Type/$Deployment incremental scaling failed"
-        echo "FAILED:$Type/$Deployment (incremental scaling)" >> /tmp/right-sizing-failures.txt
+    # Galera StatefulSets require special handling to prevent split-brain.
+    # Use scale_galera_statefulset() which provides:
+    # - Pre-flight cluster address verification
+    # - Incremental scaling with sync validation
+    # - Split-brain prevention and health checks
+    # See: docs/galera-deployment-best-practices.md#solution-4
+    if [[ "$Type" == "sts" && "$Deployment" == *"galera"* ]]; then
+      echo "📈 Galera-aware scaling for $Deployment to $PodCount replicas..."
+      if ! scale_galera_statefulset "$Deployment" "$PodCount" "$DEPLOY_NAMESPACE"; then
+        echo "❌ $Type/$Deployment Galera scaling failed"
+        echo "FAILED:$Type/$Deployment (Galera scaling)" >> /tmp/right-sizing-failures.txt
       fi
     else
+      # Non-Galera deployments use standard scaling
       if ! scale_deployment "$Type" "$Deployment" "$PodCount" "$MaxPods"; then
         echo "❌ $Type/$Deployment failed to stabilize after scaling"
         # Signal failure to parent shell via temp file (pipe subshell can't set vars)
@@ -117,26 +179,31 @@ do
       fi
     fi
 
-    # Galera-specific: verify cluster synchronization and consistency after scaling.
-    # scale_deployment only checks pod logs — it doesn't verify Galera state.
-    # Pods can appear "healthy" while in split-brain (independent clusters).
+    # Galera-specific post-scaling operations
+    # scale_galera_statefulset() already handles health checks and sync validation,
+    # but we still need to handle partition resets and restarts for ConfigMap updates.
     if [[ "$Type" == "sts" && "$Deployment" == *"galera"* ]]; then
-      echo "🔍 Verifying Galera cluster synchronization for $Deployment..."
-      if ! wait_for_galera_sync "$Deployment" 30 10 "$PodCount"; then
-        echo "❌ $Deployment Galera cluster failed to synchronize after right-sizing"
-        echo "FAILED:$Type/$Deployment (Galera sync)" >> /tmp/right-sizing-failures.txt
+
+      # Ensure partition is set to 0 for Galera StatefulSets
+      # Kubernetes won't restart pods if partition >= replica count
+      # This can happen after scale-down or failed deployments
+      echo "🔧 Ensuring partition is reset for $Deployment..."
+      if ! ensure_statefulset_partition "$Deployment" "$DEPLOY_NAMESPACE" 0; then
+        echo "   ❌ Failed to reset partition - restart may fail"
+        echo "FAILED:$Type/$Deployment (partition reset)" >> /tmp/right-sizing-failures.txt
+      fi
+
+      # Restart StatefulSet to ensure ConfigMap changes are applied
+      # Resource changes trigger automatic restarts, but ConfigMap changes
+      # (like my.cnf timeout updates) require manual restart to take effect.
+      # By this point, resource-based restarts have completed, so triggering
+      # another restart will pick up any ConfigMap modifications.
+      echo "🔄 Restarting $Deployment to apply configuration changes..."
+      if restart_statefulset "$Deployment" "$DEPLOY_NAMESPACE" "600s" "true" "$PodCount"; then
+        echo "✅ $Deployment restarted successfully with verified Galera health"
       else
-        echo "✅ $Deployment Galera cluster is synchronized ($PodCount nodes)"
-        # Additional split-brain check — verify all pods share the same cluster UUID
-        check_galera_cluster_health "app.kubernetes.io/name=$Deployment" "$DEPLOY_NAMESPACE" "$PodCount"
-        GALERA_HEALTH=$?
-        if [[ $GALERA_HEALTH -eq 2 ]]; then
-          echo "🚨 SPLIT-BRAIN DETECTED in $Deployment after right-sizing!"
-          echo "FAILED:$Type/$Deployment (split-brain)" >> /tmp/right-sizing-failures.txt
-        elif [[ $GALERA_HEALTH -eq 1 ]]; then
-          echo "⚠️ $Deployment has unhealthy pods after right-sizing"
-          echo "FAILED:$Type/$Deployment (unhealthy pods)" >> /tmp/right-sizing-failures.txt
-        fi
+        echo "⚠️ $Deployment restart failed or health check failed"
+        echo "FAILED:$Type/$Deployment (restart or health check)" >> /tmp/right-sizing-failures.txt
       fi
     fi
 
@@ -148,6 +215,44 @@ do
     fi
   fi
 done
+
+# Apply Galera timeout configuration if profiles were specified
+if [[ ${#GALERA_PROFILES[@]} -gt 0 ]]; then
+  echo ""
+  echo "========================================================================"
+  echo "Applying Galera Timeout Configuration"
+  echo "========================================================================"
+  echo ""
+
+  for deployment in "${!GALERA_PROFILES[@]}"; do
+    profile="${GALERA_PROFILES[$deployment]}"
+    echo "Applying profile '$profile' to $deployment..."
+
+    # Check if apply-galera-timeouts.sh is available
+    if [[ -f "/scripts/utils/apply-galera-timeouts.sh" ]]; then
+      # In-cluster execution - call the utility script
+      if bash /scripts/utils/apply-galera-timeouts.sh --profile "$profile" --namespace "$DEPLOY_NAMESPACE"; then
+        echo "[OK] Galera timeout configuration applied to $deployment"
+      else
+        echo "[WARN] Failed to apply Galera timeouts to $deployment"
+        echo "FAILED:$deployment (Galera timeout configuration)" >> /tmp/right-sizing-failures.txt
+      fi
+    elif [[ -f "config/pod-health-monitor/utils/apply-galera-timeouts.sh" ]]; then
+      # Local execution - call from repo
+      if bash config/pod-health-monitor/utils/apply-galera-timeouts.sh --profile "$profile" --namespace "$DEPLOY_NAMESPACE"; then
+        echo "[OK] Galera timeout configuration applied to $deployment"
+      else
+        echo "[WARN] Failed to apply Galera timeouts to $deployment"
+        echo "FAILED:$deployment (Galera timeout configuration)" >> /tmp/right-sizing-failures.txt
+      fi
+    else
+      echo "[WARN] apply-galera-timeouts.sh not found - skipping Galera timeout configuration"
+      echo "  To enable Galera tuning, ensure utility scripts are deployed to pod-health-monitor"
+    fi
+
+    echo ""
+  done
+fi
 
 # Check for any failures that occurred in the pipe subshell
 if [[ -f /tmp/right-sizing-failures.txt ]]; then
@@ -161,5 +266,10 @@ if [[ -f /tmp/right-sizing-failures.txt ]]; then
   exit 1
 fi
 
+# Cleanup
 rm -f /tmp/right-sizing-failures.txt
+if [[ "$CSV_SOURCE" == "configmap" ]]; then
+  rm -f "$CSV_TEMP_FILE"
+fi
+
 echo "✅ Right-sizing completed successfully."

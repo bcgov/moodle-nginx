@@ -11,8 +11,10 @@
 #   - Requires service account with pod read/delete permissions
 #
 # Quick Configuration:
-#   USE_LOG_AGGREGATOR=true   - Enable webhook notifications (default)
-#   USE_LOG_AGGREGATOR=false  - Disable, stdout only
+#   USE_LOG_AGGREGATOR=true                  - Enable webhook notifications (default)
+#   USE_LOG_AGGREGATOR=false                 - Disable, stdout only
+#   ENABLE_MAINTENANCE_MODE_ON_DB_DOWN=true  - Auto-enable maintenance mode when DB offline (default)
+#   SKIP_CHECKS_ON_DB_DOWN=true              - Skip Redis/web checks when DB down (default)
 #
 # Related Documentation:
 #   - Architecture: ../../docs/galera-monitoring-solution.md
@@ -27,8 +29,16 @@ if [ -z "$BASH_VERSION" ]; then
   exec /bin/bash "$0" "$@"
 fi
 
-# Source the utility script
-source /scripts/_utils.sh
+# Universal _utils.sh loader - works in all environments
+# Priority: same-dir > /scripts > /usr/local/bin > ./openshift/scripts
+for _util_path in \
+  "$(dirname "${BASH_SOURCE[0]}")/_utils.sh" \
+  "/scripts/_utils.sh" \
+  "/usr/local/bin/_utils.sh" \
+  "./openshift/scripts/_utils.sh"; do
+  [[ -f "$_util_path" ]] && source "$_util_path" && break
+done
+[[ "$(type -t log_info)" != "function" ]] && echo "FATAL: Cannot locate _utils.sh" && exit 1
 
 # Initialize utility file arrays for any containerized operations
 initialize_utility_arrays
@@ -36,8 +46,16 @@ initialize_utility_arrays
 # Ensure kubeconfig is in a writeable location
 export KUBECONFIG=/tmp/kubeconfig
 
-# Set up oc to use the service account token
-if [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
+# Check if running in-cluster with service account
+if [[ -f "/var/run/secrets/kubernetes.io/serviceaccount/token" && -z "$OPENSHIFT_TOKEN" ]]; then
+  log_debug "Running in-cluster with service account - configuring oc to use pod SA token"
+  SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+  CLUSTER_SERVER="${OPENSHIFT_SERVER:-https://kubernetes.default.svc}"
+
+  oc login --token="$SA_TOKEN" --server="$CLUSTER_SERVER" --insecure-skip-tls-verify=true
+  oc project "$DEPLOY_NAMESPACE"
+elif [[ -n "$OPENSHIFT_TOKEN" && -n "$OPENSHIFT_SERVER" ]]; then
+  log_debug "Using provided OPENSHIFT_TOKEN for authentication"
   oc login --token="$OPENSHIFT_TOKEN" --server="$OPENSHIFT_SERVER" --insecure-skip-tls-verify=true
   oc project "$DEPLOY_NAMESPACE"
 fi
@@ -99,15 +117,31 @@ RESTART_DEPLOYMENTS=(
 # - cron: transient DB/Redis errors during startup, auto-recovers
 # - redis-node: restart can cascade-disconnect redis-proxy
 # - web: nginx auto-recovers, restart won't help
+# - mariadb-galera: handled by dedicated health check, observe for WSREP errors
 declare -A OBSERVE_DEPLOYMENTS
 OBSERVE_DEPLOYMENTS=(
   ["app=cron"]="error,critical"
   ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
   ["deployment=web"]="emerg,crit"
+  ["app.kubernetes.io/name=mariadb-galera"]="WSREP.*Unrecognized,WSREP.*Failed,non-Primary,split"
 )
 
 # Initialize logging
 run_with_logging
+
+# =============================================================================
+# CONFIGURATION - Maintenance Mode Integration
+# =============================================================================
+# Enable maintenance mode when database is offline or during repairs
+# Set to "false" to disable automatic maintenance mode activation
+ENABLE_MAINTENANCE_MODE_ON_DB_DOWN=${ENABLE_MAINTENANCE_MODE_ON_DB_DOWN:-"true"}
+
+# Skip dependent service checks when database is offline
+# (e.g., Redis "lost" errors are expected when DB is down)
+SKIP_CHECKS_ON_DB_DOWN=${SKIP_CHECKS_ON_DB_DOWN:-"true"}
+
+# Flag to track database availability for dependent checks
+GALERA_OFFLINE=false
 
 # =============================================================================
 # GALERA CLUSTER HEALTH MONITORING AND AUTO-HEALING
@@ -122,6 +156,101 @@ if oc get statefulset mariadb-galera -n "$current_namespace" &> /dev/null; then
 
   echo "🔍 Found Galera cluster with expected size: $expected_size pods"
 
+  # === CRITICAL: CHECK FOR ZERO REPLICAS (SITE DOWN) ===
+  if [[ "$expected_size" -eq 0 ]]; then
+    log_critical "🚨 CRITICAL: MariaDB Galera scaled to 0 replicas - SITE IS DOWN"
+    log_warn "   Desired state: 0 replicas (intentional or misconfiguration)"
+    log_warn "   Impact: Database unavailable, site cannot function"
+
+    send_notification "GALERA_ZERO_REPLICAS" "🚨 CRITICAL: Database Offline" \
+      "MariaDB Galera has 0 replicas in $current_namespace. Site is unavailable. This may be intentional (maintenance) or a scaling error." \
+      "error" "$current_namespace"
+
+    # Enable maintenance mode if configured
+    if [[ "$ENABLE_MAINTENANCE_MODE_ON_DB_DOWN" == "true" ]]; then
+      log_info "Enabling maintenance mode (database offline)..."
+      if enable_maintenance_mode "maintenance-message" "auto"; then
+        log_success "✅ Maintenance mode enabled - users see maintenance page"
+      else
+        log_error "Failed to enable maintenance mode - users may see error pages"
+      fi
+    fi
+
+    # Set flag to skip dependent checks
+    GALERA_OFFLINE=true
+
+    # Skip all other checks for this cluster
+    echo "⏭️  Skipping health checks (0 replicas = intentional offline state)"
+  else
+    # === NORMAL OPERATION: REPLICAS > 0 ===
+
+    # === WSREP CONFIGURATION CHECK ===
+    echo "⚙️  Checking WSREP timeout configuration..."
+    running_pods=$(oc get pods -l "$galera_selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+  if [[ -n "$running_pods" ]]; then
+    first_pod=$(echo "$running_pods" | awk '{print $1}')
+
+    # Query actual timeout configuration
+    wsrep_timeout=$(oc exec "$first_pod" -n "$current_namespace" -c mariadb-galera -- bash -c \
+      'PASS=$(cat /opt/bitnami/mariadb/secrets/mariadb-password | tr -d "\n\r"); mysql -u $(printenv MARIADB_USER) --password="$PASS" -sN -e "SHOW VARIABLES LIKE '\''wsrep_provider_options'\'';" 2>/dev/null | grep -oP "evs\.inactive_timeout\s*=\s*\K[^;]+"' 2>/dev/null || echo "UNKNOWN")
+
+    if [[ "$wsrep_timeout" == "PT15S" ]]; then
+      log_warn "⚠️  WSREP Configuration Issue: Using default PT15S timeout"
+      log_warn "   This is TOO AGGRESSIVE for OpenShift and may cause split-brain"
+      log_warn "   Recommended: PT30S for production, PT20S for dev/test"
+      send_notification "WSREP_TIMEOUT_WARNING" "Galera Using Aggressive Timeout" \
+        "evs.inactive_timeout=PT15S (default) detected in $current_namespace. Recommended: PT30S. Risk: False-positive split-brain events." \
+        "warning" "$current_namespace"
+    elif [[ "$wsrep_timeout" =~ ^PT(20|25|30)S$ ]]; then
+      log_success "✅ WSREP timeout: $wsrep_timeout (recommended range)"
+    elif [[ "$wsrep_timeout" != "UNKNOWN" ]]; then
+      log_info "ℹ️  WSREP timeout: $wsrep_timeout (custom configuration)"
+    else
+      log_debug "   Could not query WSREP timeout (pod may be starting)"
+    fi
+  fi
+
+  # === WSREP ERROR PATTERN CHECK ===
+  echo "🔍 Checking for WSREP errors in pod logs..."
+  wsrep_errors_found=false
+
+  for pod in $running_pods; do
+    # Check last 100 lines for WSREP errors
+    recent_logs=$(oc logs "$pod" -n "$current_namespace" -c mariadb-galera --tail=100 2>/dev/null || echo "")
+
+    # Critical WSREP errors that indicate configuration or cluster problems
+    if echo "$recent_logs" | grep -q "WSREP: Unrecognized parameter"; then
+      log_error "❌ $pod: Invalid WSREP parameter detected (configuration error)"
+      send_notification "WSREP_CONFIG_ERROR" "Galera Configuration Error" \
+        "Pod $pod has invalid WSREP parameters. Check extraFlags or my.cnf configuration." \
+        "error" "$current_namespace"
+      wsrep_errors_found=true
+    fi
+
+    if echo "$recent_logs" | grep -q "WSREP: Failed to create.*provider"; then
+      log_error "❌ $pod: WSREP provider failed to initialize"
+      wsrep_errors_found=true
+    fi
+
+    if echo "$recent_logs" | grep -q "non-Primary"; then
+      log_warn "⚠️  $pod: Node in non-Primary state (possible split-brain component)"
+      wsrep_errors_found=true
+    fi
+
+    if echo "$recent_logs" | grep -q "split.*brain"; then
+      log_critical "🚨 $pod: Split-brain mentioned in logs"
+      wsrep_errors_found=true
+    fi
+  done
+
+  if $wsrep_errors_found; then
+    log_warn "⚠️  WSREP errors detected - cluster may need attention"
+  else
+    log_debug "   No WSREP errors found in recent logs"
+  fi
+
+  # === CLUSTER HEALTH CHECK ===
   # Use the existing health check function
   health_status=0
   if check_galera_cluster_health "$galera_selector" "$current_namespace" "$expected_size"; then
@@ -136,36 +265,69 @@ if oc get statefulset mariadb-galera -n "$current_namespace" &> /dev/null; then
       ;;
     1)
       echo "⚠️  Galera cluster has unhealthy pods - attempting auto-heal"
+
+      # Enable maintenance mode before healing if configured
+      if [[ "$ENABLE_MAINTENANCE_MODE_ON_DB_DOWN" == "true" ]]; then
+        log_info "Enabling maintenance mode before auto-heal..."
+        enable_maintenance_mode "maintenance-message" "auto"
+      fi
+
       if auto_heal_galera_cluster "$galera_selector" "$current_namespace"; then
         echo "✅ Galera auto-heal completed successfully"
+
+        # Disable maintenance mode after successful heal
+        if [[ "$ENABLE_MAINTENANCE_MODE_ON_DB_DOWN" == "true" ]]; then
+          log_info "Disabling maintenance mode (cluster healthy)..."
+          if disable_maintenance_mode "web" "maintenance-message" "auto"; then
+            log_success "✅ Maintenance mode disabled - site restored"
+          fi
+        fi
       else
         echo "❌ Galera auto-heal failed - manual intervention may be required"
         # Send critical notification
         send_notification "GALERA_AUTO_HEAL_FAILED" "Galera Auto-Heal Failed" \
           "Auto-healing failed for Galera cluster in $current_namespace. Manual intervention required." \
           "error" "$current_namespace"
+        # NOTE: Maintenance mode stays enabled until manual fix
       fi
       ;;
     2)
       echo "🚨 CRITICAL: Galera split-brain detected - attempting emergency auto-heal"
+
+      # Enable maintenance mode before emergency repair
+      if [[ "$ENABLE_MAINTENANCE_MODE_ON_DB_DOWN" == "true" ]]; then
+        log_info "Enabling maintenance mode before split-brain repair..."
+        enable_maintenance_mode "maintenance-message" "auto"
+      fi
+
       if auto_heal_galera_cluster "$galera_selector" "$current_namespace"; then
         echo "✅ Emergency Galera split-brain recovery completed"
         # Send healing success notification
         send_notification "GALERA_SPLIT_BRAIN_RECOVERED" "Galera Split-Brain Recovered" \
           "Successfully recovered from Galera split-brain condition in $current_namespace" \
           "healing" "$current_namespace"
+
+        # Disable maintenance mode after successful recovery
+        if [[ "$ENABLE_MAINTENANCE_MODE_ON_DB_DOWN" == "true" ]]; then
+          log_info "Disabling maintenance mode (split-brain resolved)..."
+          if disable_maintenance_mode "web" "maintenance-message" "auto"; then
+            log_success "✅ Maintenance mode disabled - site restored"
+          fi
+        fi
       else
         echo "❌ CRITICAL: Failed to recover from Galera split-brain - IMMEDIATE ACTION REQUIRED"
         # Send critical notification
         send_notification "GALERA_SPLIT_BRAIN_CRITICAL" "CRITICAL: Galera Split-Brain Recovery Failed" \
           "Failed to recover from split-brain in $current_namespace. Database cluster may be corrupted. IMMEDIATE ACTION REQUIRED." \
           "error" "$current_namespace"
+        # NOTE: Maintenance mode stays enabled until manual fix
       fi
       ;;
     *)
       echo "❌ Unknown Galera health check status: $health_status"
       ;;
   esac
+  fi  # End of else block (expected_size > 0)
 else
   echo "ℹ️  No MariaDB Galera StatefulSet found in namespace $current_namespace"
 fi
@@ -198,7 +360,29 @@ for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
 done
 
 # Observe-only checks (log errors but never restart)
+# Skip if database is offline (cascading failures are expected)
+if [[ "$SKIP_CHECKS_ON_DB_DOWN" == "true" ]] && [[ "$GALERA_OFFLINE" == "true" ]]; then
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "⏭️  Skipping observe-only checks (database offline)"
+  echo "   Reason: Database unavailable - dependent service errors are expected"
+  echo "   Affected: Redis, Web, Cron error monitoring"
+elif [[ "$GALERA_OFFLINE" == "true" ]]; then
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "⚠️  WARNING: Database offline but SKIP_CHECKS_ON_DB_DOWN=false"
+  echo "   Expect false-positive errors from dependent services"
+fi
+
 for selector in "${!OBSERVE_DEPLOYMENTS[@]}"; do
+  # Skip dependent service checks if database is offline
+  if [[ "$SKIP_CHECKS_ON_DB_DOWN" == "true" ]] && [[ "$GALERA_OFFLINE" == "true" ]]; then
+    # Skip all non-Galera checks when DB is down
+    if [[ "$selector" != "app.kubernetes.io/name=mariadb-galera" ]]; then
+      continue
+    fi
+  fi
+
   error_patterns="${OBSERVE_DEPLOYMENTS[$selector]}"
 
   echo ""

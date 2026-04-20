@@ -1,0 +1,83 @@
+# MariaDB Galera Configuration - 950003-dev AGGRESSIVE TIMEOUTS (TESTING ONLY)
+# WARNING: These timeouts are INTENTIONALLY aggressive to replicate split-brain
+# DO NOT use in production - for split-brain testing only
+
+[client-server]
+port = 3306
+socket = /opt/bitnami/mariadb/tmp/mysql.sock
+
+[mysqld]
+# Basic settings
+default_storage_engine = InnoDB
+basedir = /opt/bitnami/mariadb
+datadir = /bitnami/mariadb/data
+plugin_dir = /opt/bitnami/mariadb/plugin
+tmpdir = /opt/bitnami/mariadb/tmp
+socket = /opt/bitnami/mariadb/tmp/mysql.sock
+pid_file = /opt/bitnami/mariadb/tmp/mysqld.pid
+bind_address = 0.0.0.0
+
+# Character set
+character_set_server = utf8mb4
+collation_server = utf8mb4_unicode_ci
+
+# Safety
+max_allowed_packet = 256M
+max_connect_errors = 1000000
+
+# Binary logging
+log_bin = mysql-bin
+expire_logs_days = 7
+sync_binlog = 1
+
+# InnoDB settings
+innodb_autoinc_lock_mode = 2
+innodb_flush_log_at_trx_commit = 2
+innodb_buffer_pool_size = 128M
+innodb_log_file_size = 64M
+
+# Galera cluster configuration
+wsrep_on = ON
+wsrep_provider = /opt/bitnami/mariadb/lib/libgalera_smm.so
+
+# AGGRESSIVE TIMEOUTS - INTENTIONALLY SHORT FOR TESTING SPLIT-BRAIN
+# These values are designed to trigger failures under normal OpenShift conditions
+# evs.inactive_timeout=PT10S   - Node declared dead after 10 seconds (vs PT30S production)
+# evs.suspect_timeout=PT3.33S  - Node suspected after 3.33 seconds (1/3 of inactive)
+# evs.inactive_check_period=PT3.33S - Check every 3.33 seconds
+# evs.install_timeout=PT10S    - Component install timeout
+# evs.consensus_timeout=PT10S  - Consensus timeout
+wsrep_provider_options="evs.inactive_timeout=PT10S;evs.suspect_timeout=PT3.33S;evs.inactive_check_period=PT3.33S;evs.install_timeout=PT10S;evs.consensus_timeout=PT10S"
+
+wsrep_cluster_name = "galera-cluster"
+wsrep_node_name = ${HOSTNAME}
+wsrep_cluster_address = gcomm://
+wsrep_sst_method = mariabackup
+wsrep_sst_auth = root:${MARIADB_ROOT_PASSWORD}
+
+# Replication settings
+binlog_format = ROW
+default_storage_engine = InnoDB
+innodb_doublewrite = 1
+
+# Thread settings
+wsrep_slave_threads = 4
+
+# Flow control
+wsrep_flow_control_paused_threshold = 0.5
+
+# Logging
+log_error = /opt/bitnami/mariadb/logs/mysqld.log
+slow_query_log = 1
+slow_query_log_file = /opt/bitnami/mariadb/logs/slow.log
+long_query_time = 2
+
+[client]
+port = 3306
+socket = /opt/bitnami/mariadb/tmp/mysql.sock
+default_character_set = utf8mb4
+
+[manager]
+port = 3306
+socket = /opt/bitnami/mariadb/tmp/mysql.sock
+pid_file = /opt/bitnami/mariadb/tmp/mysqld.pid

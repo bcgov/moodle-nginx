@@ -58,8 +58,16 @@
 #   - PreStop Patch: ../../config/mariadb/mariadb-galera-prestop-patch.json
 #==============================================================================
 
-# Source the utility script
-source ./openshift/scripts/_utils.sh
+# Universal _utils.sh loader - works in all environments
+# Priority: same-dir > /scripts > /usr/local/bin > ./openshift/scripts
+for _util_path in \
+  "$(dirname "${BASH_SOURCE[0]}")/_utils.sh" \
+  "/scripts/_utils.sh" \
+  "/usr/local/bin/_utils.sh" \
+  "./openshift/scripts/_utils.sh"; do
+  [[ -f "$_util_path" ]] && source "$_util_path" && break
+done
+[[ "$(type -t log_info)" != "function" ]] && echo "FATAL: Cannot locate _utils.sh" && exit 1
 
 # =============================================================================
 # FAILURE CLEANUP -- ensure the StatefulSet is in a safe, re-runnable state
@@ -194,6 +202,36 @@ oc annotate configmap mariadb-galera-configuration meta.helm.sh/release-namespac
 create_or_update_configmap "${DB_DEPLOYMENT_NAME}-prestop-script" "mariadb-prestop.sh=./openshift/scripts/mariadb-prestop.sh"
 
 echo "ConfigMaps updated"
+
+# =============================================================================
+# TIER 1.5: Credentials Secret -- ensure passwords are in a K8s Secret
+# =============================================================================
+# The Bitnami chart's existingSecret feature reads passwords from a K8s Secret
+# instead of Helm values. This prevents plaintext passwords from appearing in:
+#   - helm get values output
+#   - Helm release metadata (sh.helm.release.v1.*.vN secrets)
+#   - Shell history and CI/CD logs
+#
+# Required keys: mariadb-root-password, mariadb-password,
+#                mariadb-galera-mariabackup-password
+# =============================================================================
+echo ""
+echo "======================================================================="
+echo "TIER 1.5: Credentials Secret"
+echo "======================================================================="
+
+echo "Ensuring ${DB_DEPLOYMENT_NAME} credentials secret..."
+oc create secret generic "$DB_DEPLOYMENT_NAME" \
+  --from-literal=mariadb-root-password="$DB_PASSWORD" \
+  --from-literal=mariadb-password="$DB_PASSWORD" \
+  --from-literal=mariadb-galera-mariabackup-password="$DB_PASSWORD" \
+  --dry-run=client --save-config -o yaml | oc apply -f -
+
+# Prevent Helm from deleting this secret during uninstall/upgrade
+oc annotate secret "$DB_DEPLOYMENT_NAME" helm.sh/resource-policy=keep --overwrite 2>/dev/null || true
+oc label secret "$DB_DEPLOYMENT_NAME" app.kubernetes.io/name="$DB_DEPLOYMENT_NAME" --overwrite 2>/dev/null || true
+
+echo "Credentials secret verified (passwords stored in K8s Secret, not Helm values)"
 
 # =============================================================================
 # TIER 2 & 3: Version Guard -> Fresh Install / Skip / Rolling Upgrade
@@ -344,12 +382,25 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
       --set image.tag=$RESOLVED_IMAGE_TAG \
       --set global.security.allowInsecureImages=true \
       --set global.imagePullSecrets[0].name="${ARTIFACTORY_PULL_SECRET}" \
-      --set rootUser.password=$DB_PASSWORD \
-      --set galera.mariabackup.password=$DB_PASSWORD \
+      --set existingSecret=$DB_DEPLOYMENT_NAME \
       --set galera.bootstrap.forceBootstrap=true \
       --set galera.bootstrap.forceSafeToBootstrap=true \
       --set galera.bootstrap.bootstrapFromNode=0 \
       --set replicaCount=1 \
+      --set startupProbe.enabled=true \
+      --set startupProbe.initialDelaySeconds=120 \
+      --set startupProbe.periodSeconds=15 \
+      --set startupProbe.timeoutSeconds=5 \
+      --set startupProbe.failureThreshold=80 \
+      --set readinessProbe.enabled=true \
+      --set readinessProbe.initialDelaySeconds=30 \
+      --set readinessProbe.periodSeconds=15 \
+      --set readinessProbe.timeoutSeconds=5 \
+      --set livenessProbe.enabled=true \
+      --set livenessProbe.initialDelaySeconds=180 \
+      --set livenessProbe.periodSeconds=30 \
+      --set livenessProbe.timeoutSeconds=10 \
+      --set livenessProbe.failureThreshold=6 \
       --reuse-values 2>&1)
 
     if [[ $? -ne 0 ]]; then
@@ -389,6 +440,8 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
         --set galera.bootstrap.forceBootstrap=false \
         --set galera.bootstrap.forceSafeToBootstrap=false \
         --set replicaCount=$DB_REPLICAS \
+        --set extraFlags="" \
+        --set mariadbd.extraFlags="" \
         --reuse-values
 
       if [[ $? -ne 0 ]]; then
@@ -428,19 +481,27 @@ else
     --set galera.bootstrap.forceBootstrap=true \
     --set galera.bootstrap.bootstrapFromNode=0 \
     --set image.debug=false \
-    --set rootUser.password=$DB_PASSWORD \
+    --set existingSecret=$DB_DEPLOYMENT_NAME \
     --set db.user=$DB_USER \
-    --set db.password=$DB_PASSWORD \
     --set db.name=$DB_NAME \
     --set replicaCount=1 \
     --set persistence.size=10Gi \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
-    --set readinessProbe.enabled=true \
-    --set livenessProbe.enabled=true \
     --set startupProbe.enabled=true \
-    --set galera.mariabackup.password=$DB_PASSWORD \
-    --set galera.mariabackup.forcePassword=true \
+    --set startupProbe.initialDelaySeconds=120 \
+    --set startupProbe.periodSeconds=15 \
+    --set startupProbe.timeoutSeconds=5 \
+    --set startupProbe.failureThreshold=80 \
+    --set readinessProbe.enabled=true \
+    --set readinessProbe.initialDelaySeconds=30 \
+    --set readinessProbe.periodSeconds=15 \
+    --set readinessProbe.timeoutSeconds=5 \
+    --set livenessProbe.enabled=true \
+    --set livenessProbe.initialDelaySeconds=180 \
+    --set livenessProbe.periodSeconds=30 \
+    --set livenessProbe.timeoutSeconds=10 \
+    --set livenessProbe.failureThreshold=6 \
     --set extraVolumes[0].name=prestop-script \
     --set extraVolumes[0].configMap.name=${DB_DEPLOYMENT_NAME}-prestop-script \
     --set extraVolumeMounts[0].name=prestop-script \
@@ -449,6 +510,8 @@ else
     --set extraVolumeMounts[0].readOnly=true \
     --set lifecycle.preStop.exec.command[0]="/bin/sh" \
     --set lifecycle.preStop.exec.command[1]="-c" \
+    --set extraFlags="" \
+    --set mariadbd.extraFlags="" \
     --set lifecycle.preStop.exec.command[2]="/usr/local/bin/prestop.sh"
 
   echo "Helm install completed with replicaCount=1 (bootstrap)"

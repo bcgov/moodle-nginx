@@ -1,0 +1,26 @@
+# Force LF line endings for shell scripts on all platforms
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows-specific files use CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# Let Git handle other text files automatically
+* text=auto
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
+*.jar binary
+*.war binary
+*.ear binary

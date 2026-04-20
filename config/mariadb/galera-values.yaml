@@ -4,12 +4,13 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  ⚠️  REFERENCE ONLY — NOT CONSUMED BY HELM                         ║
 # ║                                                                    ║
-# ║  This file documents the Bitnami MariaDB Galera chart defaults.    ║
-# ║  Helm values are set exclusively via --set flags in:               ║
-# ║    openshift/scripts/deploy-mariadb-galera.sh                      ║
+# ║  This file documents the Bitnami MariaDB Galera chart values.      ║
+# ║  Helm values are set via --set flags in:                           ║
+# ║    openshift/scripts/deploy-mariadb-galera.sh  (CI/CD)             ║
+# ║    scripts/deploy-mariadb-galera.ps1           (local)             ║
 # ║                                                                    ║
 # ║  Do NOT edit values here expecting them to take effect.            ║
-# ║  The --set flags are the single source of truth.                   ║
+# ║  The --set flags in .sh and .ps1 are the source of truth.         ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 #
 ## @section Global parameters
@@ -347,7 +348,11 @@ rootUser:
 ## @param existingSecret Use existing secret for password details (`rootUser.password`, `db.password`, `galera.mariabackup.password` will be ignored and picked up from this secret)
 ## The secret has to contain the keys mariadb-root-password, mariadb-galera-mariabackup-password and mariadb-password.
 ##
-existingSecret: ""
+## ⚠️  AUTHORITATIVE SOURCE: deploy-mariadb-galera.sh Tier 1.5 creates this
+##     secret before every helm install/upgrade. Passwords are NEVER passed
+##     via --set flags -- they live exclusively in the K8s Secret.
+##
+existingSecret: "mariadb-galera"
 ## @param usePasswordFiles Mount credentials as a files instead of using an environment variable.
 ##
 usePasswordFiles: false
@@ -372,7 +377,7 @@ db:
   ## @param db.name Name for new database to create
   ## ref: https://github.com/bitnami/containers/tree/main/bitnami/mariadb-galera#creating-a-database-on-first-run
   ##
-  name: moodle-test-in-galera-values-yaml
+  name: moodle
   ## @param db.forcePassword Option to force users to specify a password. That is required for 'helm upgrade' to work properly.
   ## If it is not force, a random password will be generated.
   ##
@@ -825,12 +830,14 @@ resources: {}
 livenessProbe:
   enabled: true
   ## Initializing the database could take some time
+  ## Tuned for slow/constrained OpenShift environments.
+  ## Liveness queries wsrep_cluster_members which can be slow during IST/SST.
   ##
-  initialDelaySeconds: 120
-  periodSeconds: 10
-  timeoutSeconds: 1
+  initialDelaySeconds: 180
+  periodSeconds: 30
+  timeoutSeconds: 10
   successThreshold: 1
-  failureThreshold: 3
+  failureThreshold: 6
 ## MariaDB Galera containers' readiness probe
 ## ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
 ## @param readinessProbe.enabled Turn on and off readiness probe
@@ -843,8 +850,8 @@ livenessProbe:
 readinessProbe:
   enabled: true
   initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 1
+  periodSeconds: 15
+  timeoutSeconds: 5
   successThreshold: 1
   failureThreshold: 3
 ## MariaDB Galera containers' startup probe
@@ -857,16 +864,17 @@ readinessProbe:
 ## @param startupProbe.successThreshold Minimum consecutive successes for the probe
 ##
 startupProbe:
-  enabled: false
-  ## Initializing the database could take some time
+  enabled: true
+  ## Tuned for slow/constrained OpenShift environments.
+  ## 22 min window (120s init + 80 * 15s) for IST/SST to complete.
   ##
   initialDelaySeconds: 120
-  periodSeconds: 10
-  timeoutSeconds: 1
+  periodSeconds: 15
+  timeoutSeconds: 5
   successThreshold: 1
-  ## Let's wait 600 seconds by default, it should give enough time in any cluster for mysql to init
+  ## Let's wait ~22 min, it should give enough time for IST/SST
   ##
-  failureThreshold: 48
+  failureThreshold: 80
 ## @param customStartupProbe Custom liveness probe for the Web component
 ##
 customStartupProbe: {}
