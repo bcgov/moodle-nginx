@@ -153,14 +153,14 @@ scale_galera_statefulset() {
   local sts_name="$1"
   local target_replicas="$2"
   local namespace="${3:-$DEPLOY_NAMESPACE}"
-  
+
   log_header "Galera-Aware Scaling: $sts_name → $target_replicas replicas"
-  
+
   # ============================================================
   # STEP 1: PRE-FLIGHT VERIFICATION
   # ============================================================
   log_info "Step 1/4: Pre-flight cluster address verification"
-  
+
   # Source Galera utilities if not already loaded
   if ! command -v galera_verify_cluster_address &>/dev/null; then
     local galera_utils
@@ -172,35 +172,35 @@ scale_galera_statefulset() {
       return 1
     fi
   fi
-  
+
   # Verify cluster address before any scaling operations
   if ! galera_verify_cluster_address "$sts_name" "$namespace" "fix"; then
     log_error "Cluster address verification failed - aborting scale operation"
     log_error "Run galera-fix-cluster-address.sh manually to diagnose"
     return 1
   fi
-  
+
   # ============================================================
   # STEP 2: DETERMINE SCALING DIRECTION
   # ============================================================
   log_info "Step 2/4: Determine scaling strategy"
-  
+
   local current_replicas
   current_replicas=$(oc get sts/"$sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-  
+
   if [[ -z "$current_replicas" ]]; then
     log_error "StatefulSet not found: $sts_name"
     return 1
   fi
-  
+
   log_debug "  Current replicas: $current_replicas"
   log_debug "  Target replicas:  $target_replicas"
-  
+
   if [[ "$current_replicas" -eq "$target_replicas" ]]; then
     log_success "Already at target replica count ($target_replicas)"
     return 0
   fi
-  
+
   # ============================================================
   # STEP 3: EXECUTE SCALING OPERATION
   # ============================================================
@@ -210,41 +210,41 @@ scale_galera_statefulset() {
     # ------------------------------------------------------
     log_info "Step 3/4: Incremental scale-up ($current_replicas → $target_replicas)"
     log_warn "⚠️  This will add nodes one-by-one with Galera sync validation"
-    
+
     for i in $(seq $((current_replicas + 1)) "$target_replicas"); do
       log_info "  ➤ Scaling to $i replicas..."
-      
+
       # Scale to next replica count
       if ! oc scale sts/"$sts_name" --replicas="$i" -n "$namespace"; then
         log_error "Failed to scale to $i replicas"
         return 1
       fi
-      
+
       # Wait for new pod to become Ready
       local new_pod="${sts_name}-$((i - 1))"
       log_debug "    Waiting for pod $new_pod to become Ready..."
-      
+
       if ! oc wait --for=condition=Ready pod/"$new_pod" -n "$namespace" --timeout=300s 2>/dev/null; then
         log_error "Pod $new_pod failed to become Ready within 5 minutes"
         log_error "Check pod logs: oc logs $new_pod -n $namespace"
         return 1
       fi
-      
+
       # Verify Galera cluster sync before continuing
       log_debug "    Verifying Galera sync at $i nodes..."
-      
+
       if ! galera_wait_for_sync "$sts_name" 30 10 "$i"; then
         log_error "Galera cluster failed to sync after adding pod $new_pod"
         log_error "Cluster may be in split-brain or SST is failing"
         log_error "Check Galera status: oc exec $new_pod -n $namespace -- mysql -e 'SHOW STATUS LIKE \"wsrep%\"'"
         return 1
       fi
-      
+
       log_success "  ✔️  Pod $new_pod joined cluster successfully"
     done
-    
+
     log_success "Scale-up complete: $current_replicas → $target_replicas"
-    
+
   elif [[ "$current_replicas" -gt "$target_replicas" ]]; then
     # ------------------------------------------------------
     # SCALE-DOWN: Safe (OrderedReady handles reverse order)
@@ -252,46 +252,46 @@ scale_galera_statefulset() {
     log_info "Step 3/4: Scale-down ($current_replicas → $target_replicas)"
     log_debug "  OrderedReady ensures pods shut down in reverse order (N→...→3→2→1)"
     log_debug "  Pod-0 (primary) will remain untouched"
-    
+
     if ! oc scale sts/"$sts_name" --replicas="$target_replicas" -n "$namespace"; then
       log_error "Failed to scale down to $target_replicas"
       return 1
     fi
-    
+
     # Wait for scale-down to complete
     log_debug "  Waiting for excess pods to terminate..."
     for i in $(seq "$target_replicas" $((current_replicas - 1))); do
       local removing_pod="${sts_name}-${i}"
       oc wait --for=delete pod/"$removing_pod" -n "$namespace" --timeout=300s 2>/dev/null || true
     done
-    
+
     log_success "Scale-down complete: $current_replicas → $target_replicas"
   fi
-  
+
   # ============================================================
   # STEP 4: POST-SCALING HEALTH CHECK
   # ============================================================
   log_info "Step 4/4: Final health verification"
-  
+
   # Wait a moment for cluster to stabilize
   sleep 5
-  
+
   # Verify all pods are Ready
   local ready_pods
   ready_pods=$(oc get pods -l "app.kubernetes.io/name=${sts_name}" -n "$namespace" -o jsonpath='{.items[?(@.status.conditions[?(@.type=="Ready" && @.status=="True")])].metadata.name}' | wc -w)
-  
+
   if [[ "$ready_pods" -ne "$target_replicas" ]]; then
     log_error "Health check failed: Expected $target_replicas Ready pods, found $ready_pods"
     return 1
   fi
-  
+
   # Verify Galera cluster health
   if ! check_galera_cluster_health "app.kubernetes.io/name=$sts_name" "$namespace" "$target_replicas"; then
     log_error "Galera cluster health check failed after scaling"
     log_error "Run: oc exec ${sts_name}-0 -n $namespace -- mysql -e 'SHOW STATUS LIKE \"wsrep%\"'"
     return 1
   fi
-  
+
   log_success "✅ Galera cluster scaled successfully to $target_replicas replicas"
   log_success "   Cluster is healthy and all nodes are in sync"
   return 0
@@ -2137,7 +2137,7 @@ restart_statefulset() {
 
       # Use wait_for_galera_sync if available
       if type -t wait_for_galera_sync >/dev/null 2>&1; then
-        if wait_for_galera_sync "$statefulset_name" 30 10 "$expected_replicas"; then
+        if wait_for_galera_sync "$statefulset_name" "" "" "$expected_replicas"; then
           log_success "✅ Galera cluster healthy after restart"
 
           # Additional split-brain check if function is available

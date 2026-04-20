@@ -1,6 +1,6 @@
 Deployment,Type,Pod Count,Max Pods,PVC Count,PVC Capacity (MiB),CPU Request (m),CPU Limit (m),Mem. Request (MiB),Mem. Limit (MiB),CPU Scale Value
 php,deployment,3,3,1,1024,100,1500,128,0,400
-mariadb-galera,sts,5,5,5,6144,100,0,256,0,0
+mariadb-galera,sts,5,5,5,7168,100,0,256,0,0
 redis-node,sts,5,5,1,3072,25,0,256,0,100
 redis-proxy,deployment,5,5,0,0,25,0,32,0,50
 web,deployment,3,3,0,0,25,0,192,0,3

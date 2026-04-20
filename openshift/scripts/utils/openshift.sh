@@ -2864,7 +2864,7 @@ restart_statefulset() {
 
       # Use wait_for_galera_sync if available
       if type -t wait_for_galera_sync >/dev/null 2>&1; then
-        if wait_for_galera_sync "$statefulset_name" 30 10 "$expected_replicas"; then
+        if wait_for_galera_sync "$statefulset_name" "" "" "$expected_replicas"; then
           log_success "✅ Galera cluster healthy after restart"
 
           # Additional split-brain check if function is available

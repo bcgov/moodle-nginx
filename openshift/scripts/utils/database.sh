@@ -86,8 +86,8 @@ check_galera_pod_ready() {
 # Main function to wait for Galera cluster to be ready and synced
 wait_for_galera_sync() {
   local galera_name="$1"
-  local max_retries="${2:-30}"
-  local wait_time="${3:-10}"
+  local max_retries="${2:-${GALERA_SYNC_MAX_RETRIES:-120}}"
+  local wait_time="${3:-${GALERA_SYNC_WAIT_INTERVAL:-30}}"
   local expected_pods="${4:-}"
 
   echo "[WAIT] Waiting for Galera cluster to sync: $galera_name"
@@ -1941,7 +1941,7 @@ EOF
     # Step 9: Wait for sync
     echo ""
     echo "Step 9: Waiting for Galera cluster synchronization..."
-    if ! wait_for_galera_sync "$sts_name" 120 10 "$target_replicas"; then
+    if ! wait_for_galera_sync "$sts_name" "" "" "$target_replicas"; then
       echo "   Galera sync verification failed -- check pod logs"
       return 1
     fi

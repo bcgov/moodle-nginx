@@ -660,7 +660,8 @@ if [[ "$HELM_ACTION" != "skip" ]]; then
 fi
 
 # Wait for Galera sync using existing utility (checks per-pod Synced + cluster_size)
-wait_for_galera_sync "$DB_DEPLOYMENT_NAME" 30 10 "$DB_REPLICAS"
+# Timeout: GALERA_SYNC_MAX_RETRIES * GALERA_SYNC_WAIT_INTERVAL (default: 120 * 30s = 60m)
+wait_for_galera_sync "$DB_DEPLOYMENT_NAME" "" "" "$DB_REPLICAS"
 
 # =============================================================================
 # EXPAND PVCs DURING SCALE-UP
