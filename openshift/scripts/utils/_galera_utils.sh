@@ -16,17 +16,38 @@ _GALERA_UTILS_LOADED=1
 # AUTHENTICATION & CLUSTER ACCESS
 # =============================================================================
 
-# Setup OpenShift authentication for in-cluster execution
-# Sets up writable KUBECONFIG and logs in using available credentials
+# Setup OpenShift authentication
+# Works in three contexts:
+#   1. GH Actions runner  - oc login already done by workflow step (~/.kube/config)
+#   2. In-cluster pod     - SA token at /var/run/secrets/.../token (needs writable KUBECONFIG)
+#   3. OPENSHIFT_TOKEN env - explicit token+server (e.g., cross-namespace ops)
+#
+# IMPORTANT: KUBECONFIG is only overridden when we need to perform a new login.
+# GH runners already have a valid ~/.kube/config — clobbering it with an empty
+# /tmp path was the cause of "authentication is not initialized" failures.
 galera_setup_auth() {
   local target_namespace="${DEPLOY_NAMESPACE:-${NAMESPACE:-}}"
 
-  # Set writable kubeconfig path (container filesystem root is read-only)
-  export KUBECONFIG="${KUBECONFIG:-/tmp/.kube/config}"
-  mkdir -p "$(dirname "$KUBECONFIG")" 2>/dev/null || true
-
   # Suppress oc CLI warnings (legacy token, insecure TLS)
   export KUBECTL_WARN_EXTERNAL_UNKNOWN=false
+
+  # If already authenticated (GH runner context), validate namespace and return.
+  # This preserves the existing KUBECONFIG (e.g., ~/.kube/config from a prior
+  # oc login in the workflow step).
+  if oc whoami >/dev/null 2>&1; then
+    [[ -n "$target_namespace" ]] && oc project "$target_namespace" 2>/dev/null || true
+
+    if [[ -n "$target_namespace" ]] && ! oc get namespace "$target_namespace" -o name >/dev/null 2>&1; then
+      echo "[ERROR] OpenShift access to namespace '$target_namespace' is not available" >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  # Not yet authenticated — set writable kubeconfig path
+  # (container filesystem root may be read-only, so we need /tmp)
+  export KUBECONFIG="${KUBECONFIG:-/tmp/.kube/config}"
+  mkdir -p "$(dirname "$KUBECONFIG")" 2>/dev/null || true
 
   # Authenticate with cluster (prefer OPENSHIFT_TOKEN over mounted SA token)
   if [[ -n "${OPENSHIFT_TOKEN:-}" && -n "${OPENSHIFT_SERVER:-}" ]]; then
@@ -49,6 +70,7 @@ galera_setup_auth() {
 
   if ! oc whoami >/dev/null 2>&1; then
     echo "[ERROR] OpenShift authentication is not initialized" >&2
+    echo "[ERROR] Neither OPENSHIFT_TOKEN, SA token, nor prior oc login found" >&2
     return 1
   fi
 
