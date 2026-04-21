@@ -136,11 +136,8 @@ $finalParams = @{}
 # Auto-detect common parameters
 $openshiftServer = (oc whoami --show-server 2>&1)
 
-# Look for service account tokens in the namespace (try pod-health-monitor-sa first, then github-actions-sa)
-$defaultToken = (oc get secrets -n $Namespace -o name 2>&1 | Select-String "pod-health-monitor-sa-token" | Select-Object -First 1)
-if (-not $defaultToken) {
-    $defaultToken = (oc get secrets -n $Namespace -o name 2>&1 | Select-String "github-actions-sa-token" | Select-Object -First 1)
-}
+# Look for service account token in the namespace
+$defaultToken = (oc get secrets -n $Namespace -o name 2>&1 | Select-String "github-actions-sa-token" | Select-Object -First 1)
 if ($defaultToken) {
     $defaultToken = $defaultToken.ToString().Replace("secret/", "")
 }

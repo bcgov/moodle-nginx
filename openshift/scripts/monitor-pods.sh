@@ -117,12 +117,14 @@ oc() { command oc "$@" 2> >(grep -v "^Warning:" >&2); }
 
 # Unified pod health check function
 # $1: selector  $2: error_patterns  $3: restart_enabled (true/false)
+# $4: error_threshold (optional, overrides global ERROR_THRESHOLD)
 # Appends to global issue_details[] array, increments pods_checked counter,
 # and appends to service_summary[] for per-service visibility.
 check_pod_health() {
   local selector="$1"
   local error_patterns="$2"
   local restart_enabled="${3:-false}"
+  local threshold="${4:-$ERROR_THRESHOLD}"
 
   local pods_output
   pods_output=$(oc get pods -l "$selector" --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>&1)
@@ -168,7 +170,7 @@ check_pod_health() {
         local mode="observe"
         [[ "$restart_enabled" == "true" ]] && mode="restart-eligible"
 
-        issue_details+=("  [WARN] $pod [$mode] - pattern '$pattern' (consecutive: $consecutive/$ERROR_THRESHOLD)")
+        issue_details+=("  [WARN] $pod [$mode] - pattern '$pattern' (consecutive: $consecutive/$threshold)")
         break
       fi
     done
@@ -180,15 +182,15 @@ check_pod_health() {
     pods_checked=$((pods_checked + 1))
 
     # Restart only for restart-eligible pods at error threshold
-    if [[ "$restart_enabled" == "true" && ${error_counts["$pod"]:-0} -ge $ERROR_THRESHOLD ]]; then
+    if [[ "$restart_enabled" == "true" && ${error_counts["$pod"]:-0} -ge $threshold ]]; then
       if [[ "${MANUAL_MODE,,}" == "true" ]]; then
-        issue_details+=("  - [MANUAL MODE] Would restart $pod - $ERROR_THRESHOLD consecutive errors (auto-healing disabled)")
+        issue_details+=("  - [MANUAL MODE] Would restart $pod - $threshold consecutive errors (auto-healing disabled)")
         continue
       fi
-      issue_details+=("  [ACTION] RESTARTING $pod - $ERROR_THRESHOLD consecutive errors reached")
+      issue_details+=("  [ACTION] RESTARTING $pod - $threshold consecutive errors reached")
 
       if oc delete pod "$pod" --wait=false; then
-        send_notification "POD_RESTART_THRESHOLD" "Pod Restarted - Error Threshold" "Pod $pod restarted after $ERROR_THRESHOLD consecutive errors. Selector: $selector" "warning" "$DEPLOY_NAMESPACE"
+        send_notification "POD_RESTART_THRESHOLD" "Pod Restarted - Error Threshold" "Pod $pod restarted after $threshold consecutive errors. Selector: $selector" "warning" "$DEPLOY_NAMESPACE"
         error_counts["$pod"]=0
         issues_found=$((issues_found + 1))
 
@@ -233,10 +235,20 @@ while true; do
   current_time=$(date +%s)
 
   # Deployments eligible for threshold-based restart
+  # Format: selector -> "error_patterns"
   declare -A RESTART_DEPLOYMENTS
   RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
     ["app=redis-proxy"]="err:"
+  )
+
+  # Per-service error threshold overrides (default: ERROR_THRESHOLD)
+  # redis-proxy: threshold=1 — cannot self-heal from connection errors,
+  # the only fix is a pod restart. Waiting for 3 consecutive detections
+  # leaves the site degraded for 3 monitoring cycles unnecessarily.
+  declare -A RESTART_THRESHOLDS
+  RESTART_THRESHOLDS=(
+    ["app=redis-proxy"]=1
   )
 
   # Deployments to observe only (log errors, no restart)
@@ -258,7 +270,8 @@ while true; do
   issue_details=()
   service_summary=()
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
-    check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true"
+    local svc_threshold="${RESTART_THRESHOLDS[$selector]:-$ERROR_THRESHOLD}"
+    check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true" "$svc_threshold"
     total_issues=$((total_issues + $?))
   done
 
