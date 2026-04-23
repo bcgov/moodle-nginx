@@ -332,14 +332,73 @@ check_galera_cluster_health() {
 
   # TRUE SPLIT-BRAIN: Multiple cluster UUIDs = independent clusters with divergent data
   # This is the ONLY condition that requires emergency rebuild (data loss risk)
+  #
+  # EXCEPTION: "Bootstrap leak" — galera-0 restarted after recovery and bootstrapped a
+  # standalone cluster instead of rejoining. This creates 2 UUIDs but is NOT true data
+  # divergence because the isolated node has cluster_size=1 and hasn't received writes.
+  # Fix: restart the isolated node (not full rebuild). See Step 9.5 comments for context.
   if [[ $unique_uuids -gt 1 ]]; then
+    # Identify majority UUID and isolated nodes
+    local majority_uuid
+    majority_uuid=$(printf "%s\n" "${uuids[@]}" | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+    local majority_count
+    majority_count=$(printf "%s\n" "${uuids[@]}" | grep -c "^${majority_uuid}$")
+
+    # Check for bootstrap leak pattern: isolated node(s) with cluster_size=1
+    local isolated_pods=()
+    local bootstrap_leak=true
+    for i in "${!pods[@]}"; do
+      if [[ "${uuids[$i]}" != "$majority_uuid" ]]; then
+        if [[ "${sizes[$i]}" == "1" ]]; then
+          isolated_pods+=("${pods[$i]}")
+        else
+          bootstrap_leak=false  # Non-trivial partition, not a simple bootstrap leak
+        fi
+      fi
+    done
+
+    if [[ "$bootstrap_leak" == "true" && ${#isolated_pods[@]} -gt 0 && $majority_count -ge $((expected_size / 2 + 1)) ]]; then
+      echo "    [WARN] Bootstrap leak detected: ${isolated_pods[*]} bootstrapped standalone (cluster_size=1)"
+      echo "    [INFO] Majority cluster ($majority_count nodes, uuid=$majority_uuid) has quorum"
+      echo "    [INFO] This is NOT true data-divergence split-brain — safe to restart isolated pod(s)"
+
+      if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+        echo "    [MANUAL MODE] Would restart isolated pod(s): ${isolated_pods[*]}"
+        send_notification "GALERA_BOOTSTRAP_LEAK" "Galera Bootstrap Leak (Manual Mode)" \
+          "Bootstrap leak detected: ${isolated_pods[*]} isolated with cluster_size=1. Manual mode active — not restarting. Details: $detailed_status" \
+          "warning" "$namespace"
+        return 0
+      fi
+
+      for isolated_pod in "${isolated_pods[@]}"; do
+        echo "    [ACTION] Restarting isolated pod $isolated_pod (clearing bootstrap state first)..."
+        # Reset safe_to_bootstrap AND delete gvwstate.dat to prevent re-bootstrap
+        oc exec "$isolated_pod" -n "$namespace" -- \
+          bash -c 'sed -i "s/^safe_to_bootstrap: 1/safe_to_bootstrap: 0/" /bitnami/mariadb/data/grastate.dat 2>/dev/null; \
+                   rm -f /bitnami/mariadb/data/gvwstate.dat 2>/dev/null; \
+                   echo "   ✅ Bootstrap state cleared"' 2>/dev/null || true
+        if oc delete pod "$isolated_pod" -n "$namespace" --wait=false 2>/dev/null; then
+          send_notification "GALERA_BOOTSTRAP_LEAK_RESTART" "Galera Bootstrap Leak Auto-Heal" \
+            "Restarted isolated pod $isolated_pod (bootstrap leak, cluster_size=1). Majority cluster ($majority_count nodes) unaffected. NOT triggering full rebuild." \
+            "warning" "$namespace"
+        fi
+      done
+      echo "    [INFO] Isolated pod(s) restarted — will rejoin cluster via IST (not full rebuild)"
+      return 0  # NOT return 2 — this is recoverable without rebuild
+    fi
+
+    # True split-brain: multiple UUIDs with non-trivial partitions (both sides have writes)
     send_notification "GALERA_SPLIT_BRAIN_DETECTED" "Galera Split-Brain Detected" "TRUE SPLIT-BRAIN: Multiple cluster UUIDs detected! UUIDs: $unique_uuids. Details: $detailed_status" "error" "$namespace"
-    return 2  # Split-brain detected
+    return 2  # Split-brain detected — full rebuild needed
   fi
 
   # NETWORK PARTITION: Same UUID but different cluster sizes
   # This is NORMAL during rolling updates, pod restarts, or temporary network issues.
   # As long as UUIDs match, pods will rejoin automatically when network is restored.
+  #
+  # EXCEPTION: If galera-0 bootstrapped as a standalone primary (safe_to_bootstrap=1
+  # leftover), it won't rejoin on its own. Track consecutive partition detections
+  # and auto-restart isolated pods after GALERA_PARTITION_TOLERANCE checks.
   if [[ $unique_sizes -gt 1 ]]; then
     echo "    [WARN] Cluster size mismatch (sizes: $(printf "%s\n" "${sizes[@]}" | sort | uniq | tr '\n' ' '))"
     echo "    [INFO] All pods share same UUID - this is a network partition, NOT split-brain"
@@ -357,15 +416,59 @@ check_galera_cluster_health() {
 
     if [[ $max_size -ge $((expected_size - 1)) && $max_count -ge $((expected_size / 2 + 1)) ]]; then
       echo "    [OK] Quorum exists: $max_count pods agree on cluster_size=$max_size"
-      echo "    [INFO] Isolated pods will rejoin automatically - no intervention needed"
-      send_notification "GALERA_NETWORK_PARTITION" "Galera Network Partition (Auto-Healing)" "Temporary partition detected but quorum exists ($max_count pods, size=$max_size). Isolated pods will rejoin. Details: $detailed_status" "info" "$namespace"
-      return 0  # Healthy - partition will self-heal
+
+      # Track consecutive partition detections (global counter persists across calls)
+      GALERA_PARTITION_COUNT=${GALERA_PARTITION_COUNT:-0}
+      GALERA_PARTITION_COUNT=$((GALERA_PARTITION_COUNT + 1))
+      local tolerance=${GALERA_PARTITION_TOLERANCE:-2}
+
+      if [[ $GALERA_PARTITION_COUNT -ge $tolerance ]]; then
+        echo "    [WARN] Partition persisted for $GALERA_PARTITION_COUNT consecutive checks (tolerance: $tolerance)"
+
+        # Identify and restart isolated pods (those with minority cluster_size)
+        local restarted=0
+        for i in "${!pods[@]}"; do
+          if [[ "${sizes[$i]}" != "$max_size" ]]; then
+            local isolated_pod="${pods[$i]}"
+            if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+              echo "    [MANUAL MODE] Would restart isolated pod $isolated_pod (cluster_size=${sizes[$i]})"
+            else
+              echo "    [ACTION] Restarting isolated pod $isolated_pod (cluster_size=${sizes[$i]}, expected=$max_size)"
+              # Reset safe_to_bootstrap before restart to prevent standalone bootstrap loop
+              oc exec "$isolated_pod" -n "$namespace" -- \
+                bash -c 'f="/bitnami/mariadb/data/grastate.dat"; [[ -f "$f" ]] && sed -i "s/^safe_to_bootstrap: 1/safe_to_bootstrap: 0/" "$f"' 2>/dev/null || true
+              if oc delete pod "$isolated_pod" -n "$namespace" --wait=false 2>/dev/null; then
+                send_notification "GALERA_PARTITION_RESTART" "Galera Partition Auto-Heal" \
+                  "Restarted isolated pod $isolated_pod after $GALERA_PARTITION_COUNT consecutive partition detections (cluster_size=${sizes[$i]} vs majority=$max_size)" \
+                  "warning" "$namespace"
+                restarted=$((restarted + 1))
+              fi
+            fi
+          fi
+        done
+        GALERA_PARTITION_COUNT=0  # Reset after taking action
+        if [[ $restarted -gt 0 ]]; then
+          echo "    [INFO] Restarted $restarted isolated pod(s) - will rejoin cluster via IST"
+        fi
+        return 0
+      else
+        echo "    [INFO] Partition check $GALERA_PARTITION_COUNT/$tolerance - waiting before intervention"
+        echo "    [INFO] Isolated pods may rejoin automatically"
+        send_notification "GALERA_NETWORK_PARTITION" "Galera Network Partition (Monitoring)" \
+          "Partition detected ($GALERA_PARTITION_COUNT/$tolerance checks). Quorum exists ($max_count pods, size=$max_size). Will auto-restart isolated pods if persistent. Details: $detailed_status" \
+          "info" "$namespace"
+        return 0
+      fi
     else
       echo "    [WARN] No quorum - cluster needs attention"
+      GALERA_PARTITION_COUNT=0  # Reset - different problem
       send_notification "GALERA_NO_QUORUM" "Galera No Quorum" "Cluster size mismatch without quorum. Details: $detailed_status" "warning" "$namespace"
       return 1  # Unhealthy but not split-brain
     fi
   fi
+
+  # Partition resolved - reset counter
+  GALERA_PARTITION_COUNT=0
 
   # Check overall pod health
   if [[ $healthy_pods -lt $expected_size ]]; then
@@ -527,14 +630,29 @@ auto_heal_galera_cluster() {
     echo "   ✅ Removed"
   fi
 
-  # Step 0.4: Reset stale partition from prior failed recovery.
+  # Step 0.4: Reset stale update strategy from prior failed recovery.
+  # A previous recovery may leave OnDelete strategy set (used to prevent galera-0
+  # from restarting during partition removal). Reset to RollingUpdate so partition-based
+  # protection works correctly.
+  local stale_strategy
+  stale_strategy=$(oc get statefulset/"$resource_name" -n "$namespace" \
+    -o jsonpath='{.spec.updateStrategy.type}' 2>/dev/null || echo "RollingUpdate")
+  if [[ "$stale_strategy" == "OnDelete" ]]; then
+    echo ""
+    echo "Pre-flight check 4a: Resetting stale OnDelete strategy -> RollingUpdate..."
+    oc patch statefulset/"$resource_name" -n "$namespace" \
+      -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":0}}}}' 2>/dev/null || true
+    echo "   ✅ Strategy reset to RollingUpdate"
+  fi
+
+  # Step 0.4b: Reset stale partition from prior failed recovery.
   # Partition=1 blocks galera-0 from restarting; a failed recovery may leave it set.
   local stale_partition
   stale_partition=$(oc get statefulset/"$resource_name" -n "$namespace" \
     -o jsonpath='{.spec.updateStrategy.rollingUpdate.partition}' 2>/dev/null || echo "0")
   if [[ "$stale_partition" != "0" && -n "$stale_partition" ]]; then
     echo ""
-    echo "Pre-flight check 4: Resetting stale partition ($stale_partition -> 0)..."
+    echo "Pre-flight check 4b: Resetting stale partition ($stale_partition -> 0)..."
     oc patch statefulset/"$resource_name" -n "$namespace" \
       -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":0}}}}' 2>/dev/null || true
     echo "   ✅ Partition reset"
@@ -680,6 +798,8 @@ check_and_heal_galera_cluster() {
 
   case $health_code in
     0)
+      # Reset unhealthy counter on successful check
+      GALERA_UNHEALTHY_COUNT=0
       if [[ "$actual_replicas" == "0" ]]; then
         echo "[INFO] Galera is intentionally parked at 0 replicas"
         if [[ "${manual_mode_active,,}" == "true" ]]; then
@@ -695,9 +815,23 @@ check_and_heal_galera_cluster() {
       ;;
     1)
       echo "[WARN] Some Galera pods are unhealthy (or network partition without quorum)"
+      # Progressive escalation: don't immediately rebuild for transient issues.
+      # A temporarily missing pod (e.g. during cluster maintenance) should resolve
+      # on its own. Only trigger auto-heal after consecutive unhealthy checks.
+      GALERA_UNHEALTHY_COUNT=${GALERA_UNHEALTHY_COUNT:-0}
+      GALERA_UNHEALTHY_COUNT=$((GALERA_UNHEALTHY_COUNT + 1))
+      local unhealthy_tolerance=${GALERA_UNHEALTHY_TOLERANCE:-3}
       if [[ "$auto_heal" == "true" ]]; then
-        echo "[ACTION] Attempting auto-heal..."
-        auto_heal_galera_cluster "$selector" "$namespace"
+        if [[ $GALERA_UNHEALTHY_COUNT -ge $unhealthy_tolerance ]]; then
+          echo "[ACTION] Unhealthy for $GALERA_UNHEALTHY_COUNT consecutive checks (tolerance: $unhealthy_tolerance) — attempting auto-heal..."
+          GALERA_UNHEALTHY_COUNT=0
+          auto_heal_galera_cluster "$selector" "$namespace"
+        else
+          echo "[INFO] Unhealthy check $GALERA_UNHEALTHY_COUNT/$unhealthy_tolerance — waiting for self-recovery before auto-heal"
+          send_notification "GALERA_UNHEALTHY_MONITORING" "Galera Unhealthy (Monitoring)" \
+            "Galera cluster unhealthy ($GALERA_UNHEALTHY_COUNT/$unhealthy_tolerance checks). Waiting for pods to self-recover before auto-heal. Check: oc get pods -l $selector -n $namespace" \
+            "warning" "$namespace"
+        fi
       else
         echo "  [INFO] Auto-heal disabled - manual intervention may be required"
       fi
@@ -1406,89 +1540,93 @@ galera_safe_upgrade() {
   echo "Step 3: Deleting secondary PVCs..."
   galera_delete_secondary_pvcs "$sts_name" "$target_replicas" "$namespace"
 
-  # Step 3.5: Force safe_to_bootstrap=1 on galera-0 PVC (defensive)
+  # Step 3.5: Add init container to fix safe_to_bootstrap on galera-0 PVC
+  # Instead of launching a fragile temporary "fixer" pod (which can timeout/fail
+  # to schedule), we add an init container to the StatefulSet itself. When galera-0
+  # starts in Step 5, the init container runs FIRST — fixing grastate.dat and
+  # removing gvwstate.dat BEFORE the MariaDB entrypoint reads them.
+  # This is a belt-and-suspenders with FORCE_SAFETOBOOTSTRAP (Step 4).
+  #
+  # The patch file (galera-bootstrap-fix-patch.yaml) is also available for manual
+  # recovery: oc patch statefulset/mariadb-galera --type=strategic --patch-file openshift/galera-bootstrap-fix-patch.yaml
   echo ""
-  echo "Step 3.5: Ensuring safe_to_bootstrap=1 on galera-0 PVC..."
+  echo "Step 3.5: Adding bootstrap-fix init container to StatefulSet..."
 
-  # Check if galera-0 PVC exists
-  if oc get pvc "data-${sts_name}-0" -n "$namespace" &>/dev/null; then
-    # Create temporary pod to edit grastate.dat
-    local fixer_pod="galera-bootstrap-fixer"
+  # Use the same image as the main container (guaranteed to be available/pulled)
+  local mariadb_image
+  mariadb_image=$(oc get statefulset/"$sts_name" -n "$namespace" \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
 
-    # Clean up any existing fixer pod
-    oc delete pod "$fixer_pod" -n "$namespace" &>/dev/null || true
+  # Detect volume name from the existing StatefulSet spec
+  local vol_name
+  vol_name=$(oc get statefulset/"$sts_name" -n "$namespace" \
+    -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.name}' 2>/dev/null || echo "data")
 
-    # Create fixer pod with galera-0 PVC mounted
-    cat <<EOF | oc apply -f - > /dev/null
-apiVersion: v1
-kind: Pod
-metadata:
-  name: $fixer_pod
-  namespace: $namespace
+  # Prefer the YAML patch file (mounted via ConfigMap or available locally).
+  # Falls back to inline YAML heredoc if the file isn't available.
+  local patch_file=""
+  for _p in "/openshift/galera-bootstrap-fix-patch.yaml" \
+            "./openshift/galera-bootstrap-fix-patch.yaml" \
+            "$(dirname "${BASH_SOURCE[0]}")/../../galera-bootstrap-fix-patch.yaml"; do
+    [[ -f "$_p" ]] && patch_file="$_p" && break
+  done
+
+  local init_applied=false
+  if [[ -n "$patch_file" ]]; then
+    echo "   Using patch file: $patch_file"
+    # Replace image placeholder with actual image from StatefulSet
+    local patched_content
+    patched_content=$(sed "s|image: .*|image: ${mariadb_image}|" "$patch_file" \
+      | sed "s|name: data|name: ${vol_name}|")
+    if echo "$patched_content" | oc patch statefulset/"$sts_name" -n "$namespace" \
+      --type=strategic --patch-file=/dev/stdin 2>/dev/null; then
+      init_applied=true
+    fi
+  fi
+
+  # Fallback: inline YAML (avoids JSON escaping issues entirely)
+  if [[ "$init_applied" != "true" ]]; then
+    [[ -n "$patch_file" ]] && echo "   Patch file failed, falling back to inline YAML..."
+    local init_patch
+    init_patch=$(cat <<INITPATCH
 spec:
-  containers:
-  - name: fixer
-    image: busybox
-    command: ['sh', '-c', 'sleep 600']
-    volumeMounts:
-    - name: data
-      mountPath: /data
-  volumes:
-  - name: data
-    persistentVolumeClaim:
-      claimName: data-${sts_name}-0
-  restartPolicy: Never
-EOF
-
-    # Wait for fixer pod to be ready
-    local fixer_wait=0
-    while [[ $fixer_wait -lt 60 ]]; do
-      local fixer_ready
-      fixer_ready=$(oc get pod "$fixer_pod" -n "$namespace" \
-        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-      if [[ "$fixer_ready" == "True" ]]; then
-        break
-      fi
-      sleep 2
-      fixer_wait=$((fixer_wait + 2))
-    done
-
-    if [[ $fixer_wait -ge 60 ]]; then
-      echo "   Warning: fixer pod not ready within 60s, attempting fix anyway..."
+  template:
+    spec:
+      initContainers:
+      - name: bootstrap-fix
+        image: ${mariadb_image}
+        command:
+        - bash
+        - -c
+        - |
+          f="/bitnami/mariadb/data/grastate.dat"
+          gv="/bitnami/mariadb/data/gvwstate.dat"
+          echo "=== bootstrap-fix init container ==="
+          if [ -f "\$f" ]; then
+            echo "BEFORE:"
+            cat "\$f"
+            sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' "\$f"
+            rm -f "\$gv" 2>/dev/null
+            echo "AFTER:"
+            cat "\$f"
+          else
+            echo "No grastate.dat found (fresh PVC)"
+          fi
+        volumeMounts:
+        - name: ${vol_name}
+          mountPath: /bitnami/mariadb
+INITPATCH
+)
+    if echo "$init_patch" | oc patch statefulset/"$sts_name" -n "$namespace" \
+      --type=strategic --patch-file=/dev/stdin 2>/dev/null; then
+      init_applied=true
     fi
+  fi
 
-    # Check if grastate.dat exists
-    if oc exec "$fixer_pod" -n "$namespace" -- test -f /data/data/grastate.dat 2>/dev/null; then
-      # Show current value
-      local current_safe
-      current_safe=$(oc exec "$fixer_pod" -n "$namespace" -- \
-        grep "^safe_to_bootstrap:" /data/data/grastate.dat 2>/dev/null | awk '{print $2}' || echo "unknown")
-      echo "   Current safe_to_bootstrap: $current_safe"
-
-      # Set safe_to_bootstrap=1
-      oc exec "$fixer_pod" -n "$namespace" -- \
-        sh -c "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /data/data/grastate.dat" 2>/dev/null || {
-        echo "   Warning: Could not modify grastate.dat (relying on FORCE_SAFETOBOOTSTRAP env var)"
-      }
-
-      # Verify the change
-      local new_safe
-      new_safe=$(oc exec "$fixer_pod" -n "$namespace" -- \
-        grep "^safe_to_bootstrap:" /data/data/grastate.dat 2>/dev/null | awk '{print $2}' || echo "unknown")
-
-      if [[ "$new_safe" == "1" ]]; then
-        echo "   [OK] safe_to_bootstrap set to 1"
-      else
-        echo "   [WARN] safe_to_bootstrap is $new_safe (expected 1)"
-      fi
-    else
-      echo "   No grastate.dat found (fresh PVC - will bootstrap with empty data)"
-    fi
-
-    # Cleanup fixer pod
-    oc delete pod "$fixer_pod" -n "$namespace" &>/dev/null || true
+  if [[ "$init_applied" == "true" ]]; then
+    echo "   ✅ bootstrap-fix init container added (fixes grastate.dat before MariaDB starts)"
   else
-    echo "   No PVC found for galera-0 (fresh install)"
+    echo "   ⚠️  Init container patch failed — relying on FORCE_SAFETOBOOTSTRAP env var (Step 4)"
   fi
   fi # _in_range 3
 
@@ -1629,43 +1767,10 @@ PROBEPATCH
         echo "   [WARN] Failed to apply temporary fallback flags; continuing anyway"
       fi
 
-      echo "   [ACTION] Clearing stale primary component state files from PVC-0"
-      local fixer_pod="galera-pc-reset-fixer"
-      oc delete pod "$fixer_pod" -n "$namespace" &>/dev/null || true
-      cat <<EOF | oc apply -f - > /dev/null
-apiVersion: v1
-kind: Pod
-metadata:
-  name: $fixer_pod
-  namespace: $namespace
-spec:
-  containers:
-  - name: fixer
-    image: busybox
-    command: ['sh', '-c', 'sleep 600']
-    volumeMounts:
-    - name: data
-      mountPath: /data
-  volumes:
-  - name: data
-    persistentVolumeClaim:
-      claimName: data-${sts_name}-0
-  restartPolicy: Never
-EOF
-
-      local fixer_wait=0
-      while [[ $fixer_wait -lt 60 ]]; do
-        local fixer_ready
-        fixer_ready=$(oc get pod "$fixer_pod" -n "$namespace" \
-          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-        [[ "$fixer_ready" == "True" ]] && break
-        sleep 2
-        fixer_wait=$((fixer_wait + 2))
-      done
-
-      oc exec "$fixer_pod" -n "$namespace" -- sh -c "rm -f /data/data/gvwstate.dat /data/data/grastate.dat.recover 2>/dev/null || true" >/dev/null 2>&1 || true
-      oc delete pod "$fixer_pod" -n "$namespace" &>/dev/null || true
-      echo "   [OK] Stale files cleared"
+      # The bootstrap-fix init container (Step 3.5) already handles grastate.dat
+      # and gvwstate.dat cleanup. It re-runs on every pod start, so the scale
+      # 0→1 below will trigger it again. No separate fixer pod needed.
+      echo "   [INFO] bootstrap-fix init container will re-clean state files on next start"
 
       echo "   [ACTION] Retrying bootstrap (0 -> 1) with fallback settings"
       oc scale sts/"$sts_name" --replicas=0 -n "$namespace" >/dev/null || true
@@ -1784,7 +1889,33 @@ EOF
   # entire provider options string (gcache, gcomm, base_host, etc.), causing segfaults
   # on SST. Galera timeout tuning must be done via my.cnf or Helm values instead.
   echo ""
-  echo "Step 7.6a: Cleaning up any leftover MARIADB_EXTRA_FLAGS..."
+  echo "Step 7.6a: Cleaning up recovery artifacts from StatefulSet template..."
+
+  # Remove bootstrap-fix init container (added in Step 3.5)
+  # Safe to remove now — galera-0 has already bootstrapped and secondaries
+  # don't need it (their PVCs are fresh, no grastate.dat to fix)
+  local has_init_container
+  has_init_container=$(oc get statefulset/"$sts_name" -n "$namespace" \
+    -o jsonpath='{.spec.template.spec.initContainers[?(@.name=="bootstrap-fix")].name}' 2>/dev/null || echo "")
+  if [[ "$has_init_container" == "bootstrap-fix" ]]; then
+    echo "   Removing bootstrap-fix init container..."
+    # Find the index of the bootstrap-fix init container
+    local init_idx
+    init_idx=$(oc get statefulset/"$sts_name" -n "$namespace" \
+      -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}' 2>/dev/null \
+      | grep -n "^bootstrap-fix$" | cut -d: -f1)
+    if [[ -n "$init_idx" ]]; then
+      init_idx=$((init_idx - 1))  # JSON patch uses 0-based index
+      if oc patch statefulset/"$sts_name" -n "$namespace" --type=json \
+        -p "[{\"op\": \"remove\", \"path\": \"/spec/template/spec/initContainers/$init_idx\"}]" 2>/dev/null; then
+        echo "   ✅ bootstrap-fix init container removed"
+      else
+        echo "   ⚠️  Could not remove init container (non-fatal, will be cleaned on next deploy)"
+      fi
+    fi
+  fi
+
+  # Remove any leftover MARIADB_EXTRA_FLAGS
   if oc set env statefulset/"$sts_name" MARIADB_EXTRA_FLAGS- -n "$namespace" 2>/dev/null; then
     echo "   Cleared MARIADB_EXTRA_FLAGS from template (if present)"
   fi
@@ -1954,15 +2085,24 @@ EOF
       return 1
     fi
 
-    # Step 9.5: Remove partition to let galera-0 restart with the updated template.
-    # Now that pods 1-N are Primary/Synced, galera-0 can safely restart with bootstrap=no
-    # and rejoin the cluster through its peers.
+    # Step 9.5: Safely remove partition WITHOUT restarting galera-0.
     #
-    # CRITICAL: Wait for galera-0 to finish any SST donations (DONOR state) before
-    # removing the partition. Killing galera-0 mid-SST corrupts the joiner and
-    # cascades into CrashLoopBackOff for the entire cluster.
+    # WHY NOT RESTART: When galera-0 restarts after being the bootstrap node,
+    # MySQL's shutdown handler writes grastate.dat with safe_to_bootstrap=1
+    # (overwriting any prior sed fix). The Bitnami entrypoint then bootstraps a
+    # NEW standalone cluster instead of rejoining, causing a split-brain loop
+    # where the monitor detects 2 UUIDs and triggers full rebuild repeatedly.
+    #
+    # SOLUTION: Temporarily switch to OnDelete update strategy, remove the
+    # partition (so it's clean for future deploys), then switch back. This
+    # prevents the StatefulSet controller from automatically restarting pod-0.
+    # galera-0 stays running with its current (bootstrap) config but is already
+    # a full cluster member. It gets the updated template on its next natural
+    # restart (deploy, eviction, crash).
     echo ""
-    echo "Step 9.5: Preparing partition removal (waiting for galera-0 to finish SST donations)..."
+    echo "Step 9.5: Removing partition safely (without restarting galera-0)..."
+
+    # Wait for galera-0 to finish SST donations before touching StatefulSet config
     local donor_wait=0
     while [[ $donor_wait -lt 300 ]]; do
       local g0_wsrep_state
@@ -1971,65 +2111,70 @@ EOF
         -Nse "SHOW STATUS LIKE 'wsrep_local_state_comment';" 2>/dev/null \
         | awk '{print $2}' || echo "unknown")
       if [[ "$g0_wsrep_state" == "Synced" ]]; then
-        echo "   ✅ galera-0 is Synced (not DONOR), safe to restart"
+        echo "   ✅ galera-0 is Synced (not DONOR)"
         break
       fi
       if [[ $donor_wait -eq 0 ]]; then
-        echo "   galera-0 state: $g0_wsrep_state (waiting for Synced before restart)..."
+        echo "   galera-0 state: $g0_wsrep_state (waiting for Synced)..."
       fi
       sleep 10
       donor_wait=$((donor_wait + 10))
-      if [[ $((donor_wait % 60)) -eq 0 ]]; then
-        echo "   galera-0 state: $g0_wsrep_state (${donor_wait}s elapsed)..."
-      fi
-    done
-    if [[ $donor_wait -ge 300 ]]; then
-      echo "   ⚠️  galera-0 still not Synced after 300s (state: $g0_wsrep_state)"
-      echo "   Proceeding with partition removal anyway -- cluster has $((target_replicas - 1)) healthy nodes"
-    fi
-
-    echo "   Removing partition -- galera-0 will restart with non-bootstrap config..."
-    oc patch statefulset/"$sts_name" -n "$namespace" -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":0}}}}' 2>/dev/null || true
-
-    # Wait for galera-0 to be replaced by the rolling update and become Ready
-    echo "   Waiting for ${sts_name}-0 to restart and rejoin cluster..."
-    local partition_wait=0
-    while [[ $partition_wait -lt 600 ]]; do
-      local g0_ready
-      g0_ready=$(oc get pod "${sts_name}-0" -n "$namespace" \
-        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-      local g0_gen
-      g0_gen=$(oc get pod "${sts_name}-0" -n "$namespace" \
-        -o jsonpath='{.metadata.labels.controller-revision-hash}' 2>/dev/null || echo "")
-      local sts_gen
-      sts_gen=$(oc get statefulset/"$sts_name" -n "$namespace" \
-        -o jsonpath='{.status.updateRevision}' 2>/dev/null || echo "")
-
-      if [[ "$g0_ready" == "True" && "$g0_gen" == "$sts_gen" ]]; then
-        echo "   ✅ ${sts_name}-0 restarted and Ready (revision: $g0_gen)"
-        break
-      fi
-      sleep 10
-      partition_wait=$((partition_wait + 10))
-      if [[ $((partition_wait % 60)) -eq 0 ]]; then
-        echo "   Still waiting for ${sts_name}-0... ${partition_wait}s elapsed (ready=$g0_ready, rev=$g0_gen, target=$sts_gen)"
-      fi
     done
 
-    if [[ $partition_wait -ge 600 ]]; then
-      echo "   ⚠️  ${sts_name}-0 did not become Ready within 600s after partition removal"
-      echo "   Cluster may still be functional via pods 1-$((target_replicas - 1))"
-      echo "   Check: oc get pods -l app.kubernetes.io/name=$sts_name -n $namespace"
-      # Don't return failure -- the cluster is operational with the other nodes
+    # Pre-clean bootstrap state on PVC for whenever galera-0 eventually restarts
+    echo "   Clearing bootstrap state on galera-0 PVC (for next restart)..."
+    oc exec "${sts_name}-0" -n "$namespace" -- \
+      bash -c 'sed -i "s/^safe_to_bootstrap: 1/safe_to_bootstrap: 0/" /bitnami/mariadb/data/grastate.dat 2>/dev/null; \
+               rm -f /bitnami/mariadb/data/gvwstate.dat 2>/dev/null; \
+               echo "   ✅ safe_to_bootstrap=0, gvwstate.dat removed"' \
+      2>/dev/null || echo "   ⚠️  Could not clear bootstrap state"
+
+    # Switch to OnDelete strategy so removing partition doesn't trigger restart
+    echo "   Switching to OnDelete update strategy (prevents automatic restart)..."
+    oc patch statefulset/"$sts_name" -n "$namespace" --type=merge \
+      -p '{"spec":{"updateStrategy":{"type":"OnDelete"}}}' 2>/dev/null || true
+
+    # Remove partition (safe now — OnDelete prevents automatic pod restart)
+    echo "   Removing partition..."
+    oc patch statefulset/"$sts_name" -n "$namespace" --type=merge \
+      -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":0}}}}' 2>/dev/null || true
+
+    # NOTE: We intentionally leave OnDelete strategy active. Switching back to
+    # RollingUpdate here would immediately restart pod-0 (revision mismatch),
+    # re-triggering the bootstrap leak. The next Helm/deploy operation will
+    # restore RollingUpdate strategy as part of its normal template application.
+    echo "   ℹ️  OnDelete strategy left active — next deploy restores RollingUpdate"
+
+    # Verify galera-0 is still running and healthy (should not have restarted)
+    sleep 5
+    local g0_ready_after
+    g0_ready_after=$(oc get pod "${sts_name}-0" -n "$namespace" \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+    if [[ "$g0_ready_after" == "True" ]]; then
+      echo "   ✅ galera-0 still running and Ready (not restarted)"
+    else
+      echo "   ⚠️  galera-0 may be restarting (ready=$g0_ready_after)"
+      echo "   Waiting up to 120s for it to stabilize..."
+      local stabilize_wait=0
+      while [[ $stabilize_wait -lt 120 ]]; do
+        g0_ready_after=$(oc get pod "${sts_name}-0" -n "$namespace" \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+        if [[ "$g0_ready_after" == "True" ]]; then
+          echo "   ✅ galera-0 Ready after ${stabilize_wait}s"
+          break
+        fi
+        sleep 10
+        stabilize_wait=$((stabilize_wait + 10))
+      done
     fi
 
-    # Final cluster-wide health check after galera-0 rejoin
+    # Final cluster-wide health check
     echo ""
     echo "Step 9.6: Final cluster health verification..."
     check_galera_cluster_health "$selector" "$namespace" "$target_replicas"
     local final_health=$?
     if [[ $final_health -ne 0 ]]; then
-      echo "   ⚠️  Post-rejoin health check returned code $final_health (cluster may still be stabilizing)"
+      echo "   ⚠️  Post-recovery health check returned code $final_health (cluster may still be stabilizing)"
     else
       echo "   ✅ All $target_replicas nodes healthy"
     fi

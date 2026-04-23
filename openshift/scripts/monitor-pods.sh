@@ -40,6 +40,17 @@ AUTO_APPLY_GALERA_TIMEOUTS=${AUTO_APPLY_GALERA_TIMEOUTS:-true}  # Auto-apply PT3
 # Track consecutive errors per pod
 declare -A error_counts
 
+# Track last restart time per selector to prevent restart loops
+# During cluster maintenance, node drains cause transient startup errors.
+# Without cooldown, the monitor would restart pods that just restarted.
+declare -A last_restart_time
+declare -A pod_restart_counts       # Per-pod restart counter within window
+declare -A pod_restart_window_start # Per-pod window start epoch
+POD_MIN_AGE_SECONDS=${POD_MIN_AGE_SECONDS:-120}       # Skip pods younger than this (startup grace)
+RESTART_COOLDOWN_SECONDS=${RESTART_COOLDOWN_SECONDS:-300}  # Min time between restarts per service
+MAX_POD_RESTARTS=${MAX_POD_RESTARTS:-3}                # Max restarts per pod within window
+MAX_POD_RESTART_WINDOW=${MAX_POD_RESTART_WINDOW:-1800} # Window in seconds (30min)
+
 # Initialize logging
 echo "Starting continuous pod health monitoring..."
 echo "Monitoring interval: ${MONITORING_INTERVAL}s"
@@ -150,6 +161,24 @@ check_pod_health() {
 
   for pod in $pods; do
     pod_count=$((pod_count + 1))
+
+    # Pod age gate: skip pods that just started (transient startup errors)
+    # Bypass for redis-proxy — it cannot self-heal and must restart immediately
+    if [[ "$selector" != "app=redis-proxy" ]]; then
+      local start_time
+      start_time=$(oc get pod "$pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.startTime}' 2>/dev/null)
+      if [[ -n "$start_time" ]]; then
+        local start_epoch
+        start_epoch=$(date -d "$start_time" +%s 2>/dev/null || echo "0")
+        local age=$(( $(date +%s) - start_epoch ))
+        if [[ $age -lt $POD_MIN_AGE_SECONDS ]]; then
+          issue_details+=("  [SKIP] $pod - too young (${age}s < ${POD_MIN_AGE_SECONDS}s startup grace)")
+          pods_checked=$((pods_checked + 1))
+          continue
+        fi
+      fi
+    fi
+
     local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
 
     if [[ -z "$recent_logs" ]]; then
@@ -187,11 +216,46 @@ check_pod_health() {
         issue_details+=("  - [MANUAL MODE] Would restart $pod - $threshold consecutive errors (auto-healing disabled)")
         continue
       fi
+
+      # Cooldown: prevent restart loops during cluster maintenance
+      # Bypass for redis-proxy — it cannot self-heal, immediate restart required
+      if [[ "$selector" != "app=redis-proxy" ]]; then
+        local last_restart="${last_restart_time[$selector]:-0}"
+        local since_last=$(( $(date +%s) - last_restart ))
+        if [[ $since_last -lt $RESTART_COOLDOWN_SECONDS ]]; then
+          local remaining=$(( RESTART_COOLDOWN_SECONDS - since_last ))
+          issue_details+=("  [COOLDOWN] $pod - restart suppressed (${remaining}s remaining for $selector)")
+          continue
+        fi
+      fi
+
+      # Per-pod restart cap: prevent infinite restart loops when restarts don't fix the issue.
+      # If a pod has been restarted MAX_POD_RESTARTS times within MAX_POD_RESTART_WINDOW,
+      # stop restarting it and alert instead.
+      local _now
+      _now=$(date +%s)
+      local window_start="${pod_restart_window_start[$pod]:-0}"
+      if [[ $(( _now - window_start )) -gt $MAX_POD_RESTART_WINDOW ]]; then
+        pod_restart_counts["$pod"]=0
+        pod_restart_window_start["$pod"]=$_now
+      fi
+      local pod_restarts="${pod_restart_counts[$pod]:-0}"
+      if [[ $pod_restarts -ge $MAX_POD_RESTARTS ]]; then
+        issue_details+=("  [CAPPED] $pod - restart suppressed ($pod_restarts/$MAX_POD_RESTARTS restarts in $(( (_now - window_start) / 60 ))min window)")
+        issue_details+=("     Restarts are not fixing $pod — manual investigation required")
+        if [[ $pod_restarts -eq $MAX_POD_RESTARTS ]]; then
+          send_notification "POD_RESTART_CAPPED" "Pod Restart Cap Reached" "Pod $pod has been restarted $MAX_POD_RESTARTS times in ${MAX_POD_RESTART_WINDOW}s without recovery. Stopping automatic restarts — manual investigation required. Selector: $selector" "error" "$DEPLOY_NAMESPACE"
+        fi
+        continue
+      fi
+
       issue_details+=("  [ACTION] RESTARTING $pod - $threshold consecutive errors reached")
 
       if oc delete pod "$pod" --wait=false; then
         send_notification "POD_RESTART_THRESHOLD" "Pod Restarted - Error Threshold" "Pod $pod restarted after $threshold consecutive errors. Selector: $selector" "warning" "$DEPLOY_NAMESPACE"
         error_counts["$pod"]=0
+        pod_restart_counts["$pod"]=$(( ${pod_restart_counts[$pod]:-0} + 1 ))
+        last_restart_time["$selector"]=$(date +%s)
         issues_found=$((issues_found + 1))
 
         # Post-restart verification - wait briefly, then check if replacement pod starts
@@ -240,26 +304,29 @@ while true; do
   RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
     ["app=redis-proxy"]="err:"
+    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
   )
 
   # Per-service error threshold overrides (default: ERROR_THRESHOLD)
   # redis-proxy: threshold=1 — cannot self-heal from connection errors,
-  # the only fix is a pod restart. Waiting for 3 consecutive detections
-  # leaves the site degraded for 3 monitoring cycles unnecessarily.
+  # the only fix is a pod restart.
+  # redis-node: threshold=1 — CRITICAL/lost errors mean the node has stale
+  # connections and needs a restart to rejoin the cluster cleanly. Since
+  # redis-proxy already restarts on first error, a redis-node restart won't
+  # cause additional cascade impact.
   declare -A RESTART_THRESHOLDS
   RESTART_THRESHOLDS=(
     ["app=redis-proxy"]=1
+    ["app.kubernetes.io/name=redis"]=1
   )
 
   # Deployments to observe only (log errors, no restart)
   # - cron: transient DB/Redis errors during startup, auto-recovers
-  # - redis-node: restart can cascade-disconnect redis-proxy
   # - web: nginx auto-recovers, restart won't help
   # - mariadb-galera: handled by dedicated Galera check at GALERA_CHECK_INTERVAL
   declare -A OBSERVE_DEPLOYMENTS
   OBSERVE_DEPLOYMENTS=(
     ["app=cron"]="error,critical"
-    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
     ["deployment=web"]="emerg,crit"
   )
 
@@ -270,7 +337,7 @@ while true; do
   issue_details=()
   service_summary=()
   for selector in "${!RESTART_DEPLOYMENTS[@]}"; do
-    local svc_threshold="${RESTART_THRESHOLDS[$selector]:-$ERROR_THRESHOLD}"
+    svc_threshold="${RESTART_THRESHOLDS[$selector]:-$ERROR_THRESHOLD}"
     check_pod_health "$selector" "${RESTART_DEPLOYMENTS[$selector]}" "true" "$svc_threshold"
     total_issues=$((total_issues + $?))
   done

@@ -42,6 +42,65 @@ oc get pods -l "deployment=php" --field-selector=status.phase=Running
 oc get pods -l "app=redis-proxy" --field-selector=status.phase=Running
 ```
 
+## Automated Recovery (Recommended First)
+
+Before attempting manual recovery, use the automated tools available in the pod-health-monitor deployment. These tools handle namespace safety, MANUAL_MODE coordination, and step-by-step recovery with rollback.
+
+### Quick Diagnostics
+
+```bash
+# Inspect cluster health from pod-health-monitor (color-coded output)
+oc exec -it deployment/pod-health-monitor -n 950003-prod -- \
+  bash /scripts/utils/galera-inspect.sh
+```
+
+This checks pod status, timeout configuration, cluster state (Primary/Synced), grastate analysis, and provides recommendations.
+
+### Automated Split-Brain Recovery
+
+```bash
+# Interactive recovery (with confirmation prompts)
+oc exec -it deployment/pod-health-monitor -n 950003-prod -- \
+  bash /scripts/utils/galera-recover.sh
+
+# Force mode (skip confirmation, for automation)
+oc exec deployment/pod-health-monitor -n 950003-prod -- \
+  bash /scripts/utils/galera-recover.sh --force
+```
+
+### Full 9-Step Recovery Pipeline
+
+For complete cluster failure, the full recovery pipeline handles scale-down, PVC cleanup, grastate repair, bootstrap, and scale-up:
+
+```bash
+# From inside pod-health-monitor (auto-enables MANUAL_MODE, restores on exit)
+oc exec -it deployment/pod-health-monitor -n 950003-prod -- \
+  bash -c 'source /scripts/repair-mariadb-galera.sh'
+```
+
+Or step-by-step from Windows PowerShell:
+
+```powershell
+# Check current cluster status
+.\scripts\galera-recovery-step.ps1 -Namespace 950003-prod -Status
+
+# Run specific steps (e.g., steps 7-9: partition, scale, sync)
+.\scripts\galera-recovery-step.ps1 -Namespace 950003-prod -FromStep 7 -ToStep 9
+
+# Full recovery with force (no confirmation)
+.\scripts\galera-recovery-step.ps1 -Namespace 950003-prod -Force
+```
+
+Recovery steps: (1) Pre-flight + annotation, (2) Scale to 0 + clear env, (3) Delete secondary PVCs + fix grastate, (4) Enable bootstrap, (5) Scale to 1 + wait, (7) Set partition, disable bootstrap, verify Primary, (8) Scale to target + deadlock detection, (9) Wait for sync + remove partition + final health check.
+
+> **Tip**: The repair script automatically enables `MANUAL_MODE=true` on the pod-health-monitor to prevent the monitoring loop from interfering with recovery, and restores it on exit.
+
+---
+
+## Manual Recovery Procedures
+
+Use these procedures when the automated tools are unavailable or when you need fine-grained control over the recovery process.
+
 ## Detailed Galera Cluster Health Assessment
 
 ### 1. Identify Galera Pods
@@ -136,13 +195,20 @@ This shows two separate clusters with different UUIDs☝️
 
 ### Step 1: Create a Database Backup
 
-```bash
-# Find a healthy pod for backup (one that shows 'Primary' and 'Synced')
-oc exec -it mariadb-galera-0 -- mysqldump -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" --all-databases --single-transaction > galera-backup-$(date +%Y%m%d-%H%M).sql
+Use the `moodle-db-backup-storage` deployment to create a backup. This is the standard backup mechanism for the environment — do not use `mysqldump` directly.
 
-# Verify backup was created
-ls -la galera-backup-*.sql
+```bash
+# Trigger an immediate backup (runs once and exits)
+oc exec deployment/moodle-db-backup-storage -n $DEPLOY_NAMESPACE -- ./backup.sh -1
+
+# List existing backups to confirm it completed
+oc exec deployment/moodle-db-backup-storage -n $DEPLOY_NAMESPACE -- ./backup.sh -l
+
+# View current backup configuration
+oc exec deployment/moodle-db-backup-storage -n $DEPLOY_NAMESPACE -- ./backup.sh -c
 ```
+
+> **Tip**: Use `./backup.sh -l` to identify the backup file you would use for a restore. Restore with `./backup.sh -r <DatabaseSpec>` — see `./backup.sh -h` for full usage.
 
 ### Step 2: Identify the StatefulSet
 
@@ -351,6 +417,14 @@ oc exec -it <POD_NAME> -- ping <OTHER_POD_IP>
 
 If all pods are failing and split-brain resolution doesn't work:
 
+> **Preferred**: Use the automated 9-step recovery pipeline first:
+> ```bash
+> oc exec -it deployment/pod-health-monitor -n 950003-prod -- bash -c 'source /scripts/repair-mariadb-galera.sh'
+> ```
+> It handles scale-down, PVC cleanup, grastate repair, bootstrap, and scale-up with safety checks.
+
+If automated recovery is unavailable, proceed manually:
+
 ```bash
 # 1. Scale down to 0 (DANGEROUS - only if cluster is completely broken)
 oc scale statefulset mariadb-galera --replicas=0
@@ -367,8 +441,9 @@ oc scale statefulset mariadb-galera --replicas=1
 # 5. Wait for first pod to initialize
 oc wait --for=condition=ready pod -l "app.kubernetes.io/name=mariadb-galera" --timeout=600s
 
-# 6. Restore from backup
-# oc exec -it <POD_NAME> -- mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" < galera-backup-YYYYMMDD-HHMM.sql
+# 6. Restore from backup using the backup-storage deployment
+# oc exec deployment/moodle-db-backup-storage -n $DEPLOY_NAMESPACE -- ./backup.sh -l   # list available backups
+# oc exec -it deployment/moodle-db-backup-storage -n $DEPLOY_NAMESPACE -- ./backup.sh -r <DatabaseSpec>   # restore
 
 # 7. Scale up to full size
 oc scale statefulset mariadb-galera --replicas=$ORIGINAL_REPLICAS
@@ -391,4 +466,4 @@ for pod in $GALERA_PODS; do
 done
 ```
 
-> **Note**: This manual process mirrors the automated monitoring and healing to be implemented in the pod health monitoring system. The automated system performs these same checks every 60 seconds and auto-heals when safe to do so. Manual intervention should only be necessary when the automated system cannot resolve the issue.
+> **Note**: The pod-health-monitor performs continuous automated health checks every 60 seconds with Galera-specific checks every 5 minutes. It auto-heals when safe to do so, including IST failure detection and pod restart. The automated recovery tools (`galera-inspect.sh`, `galera-recover.sh`, `repair-mariadb-galera.sh`) are available inside the pod-health-monitor for more complex scenarios. Manual intervention should only be necessary when the automated system cannot resolve the issue.

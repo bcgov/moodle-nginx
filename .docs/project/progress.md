@@ -39,6 +39,12 @@ timeline
         existingSecret Migration    : Eliminated plaintext passwords from Helm
         Unified OpenShift Auth      : ensure_openshift_auth for GH + in-cluster
         IST Failure Auto-Recovery   : Detect Disconnected pods, auto-delete for rejoin
+    section Pod Health Monitor Hardening
+        Auth Fix                    : galera_setup_auth early-return, preserve KUBECONFIG
+        RBAC Cleanup                : Removed dead ServiceAccount/Role/RoleBinding
+        Configurable Galera Sync    : GALERA_SYNC_MAX_RETRIES/WAIT_INTERVAL env vars
+        Per-Service Restart Tuning  : redis-proxy=1, redis-node=1, php=3 thresholds
+        Restart Loop Protection     : Pod age gate + per-service cooldown
 ```
 
 ---
@@ -47,10 +53,14 @@ timeline
 
 | Component | Summary |
 |-----------|---------|
+| **Pod Health Monitor Hardening** | Per-service restart thresholds (redis-proxy=1, redis-node=1, php=3), pod age gate (120s startup grace), per-service cooldown (300s), redis-proxy bypasses both safeguards for immediate restart |
+| **OpenShift Auth Fix** | `galera_setup_auth()` early-return when already authenticated; preserves GH runner KUBECONFIG instead of clobbering with empty /tmp path |
+| **RBAC Cleanup** | Removed dead ServiceAccount, Role, RoleBinding from pod-health-monitor.yml — deployment uses shared `github-actions-sa` |
+| **Configurable Galera Sync Timeout** | `GALERA_SYNC_MAX_RETRIES` (default: 120) and `GALERA_SYNC_WAIT_INTERVAL` (default: 30s) — total 60 min for PVC mount delays during cluster maintenance |
 | **Galera Recovery Pipeline** | 9-step PS1/bash recovery (galera-recovery-step.ps1 + repair-mariadb-galera.sh) with -Force, -Status, -FromStep/-ToStep |
 | **Probe Alignment** | Startup 5s/15s/80fail (~22min), readiness 5s/15s, liveness 10s/30s/6fail/180s-init — aligned across Helm, Step 4.5, galera-values.yaml |
 | **existingSecret Migration** | Passwords read from K8s Secret instead of Helm --set values; deploy scripts create/ensure secret |
-| **Unified OpenShift Auth** | `ensure_openshift_auth()` in coordination.sh works for both GH runners and in-cluster pods |
+| **Unified OpenShift Auth** | `ensure_openshift_auth()` in coordination.sh delegates to `galera_setup_auth()` for GH runners and in-cluster pods |
 | **IST Failure Auto-Recovery** | `wait_for_galera_sync` detects Initialized/Disconnected pods, auto-deletes for clean SST rejoin |
 | **Pod Health Check Fix** | `check_galera_pod_ready` checks Synced+Primary (not cluster_size), preventing false 0/N counts |
 | **Modular Refactoring - Week 2** | Extracted cluster-health, monitoring, secrets, pvc modules (2,000 lines) |
@@ -109,9 +119,9 @@ graph LR
 | **Site monitor** | ✅ Active | State machine with human-readable timings, pipeline failure early-exit |
 | **Deploy log capture** | ✅ Active | migrate-build-files + moodle-upgrade job logs |
 | **Node.js 24 actions** | ✅ Complete | 37 references upgraded; 3 third-party actions use env var fallback |
-| **Pod health monitoring** | ✅ Active | Galera auto-heal, service health checks, webhook notifications |
+| **Pod health monitoring** | ✅ Active | Per-service thresholds, restart loop protection, redis-proxy immediate restart |
 | **Galera recovery automation** | ✅ Active | 9-step pipeline, IST auto-recovery, probe alignment |
-| **Unified auth** | ✅ Active | ensure_openshift_auth for GH Actions + pod-health-monitor |
+| **Unified auth** | ✅ Active | galera_setup_auth early-return fix; preserves GH runner KUBECONFIG |
 | **Docker layer caching** | ✅ Active | Artifactory registry, buildx cache |
 | **Trivy DB caching** | ✅ Fixed | Branch-prefixed keys, continue-on-error for save collisions |
 | **Modular script architecture** | ✅ Week 2 Complete | 7 modules extracted (3,350 lines); openshift.sh reduced to ~700 lines |
@@ -130,7 +140,7 @@ graph LR
 | `WyriHaximus/github-action-helm3@v3` no node24 | Low | Cosmetic deprecation warning only |
 | `muinmomin/webhook-action@v1.0.0` no node24 | Low | Cosmetic deprecation warning only |
 | Lighthouse page load ~70s each | Low | Inherent to Lighthouse profiling; cold cache adds ~10-20s first page |
-| Documentation updates | Low | In progress - Week 2 completion docs pending |
+| Documentation updates | Low | Complete through pod health monitor hardening |
 
 ---
 

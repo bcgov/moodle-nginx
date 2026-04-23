@@ -4,6 +4,36 @@
 
 Leverage existing utilities and functions from `_utils.sh` by mounting them into the pod-health-monitor pod.
 
+## Monitoring Behavior
+
+### Per-Service Restart Thresholds
+
+| Service | Selector | Threshold | Age Gate | Cooldown | Rationale |
+|---------|----------|-----------|----------|----------|----------|
+| redis-proxy | `app=redis-proxy` | 1 | **bypassed** | **bypassed** | Stateless proxy, cannot self-heal, immediate restart required |
+| redis-node | `app.kubernetes.io/name=redis` | 1 | 120s | 300s | CRITICAL/lost errors mean stale connections, needs restart |
+| PHP | `deployment=php` | 3 (default) | 120s | 300s | Most resilient, self-heals most transient errors |
+| cron | `app=cron` | — | — | — | Observe-only (transient DB/Redis errors, auto-recovers) |
+| web | `deployment=web` | — | — | — | Observe-only (nginx auto-recovers, restart won't help) |
+
+### Restart Loop Protection
+
+During cluster maintenance (node drains, rolling restarts), pods restart with transient startup errors that resolve once the cluster settles. Two safeguards prevent the monitor from making things worse:
+
+1. **Pod Age Gate** (`POD_MIN_AGE_SECONDS=120`) — Skip pods younger than 2 minutes. Startup errors (connection refused to Redis/DB) resolve on their own.
+2. **Per-Service Cooldown** (`RESTART_COOLDOWN_SECONDS=300`) — After restarting a service, suppress further restarts for 5 minutes. Prevents: restart → new pod → startup error → restart loop.
+
+redis-proxy bypasses both safeguards because it cannot recover from errors without a restart.
+
+Both values are configurable via environment variables on the pod-health-monitor deployment:
+
+```bash
+oc set env deployment/pod-health-monitor \
+  POD_MIN_AGE_SECONDS=180 \
+  RESTART_COOLDOWN_SECONDS=600 \
+  -n 950003-dev
+```
+
 ## Architecture
 
 ### ConfigMaps Mounted in pod-health-monitor:
@@ -55,20 +85,12 @@ oc exec -it deployment/pod-health-monitor -n 950003-prod -- bash
 # Inside the pod:
 source /scripts/utils/_utils.sh
 
-# Now you have access to ALL utility functions:
+# Access ALL utility functions:
 check_galera_cluster_health 'app.kubernetes.io/name=mariadb-galera' '950003-prod'
 scale_deployment "deployment" "$PHP_DEPLOYMENT_NAME" "1" "1"
 patch_route "moodle-web" "maintenance-message"
 clear_moodle_cache_deployment "$PHP_DEPLOYMENT_NAME" "$NAMESPACE"
 ```
-
-## Benefits
-
-✅ **No Code Duplication** - Reuse existing tested utilities instead of rewriting in PowerShell
-✅ **Full Bash Ecosystem** - Access to all functions in `_utils.sh` and modules
-✅ **Quick Updates** - PowerShell scripts only update ConfigMaps, ~1 minute vs 45-minute deployment
-✅ **Consistent Behavior** - Same code runs in pods and bash deployment scripts
-✅ **Easy Debugging** - Can shell into pod and run functions interactively
 
 ## Available Utility Functions in Pod
 
@@ -93,41 +115,3 @@ Once you source `/scripts/utils/_utils.sh`, you have access to:
 ### Moodle Operations (moodle.sh):
 - `clear_moodle_cache_deployment()` - Cache clearing across pods
 - `run_moodle_cli()` - Execute Moodle CLI commands
-
-## Files Updated
-
-1. [openshift/scripts/deploy-template.sh](../../openshift/scripts/deploy-template.sh) - Adds galera-recovery-scripts ConfigMap
-2. [openshift/pod-health-monitor.yml](../../openshift/pod-health-monitor.yml) - Mounts galera-scripts volume
-3. [openshift/scripts/galera-inspect.sh](../../openshift/scripts/galera-inspect.sh) - Sources _utils.sh, uses utility functions
-4. [scripts/update-pod-health-scripts.ps1](./update-pod-health-scripts.ps1) - Universal updater for all ConfigMaps
-
-## Migration from Old Approach
-
-**Old (Deprecated)**:
-- `update-galera-recovery-scripts.ps1` - Just updated galera scripts
-- `update-monitor-pods-script.ps1` - Just updated monitor script
-- Standalone bash scripts without utilities
-
-**New (Current)**:
-- `update-pod-health-scripts.ps1` - Updates ALL ConfigMaps with `-ScriptType` parameter
-- All bash scripts source `/scripts/utils/_utils.sh` and use existing functions
-- Single source of truth for all utilities
-
-## Next Steps
-
-1. **Test in Dev**:
-   ```powershell
-   .\scripts\update-pod-health-scripts.ps1 -Namespace 950003-dev
-   ```
-
-2. **Verify Scripts Available**:
-   ```bash
-   oc exec -it deployment/pod-health-monitor -n 950003-dev -- ls -la /scripts/utils/
-   ```
-
-3. **Test Galera Inspection**:
-   ```bash
-   oc exec -it deployment/pod-health-monitor -n 950003-dev -- bash /scripts/utils/galera-inspect.sh
-   ```
-
-4. **Deploy to Production** when tested and validated

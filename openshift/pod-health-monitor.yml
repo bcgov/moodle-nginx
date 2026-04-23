@@ -192,10 +192,11 @@ objects:
                 command:
                 - /bin/bash
                 - -c
-                - "oc whoami >/dev/null 2>&1"
-              initialDelaySeconds: 10
-              periodSeconds: 30
+                - "ps aux | grep -v grep | grep monitor-pods.sh"
+              initialDelaySeconds: 30
+              periodSeconds: 60
               timeoutSeconds: 5
+              failureThreshold: 3
           volumes:
           - name: openshift-scripts
             configMap:
