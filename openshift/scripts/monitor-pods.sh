@@ -391,7 +391,55 @@ while true; do
     fi
 
     if [[ -n "$galera_expected_size" ]]; then
-      if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+      # Under-scaled detection: compare live replicas against sizing CSV target.
+      # Catches half-completed auto-heal that left the cluster at fewer replicas
+      # than the environment target (e.g., 1/5 after a failed recovery).
+      galera_sizing_target=""
+      if command -v get_sizing_replicas &>/dev/null; then
+        galera_sizing_target=$(get_sizing_replicas "mariadb-galera" "$DEPLOY_NAMESPACE" 2>/dev/null)
+      fi
+      if [[ -n "$galera_sizing_target" && "$galera_sizing_target" =~ ^[0-9]+$ \
+            && "$galera_expected_size" =~ ^[0-9]+$ \
+            && "$galera_expected_size" -lt "$galera_sizing_target" \
+            && "$galera_expected_size" -gt 0 ]]; then
+        echo "$(date): [WARN] Under-scaled: StatefulSet replicas=$galera_expected_size, sizing target=$galera_sizing_target"
+
+        if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+          echo "$(date): [MANUAL MODE] Under-scaled cluster detected but manual mode is active"
+          service_summary+=("  [WARN] mariadb-galera - under-scaled ($galera_expected_size/$galera_sizing_target replicas, MANUAL MODE)")
+          send_notification "GALERA_UNDERSCALED" "Galera Under-Scaled (Manual Mode)" \
+            "StatefulSet has $galera_expected_size replicas but sizing target is $galera_sizing_target. Manual mode active — not auto-healing." \
+            "warning" "$DEPLOY_NAMESPACE"
+          # Still run health check in observe mode
+          check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" "$galera_expected_size" false
+          galera_status=$?
+        else
+          # Progressive escalation: track consecutive under-scaled detections
+          GALERA_UNDERSCALED_COUNT=${GALERA_UNDERSCALED_COUNT:-0}
+          GALERA_UNDERSCALED_COUNT=$((GALERA_UNDERSCALED_COUNT + 1))
+          local underscaled_tolerance=${GALERA_UNDERSCALED_TOLERANCE:-2}
+
+          if [[ $GALERA_UNDERSCALED_COUNT -ge $underscaled_tolerance ]]; then
+            echo "$(date): [ACTION] Under-scaled for $GALERA_UNDERSCALED_COUNT consecutive checks — triggering auto-heal to restore $galera_sizing_target replicas"
+            GALERA_UNDERSCALED_COUNT=0
+            send_notification "GALERA_UNDERSCALED_HEAL" "Galera Under-Scaled Auto-Heal" \
+              "StatefulSet has $galera_expected_size replicas but sizing target is $galera_sizing_target. Triggering auto-heal after $underscaled_tolerance consecutive detections." \
+              "warning" "$DEPLOY_NAMESPACE"
+            auto_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE"
+            galera_status=$?
+          else
+            echo "$(date): [INFO] Under-scaled check $GALERA_UNDERSCALED_COUNT/$underscaled_tolerance — waiting before auto-heal"
+            send_notification "GALERA_UNDERSCALED_MONITORING" "Galera Under-Scaled (Monitoring)" \
+              "StatefulSet has $galera_expected_size/$galera_sizing_target replicas ($GALERA_UNDERSCALED_COUNT/$underscaled_tolerance checks before auto-heal)." \
+              "info" "$DEPLOY_NAMESPACE"
+            # Run health check normally for the current replica count
+            check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" "$galera_expected_size" true
+            galera_status=$?
+          fi
+        fi
+      elif [[ "${MANUAL_MODE,,}" == "true" ]]; then
+        # Reset under-scaled counter when at target
+        GALERA_UNDERSCALED_COUNT=0
         echo "$(date): [MANUAL MODE] Skipping Galera auto-healing: manual intervention in progress"
         check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" "$galera_expected_size" false
         galera_status=$?
@@ -405,6 +453,8 @@ while true; do
           service_summary+=("  [NOTICE] mariadb-galera - reduced availability mode (1 replica, MANUAL MODE=true)")
         fi
       else
+        # At target or no sizing CSV — normal health check
+        GALERA_UNDERSCALED_COUNT=0
         check_and_heal_galera_cluster "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE" "$galera_expected_size" true
         galera_status=$?
       fi

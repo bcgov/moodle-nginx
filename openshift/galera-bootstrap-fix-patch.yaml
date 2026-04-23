@@ -11,13 +11,19 @@
 ## Remove after recovery with:
 ##   oc patch statefulset/mariadb-galera -n $NAMESPACE --type=json -p '[{"op":"remove","path":"/spec/template/spec/initContainers"}]'
 ##
+## Note: The image below must match your cluster's registry. The automated
+## galera_safe_upgrade() script detects the correct image from the StatefulSet.
+## For manual use, update the image to match your environment:
+##   artifacts.developer.gov.bc.ca/m950-learning/bitnamilegacy/mariadb-galera:10.6  (BCGov Artifactory)
+##   docker.io/bitnami/mariadb-galera:10.6                                          (Docker Hub)
+##
 ## See: docs/manual-galera-troubleshooting.md
 spec:
   template:
     spec:
       initContainers:
       - name: bootstrap-fix
-        image: docker.io/bitnami/mariadb-galera:10.6.20-debian-12-r6
+        image: artifacts.developer.gov.bc.ca/m950-learning/bitnamilegacy/mariadb-galera:10.6
         command:
         - bash
         - -c
