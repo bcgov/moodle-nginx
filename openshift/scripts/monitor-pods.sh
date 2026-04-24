@@ -179,7 +179,17 @@ check_pod_health() {
       fi
     fi
 
-    local recent_logs=$(oc logs "$pod" --tail=10 2>/dev/null)
+    # Check recent logs for error patterns.
+    # redis-proxy: check ALL logs (no --since). Proxy logs are tiny (< 20 lines total)
+    # and errors are persistent state (stale connection from startup), not time-bounded.
+    # Other services: use --since window to avoid reacting to old resolved errors.
+    local recent_logs
+    if [[ "$selector" == "app=redis-proxy" ]]; then
+      recent_logs=$(oc logs "$pod" --tail=50 2>/dev/null)
+    else
+      local since_seconds=$((MONITORING_INTERVAL * 2 + 30))
+      recent_logs=$(oc logs "$pod" --tail=50 --since="${since_seconds}s" 2>/dev/null)
+    fi
 
     if [[ -z "$recent_logs" ]]; then
       pods_checked=$((pods_checked + 1))
@@ -350,29 +360,65 @@ while true; do
   # Comprehensive infrastructure checks at longer interval (Galera + Redis Proxy)
   if [[ $((current_time - last_galera_check)) -ge $GALERA_CHECK_INTERVAL ]]; then
 
-    # -- Redis Proxy readiness check --
-    # The proxy can get "stuck" with stale connections after Galera/Redis changes.
-    # Log-based checks only catch written errors; this validates actual pod readiness.
-    proxy_pod=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>&1)
-    proxy_oc_exit=$?
+    # -- Redis Proxy connectivity check --
+    # Log-based checks miss stale proxy connections (errors are sparse and the proxy
+    # appears Running/Ready to Kubernetes while silently failing intermittently).
+    # Test actual Redis PING through each proxy pod to detect broken tunnels.
+    local proxy_pods
+    proxy_pods=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>&1)
+    local proxy_oc_exit=$?
     if [[ $proxy_oc_exit -ne 0 ]]; then
       service_summary+=("  [WARN] redis-proxy - oc query failed (exit $proxy_oc_exit)")
-      issue_details+=("  [WARN] redis-proxy readiness check skipped - oc command failed")
-    elif [[ -n "$proxy_pod" ]]; then
-      ready=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-      restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
-      restarts=${restarts:-0}
+      issue_details+=("  [WARN] redis-proxy connectivity check skipped - oc command failed")
+    elif [[ -n "$proxy_pods" ]]; then
+      local proxy_healthy=0
+      local proxy_total=0
+      local proxy_stale=()
+      for proxy_pod in $proxy_pods; do
+        proxy_total=$((proxy_total + 1))
+        local restarts
+        restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
+        restarts=${restarts:-0}
 
-      if [[ "$ready" == "True" ]]; then
-        service_summary+=("  [OK] redis-proxy - $proxy_pod ready (restarts: $restarts)")
+        # Active connectivity test: PING through the proxy's Redis tunnel
+        # redis-cli is available in the proxy container (redis-tools installed)
+        local ping_result
+        ping_result=$(oc exec "$proxy_pod" -n "$DEPLOY_NAMESPACE" -- \
+          redis-cli -h localhost -p 6379 PING 2>/dev/null || echo "")
+
+        if [[ "$ping_result" == *"PONG"* ]]; then
+          proxy_healthy=$((proxy_healthy + 1))
+        else
+          # Check logs for recent errors as additional context
+          local proxy_errors
+          proxy_errors=$(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=20 2>/dev/null | grep -i "error\|cannot connect\|refused\|timeout" | tail -3)
+          proxy_stale+=("$proxy_pod")
+          issue_details+=("  [ALERT] redis-proxy $proxy_pod - PING failed (stale connection, restarts: $restarts)")
+          if [[ -n "$proxy_errors" ]]; then
+            while IFS= read -r line; do
+              issue_details+=("       $line")
+            done <<< "$proxy_errors"
+          fi
+
+          # Restart the broken proxy immediately
+          if [[ "${MANUAL_MODE,,}" != "true" ]]; then
+            issue_details+=("  [ACTION] RESTARTING $proxy_pod - stale Redis tunnel detected via PING")
+            if oc delete pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" --wait=false 2>/dev/null; then
+              send_notification "REDIS_PROXY_STALE" "Redis Proxy Stale Connection" \
+                "Restarted $proxy_pod: Redis PING through tunnel failed (stale connection after cluster changes). Restarts: $restarts" \
+                "warning" "$DEPLOY_NAMESPACE"
+            fi
+          else
+            issue_details+=("  [MANUAL MODE] Would restart $proxy_pod - stale Redis tunnel")
+          fi
+        fi
+      done
+
+      if [[ ${#proxy_stale[@]} -gt 0 ]]; then
+        service_summary+=("  [ALERT] redis-proxy - ${#proxy_stale[@]}/$proxy_total stale (PING failed)")
+        total_issues=$((total_issues + ${#proxy_stale[@]}))
       else
-        service_summary+=("  [ALERT] redis-proxy - $proxy_pod NOT READY (restarts: $restarts)")
-        issue_details+=("  [WARN] redis-proxy $proxy_pod is Running but NOT Ready - may have stale connections")
-        issue_details+=("     Last 5 log lines:")
-        while IFS= read -r line; do
-          issue_details+=("       $line")
-        done < <(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=5 2>/dev/null)
-        total_issues=$((total_issues + 1))
+        service_summary+=("  [OK] redis-proxy - $proxy_total/$proxy_total connectivity verified")
       fi
     else
       service_summary+=("  [INFO] redis-proxy - no running pods")
