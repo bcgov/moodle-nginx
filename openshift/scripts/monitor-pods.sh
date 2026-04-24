@@ -318,15 +318,13 @@ while true; do
   # - cron: transient DB/Redis errors during startup, auto-recovers
   # - web: nginx auto-recovers, restart won't help
   # - mariadb-galera: handled by dedicated Galera check at GALERA_CHECK_INTERVAL
-  # - redis-node: "lost" patterns are transient connection timeouts that Redis
-  #   Sentinel handles automatically via reconnection. Restarting a node causes
-  #   MORE lost events across the cluster and cascades to redis-proxy restarts.
-  #   Observe-only prevents this amplification loop.
+  # - redis-node: NOT monitored here. "lost" patterns are normal RDB channel closures
+  #   after successful replica sync (not errors). Sentinel handles all failover/reconnection
+  #   automatically. Actual Redis issues surface through redis-proxy err: patterns instead.
   declare -A OBSERVE_DEPLOYMENTS
   OBSERVE_DEPLOYMENTS=(
     ["app=cron"]="error,critical"
     ["deployment=web"]="emerg,crit"
-    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
   )
 
   # Perform health checks - restart-eligible services
