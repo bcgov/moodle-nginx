@@ -364,25 +364,22 @@ while true; do
     # Log-based checks miss stale proxy connections (errors are sparse and the proxy
     # appears Running/Ready to Kubernetes while silently failing intermittently).
     # Test actual Redis PING through each proxy pod to detect broken tunnels.
-    local proxy_pods
     proxy_pods=$(oc get pods -l app=redis-proxy --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>&1)
-    local proxy_oc_exit=$?
+    proxy_oc_exit=$?
     if [[ $proxy_oc_exit -ne 0 ]]; then
       service_summary+=("  [WARN] redis-proxy - oc query failed (exit $proxy_oc_exit)")
       issue_details+=("  [WARN] redis-proxy connectivity check skipped - oc command failed")
     elif [[ -n "$proxy_pods" ]]; then
-      local proxy_healthy=0
-      local proxy_total=0
-      local proxy_stale=()
+      proxy_healthy=0
+      proxy_total=0
+      proxy_stale=()
       for proxy_pod in $proxy_pods; do
         proxy_total=$((proxy_total + 1))
-        local restarts
         restarts=$(oc get pod "$proxy_pod" -n "$DEPLOY_NAMESPACE" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
         restarts=${restarts:-0}
 
         # Active connectivity test: PING through the proxy's Redis tunnel
         # redis-cli is available in the proxy container (redis-tools installed)
-        local ping_result
         ping_result=$(oc exec "$proxy_pod" -n "$DEPLOY_NAMESPACE" -- \
           redis-cli -h localhost -p 6379 PING 2>/dev/null || echo "")
 
@@ -390,7 +387,6 @@ while true; do
           proxy_healthy=$((proxy_healthy + 1))
         else
           # Check logs for recent errors as additional context
-          local proxy_errors
           proxy_errors=$(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=20 2>/dev/null | grep -i "error\|cannot connect\|refused\|timeout" | tail -3)
           proxy_stale+=("$proxy_pod")
           issue_details+=("  [ALERT] redis-proxy $proxy_pod - PING failed (stale connection, restarts: $restarts)")
@@ -460,7 +456,7 @@ while true; do
           # Progressive escalation: track consecutive under-scaled detections
           GALERA_UNDERSCALED_COUNT=${GALERA_UNDERSCALED_COUNT:-0}
           GALERA_UNDERSCALED_COUNT=$((GALERA_UNDERSCALED_COUNT + 1))
-          local underscaled_tolerance=${GALERA_UNDERSCALED_TOLERANCE:-2}
+          underscaled_tolerance=${GALERA_UNDERSCALED_TOLERANCE:-2}
 
           if [[ $GALERA_UNDERSCALED_COUNT -ge $underscaled_tolerance ]]; then
             echo "$(date): [ACTION] Under-scaled for $GALERA_UNDERSCALED_COUNT consecutive checks — triggering auto-heal to restore $galera_sizing_target replicas"
