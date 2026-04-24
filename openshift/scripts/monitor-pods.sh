@@ -304,30 +304,29 @@ while true; do
   RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
     ["app=redis-proxy"]="err:"
-    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
   )
 
   # Per-service error threshold overrides (default: ERROR_THRESHOLD)
   # redis-proxy: threshold=1 — cannot self-heal from connection errors,
   # the only fix is a pod restart.
-  # redis-node: threshold=1 — CRITICAL/lost errors mean the node has stale
-  # connections and needs a restart to rejoin the cluster cleanly. Since
-  # redis-proxy already restarts on first error, a redis-node restart won't
-  # cause additional cascade impact.
   declare -A RESTART_THRESHOLDS
   RESTART_THRESHOLDS=(
     ["app=redis-proxy"]=1
-    ["app.kubernetes.io/name=redis"]=1
   )
 
   # Deployments to observe only (log errors, no restart)
   # - cron: transient DB/Redis errors during startup, auto-recovers
   # - web: nginx auto-recovers, restart won't help
   # - mariadb-galera: handled by dedicated Galera check at GALERA_CHECK_INTERVAL
+  # - redis-node: "lost" patterns are transient connection timeouts that Redis
+  #   Sentinel handles automatically via reconnection. Restarting a node causes
+  #   MORE lost events across the cluster and cascades to redis-proxy restarts.
+  #   Observe-only prevents this amplification loop.
   declare -A OBSERVE_DEPLOYMENTS
   OBSERVE_DEPLOYMENTS=(
     ["app=cron"]="error,critical"
     ["deployment=web"]="emerg,crit"
+    ["app.kubernetes.io/name=redis"]="CRITICAL,lost"
   )
 
   # Perform health checks - restart-eligible services
