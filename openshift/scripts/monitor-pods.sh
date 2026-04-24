@@ -313,7 +313,7 @@ while true; do
   declare -A RESTART_DEPLOYMENTS
   RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
-    ["app=redis-proxy"]="err:"
+    ["app=redis-proxy"]="error"
   )
 
   # Per-service error threshold overrides (default: ERROR_THRESHOLD)
