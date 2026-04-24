@@ -107,6 +107,27 @@ deploy_resource_from_template ./openshift/template.json \
   "REDIS_PORT=$REDIS_PORT" \
   "MOODLE_DEPLOYMENT_NAME=$MOODLE_DEPLOYMENT_NAME"
 
+# Wait for old pods to fully terminate before creating the migrate job.
+# PVCs (ReadWriteOnce) cannot be attached to new pods until old pods release them.
+# Without this wait, the job pod hits FailedAttachVolume and can exhaust its timeout.
+log_info "Waiting for terminating pods to release PVC volumes..."
+for _pvc in moodle-data moodle-app-data; do
+  # Find pods still mounting this PVC (any phase except Succeeded/Failed)
+  _attached_pods=$(oc get pods -n "$DEPLOY_NAMESPACE" -o json 2>/dev/null \
+    | jq -r --arg pvc "$_pvc" '.items[]
+      | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+      | select(.spec.volumes[]? | .persistentVolumeClaim?.claimName == $pvc)
+      | .metadata.name' 2>/dev/null || true)
+  if [[ -n "$_attached_pods" ]]; then
+    log_info "  PVC $_pvc still attached to: $(echo $_attached_pods | tr '\n' ' ')"
+    for _pod in $_attached_pods; do
+      log_info "  Waiting for $_pod to terminate..."
+      oc wait --for=delete "pod/$_pod" -n "$DEPLOY_NAMESPACE" --timeout=120s 2>/dev/null || true
+    done
+  fi
+done
+log_info "PVC volumes are available"
+
 log_info "Create and run migrate-build-files job..."
 deploy_resource_from_template ./openshift/migrate-build-files.yml \
     IMAGE_REPO=$IMAGE_REPO \
@@ -114,7 +135,7 @@ deploy_resource_from_template ./openshift/migrate-build-files.yml \
     BUILD_NAMESPACE=$BUILD_NAMESPACE \
     FORCE_MIGRATE=$FORCE_MIGRATE \
     ARTIFACTORY_PULL_SECRET=$ARTIFACTORY_PULL_SECRET
-if ! wait_for "job/migrate-build-files" "complete" "800s"; then
+if ! wait_for "job/migrate-build-files" "complete" "1200s"; then
   log_error "Failed to run migrate-build-files job. Exiting..."
   exit 1
 fi
