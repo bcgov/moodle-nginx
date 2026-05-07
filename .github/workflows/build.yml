@@ -22,18 +22,34 @@ env:
   FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
 
 on:
-  schedule:
-    - cron: "0 3 * * 6"
+  # Manual trigger — the "Run workflow" button appears in the Actions tab.
+  # When triggered, select the target branch (950003-dev, 950003-test, or 950003-prod).
+  # GitHub will execute THAT branch's version of this workflow, not main's.
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Target branch/environment to deploy'
+        type: choice
+        options:
+          - '950003-dev'
+          - '950003-test'
+          - '950003-prod'
+        required: true
+      reason:
+        description: 'Reason for manual rebuild (logged for audit purposes)'
+        required: false
+        default: 'Manual rebuild to refresh external dependencies'
+
   push:
     branches:
-      - dev
-      # - test
-      # - prod
+      - 950003-dev
+      - 950003-test
+      - 950003-prod
   pull_request:
     branches:
-      - dev
-      #- test
-      #- prod
+      - 950003-dev
+      - 950003-test
+      - 950003-prod
 
   workflow_call:
     secrets:

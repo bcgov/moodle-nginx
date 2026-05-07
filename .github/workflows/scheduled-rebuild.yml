@@ -1,0 +1,58 @@
+name: ⏰ Scheduled Rebuild
+
+# This workflow lives on the default branch (main) because GitHub Actions
+# schedule triggers ONLY fire on the default branch. It dispatches the real
+# build workflow on the target branch, so that branch's code, configs, and
+# workflow definition are used — not main's potentially outdated copies.
+
+on:
+  schedule:
+    # Every Saturday at 03:00 UTC — picks up latest Moodle patches,
+    # plugin updates, and base image security fixes automatically.
+    - cron: "0 3 * * 6"
+
+  # Allow manual trigger of the scheduler itself (useful for testing)
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to trigger rebuild on'
+        type: choice
+        options:
+          - '950003-dev'
+          - '950003-test'
+          - '950003-prod'
+        default: '950003-dev'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: 🚀 Trigger rebuild
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Dispatch build workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = context.eventName === 'schedule'
+              ? '950003-dev'
+              : '${{ inputs.target_branch }}';
+
+            console.log(`Dispatching build.yml on branch: ${branch}`);
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build.yml',
+              ref: branch,
+              inputs: {
+                target_environment: branch,
+                reason: context.eventName === 'schedule'
+                  ? 'Weekly scheduled rebuild — external dependency refresh'
+                  : `Manual scheduler dispatch to ${branch}`
+              }
+            });
+
+            console.log(`Successfully triggered build on ${branch}`);
