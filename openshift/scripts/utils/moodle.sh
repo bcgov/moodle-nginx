@@ -849,6 +849,12 @@ manage_maintenance_mode() {
     elif echo "$maintenance_output" | grep -q "$expected_output_first_run"; then
       echo "⚠️ Maintenance cannot be set on first run, skipping."
       break
+    elif echo "$maintenance_output" | grep -q "== Maintenance mode" && ! echo "$maintenance_output" | grep -qE "Exception|Error|Fatal"; then
+      # Moodle CLI header present with no errors — maintenance.php ran successfully.
+      # Some Moodle versions output only the header (e.g., "== Maintenance mode (/var/www/html) ==")
+      # without the expected status line. Accept this as success.
+      echo "✔️ Maintenance mode ${action}d (confirmed by CLI header)."
+      break
     elif echo "$maintenance_output" | grep -qE "Exception|Error" && echo "$maintenance_output" | grep -q "redis-proxy"; then
       echo "❌ Redis connection error detected: $maintenance_output"
       consecutive_redis_errors=$((consecutive_redis_errors + 1))

@@ -250,6 +250,80 @@ if oc get statefulset mariadb-galera -n "$current_namespace" &> /dev/null; then
     log_debug "   No WSREP errors found in recent logs"
   fi
 
+  # === READ-ONLY MODE CHECK ===
+  # After bootstrap recovery or restore, nodes can end up with read_only=ON
+  # which causes "READONLY You can't write against a read only replica" in Moodle.
+  # Galera multi-master requires all nodes writable.
+  echo "🔒 Checking for read-only nodes..."
+  read_only_fixed=0
+
+  for pod in $running_pods; do
+    read_only_status=$(oc exec "$pod" -n "$current_namespace" -c mariadb-galera -- bash -c \
+      'PASS=$(cat /opt/bitnami/mariadb/secrets/mariadb-password | tr -d "\n\r"); mysql -u $(printenv MARIADB_USER) --password="$PASS" -sN -e "SELECT @@read_only;" 2>/dev/null' 2>/dev/null || echo "UNKNOWN")
+
+    if [[ "$read_only_status" == "1" ]]; then
+      log_warn "⚠️  $pod: read_only=ON — Moodle cannot write to this node"
+
+      if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+        log_info "   [MANUAL MODE] Would run SET GLOBAL read_only=OFF on $pod"
+      else
+        # Fix: disable read_only so the node accepts writes
+        oc exec "$pod" -n "$current_namespace" -c mariadb-galera -- bash -c \
+          'PASS=$(cat /opt/bitnami/mariadb/secrets/mariadb-root-password | tr -d "\n\r"); mysql -u root --password="$PASS" -e "SET GLOBAL read_only=OFF;" 2>/dev/null' 2>/dev/null
+
+        if [[ $? -eq 0 ]]; then
+          log_success "   ✅ Fixed: SET GLOBAL read_only=OFF on $pod"
+          read_only_fixed=$((read_only_fixed + 1))
+        else
+          log_error "   ❌ Failed to disable read_only on $pod (may need manual fix)"
+        fi
+      fi
+    elif [[ "$read_only_status" == "0" ]]; then
+      log_debug "   $pod: read_only=OFF (writable)"
+    else
+      log_debug "   $pod: could not query read_only status"
+    fi
+  done
+
+  if [[ $read_only_fixed -gt 0 ]]; then
+    send_notification "GALERA_READONLY_FIXED" "Galera Read-Only Nodes Fixed" \
+      "Disabled read_only on $read_only_fixed node(s) in $current_namespace. Nodes were likely left in read-only state after bootstrap recovery or restore." \
+      "healing" "$current_namespace"
+  fi
+
+  # === STALE BOOTSTRAP ENV VAR CHECK ===
+  # Bootstrap env vars must not persist after recovery — they cause galera-0 to
+  # bootstrap a standalone cluster on every restart instead of rejoining.
+  echo "🔧 Checking for stale bootstrap environment variables..."
+  bootstrap_val=$(oc get statefulset mariadb-galera -n "$current_namespace" \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MARIADB_GALERA_CLUSTER_BOOTSTRAP")].value}' 2>/dev/null || echo "")
+
+  if [[ "$bootstrap_val" == "yes" ]]; then
+    log_warn "⚠️  MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes is still set on StatefulSet!"
+    log_warn "   This causes galera-0 to bootstrap standalone on every restart."
+
+    if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+      log_info "   [MANUAL MODE] Would remove bootstrap env vars from StatefulSet"
+    else
+      log_info "   [ACTION] Removing stale bootstrap env vars..."
+      oc set env statefulset/mariadb-galera -n "$current_namespace" \
+        MARIADB_GALERA_CLUSTER_BOOTSTRAP- \
+        MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP- \
+        MARIADB_GALERA_CLUSTER_ADDRESS- 2>/dev/null
+
+      if [[ $? -eq 0 ]]; then
+        log_success "   ✅ Removed stale bootstrap env vars from StatefulSet"
+        send_notification "GALERA_BOOTSTRAP_VARS_CLEANED" "Stale Bootstrap Env Vars Removed" \
+          "Removed MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes and related vars from StatefulSet in $current_namespace. These were left over from a previous recovery." \
+          "healing" "$current_namespace"
+      else
+        log_error "   ❌ Failed to remove bootstrap env vars"
+      fi
+    fi
+  else
+    log_debug "   No stale bootstrap env vars detected"
+  fi
+
   # === CLUSTER HEALTH CHECK ===
   # Use the existing health check function
   health_status=0

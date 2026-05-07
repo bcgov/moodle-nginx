@@ -126,11 +126,26 @@ function ConvertTo-UnixLineEndings {
 Write-Host "[1/2] Preparing openshift-scripts ConfigMap..." -ForegroundColor Cyan
 
 # Collect all bash scripts from openshift/scripts/ (recursively)
-# Exclude: .git folders, -legacy.sh files (archived originals)
+# Exclude: .git folders, -legacy.sh files (archived originals), CI/CD-only scripts
+# CI/CD scripts are only used by GitHub Actions deploy workflows, not by the monitor pod.
+# This keeps the ConfigMap under the 1MB Kubernetes limit.
+$cicdOnlyPatterns = @(
+    "deploy-*", "build-*", "migrate-*", "optimize-*",
+    "validate-*", "test-*", "comprehensive-*", "ensure-*",
+    "right-sizing*", "helm-image-*", "populate-*",
+    "lighthouse-*", "fix-mojibake-*", "moodle-mojibake-*",
+    "openshift-list-*", "moodle-upgrade*", "enable-maintenance*",
+    "deploy-memcached*"
+)
 $bashScripts = Get-ChildItem -Path $ScriptsPath -Recurse -File -Include "*.sh" |
-    Where-Object { $_.FullName -notlike "*\.git*" -and $_.Name -notlike "*-legacy.sh" }
+    Where-Object {
+        $name = $_.Name
+        $_.FullName -notlike "*\.git*" -and
+        $name -notlike "*-legacy.sh" -and
+        -not ($cicdOnlyPatterns | Where-Object { $name -like $_ })
+    }
 
-Write-Host "  Found $($bashScripts.Count) bash scripts (excluding legacy files)" -ForegroundColor Gray
+Write-Host "  Found $($bashScripts.Count) bash scripts (excluding legacy + CI/CD-only files)" -ForegroundColor Gray
 
 # Build --from-file arguments with flattened keys (ConfigMap keys cannot contain /)
 $scriptsArgs = @()

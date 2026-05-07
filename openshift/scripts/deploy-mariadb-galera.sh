@@ -486,6 +486,7 @@ else
     --set db.name=$DB_NAME \
     --set replicaCount=1 \
     --set persistence.size=10Gi \
+    --set resourcesPreset=none \
     --set resources.requests.cpu=50m \
     --set resources.requests.memory=256Mi \
     --set startupProbe.enabled=true \

@@ -313,7 +313,7 @@ while true; do
   declare -A RESTART_DEPLOYMENTS
   RESTART_DEPLOYMENTS=(
     ["deployment=php"]="error,critical"
-    ["app=redis-proxy"]="error"
+    ["app=redis-proxy"]="err:,error"
   )
 
   # Per-service error threshold overrides (default: ERROR_THRESHOLD)
@@ -387,7 +387,7 @@ while true; do
           proxy_healthy=$((proxy_healthy + 1))
         else
           # Check logs for recent errors as additional context
-          proxy_errors=$(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=20 2>/dev/null | grep -i "error\|cannot connect\|refused\|timeout" | tail -3)
+          proxy_errors=$(oc logs "$proxy_pod" -n "$DEPLOY_NAMESPACE" --tail=20 2>/dev/null | grep -i "err:\|error\|cannot connect\|refused\|timeout" | tail -3)
           proxy_stale+=("$proxy_pod")
           issue_details+=("  [ALERT] redis-proxy $proxy_pod - PING failed (stale connection, restarts: $restarts)")
           if [[ -n "$proxy_errors" ]]; then
@@ -420,6 +420,132 @@ while true; do
       service_summary+=("  [INFO] redis-proxy - no running pods")
     fi
 
+    # -- Cross-service network connectivity probe --
+    # Tests actual pod-to-pod TCP paths between key services.
+    # OVN migration or SDN issues cause intermittent pod connectivity drops that
+    # Kubernetes health checks miss (pods stay Running/Ready while connections fail).
+    # This probe provides timestamped evidence for cluster incident reports.
+    #
+    # Latency thresholds (measured inside the pod to exclude oc exec overhead):
+    #   < WARN threshold  : healthy
+    #   WARN - CRITICAL   : degraded — network is slow, timeouts likely soon
+    #   > CRITICAL        : near-failure — connections may drop under load
+    #   TCP connect fail  : broken path
+    NET_PROBE_WARN_MS=${NET_PROBE_WARN_MS:-100}       # >100ms = degraded
+    NET_PROBE_CRITICAL_MS=${NET_PROBE_CRITICAL_MS:-500}  # >500ms = near-failure
+    echo "$(date): 🌐 Running cross-service network connectivity probe..."
+    echo "$(date):    Latency thresholds: warn=${NET_PROBE_WARN_MS}ms, critical=${NET_PROBE_CRITICAL_MS}ms"
+    NET_PROBE_LOG="/tmp/logs/network-probe.log"
+    mkdir -p /tmp/logs
+
+    net_probe_failures=0
+    net_probe_slow=0
+    net_probe_tests=0
+    net_probe_details=()
+
+    # Define critical network paths to test: source_selector|source_label|target_host|target_port|test_type
+    # These are the paths that, when broken, cause our observed failures:
+    #   PHP → MariaDB (Galera): Moodle DB queries
+    #   PHP → Redis (via proxy): Session locks, caching
+    #   Galera → Galera: Cluster replication (wsrep)
+    NET_PATHS=(
+      "deployment=php|php→mariadb|mariadb-galera|3306|tcp"
+      "deployment=php|php→redis-proxy|redis-proxy|6379|tcp"
+    )
+
+    # Add Galera inter-node paths if cluster has multiple nodes
+    if [[ -n "$galera_running_pods" ]]; then
+      galera_pod_array=($galera_running_pods)
+      if [[ ${#galera_pod_array[@]} -gt 1 ]]; then
+        # Test from first node to the galera headless service (covers wsrep/IST/SST)
+        NET_PATHS+=("app.kubernetes.io/name=mariadb-galera|galera→galera-svc|mariadb-galera-headless|4567|tcp")
+      fi
+    fi
+
+    for net_path in "${NET_PATHS[@]}"; do
+      IFS='|' read -r src_selector src_label target_host target_port test_type <<< "$net_path"
+
+      # Pick the first running pod matching the source selector
+      src_pod=$(oc get pods -l "$src_selector" --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+      if [[ -z "$src_pod" ]]; then
+        net_probe_details+=("  [SKIP] $src_label - no source pod for $src_selector")
+        continue
+      fi
+
+      net_probe_tests=$((net_probe_tests + 1))
+
+      # TCP connectivity test with in-pod latency measurement.
+      # Runs date +%s%N inside the container (before and after the connect) so the
+      # latency reflects only the actual TCP handshake, not oc exec API overhead.
+      probe_output=$(oc exec "$src_pod" -n "$DEPLOY_NAMESPACE" -- \
+        bash -c 'S=$(date +%s%N); timeout 5 bash -c "echo > /dev/tcp/'"$target_host"'/'"$target_port"'" 2>&1 && E=$(date +%s%N) && echo "OK $((( E - S ) / 1000000))" || echo "FAIL 0"' 2>/dev/null || echo "EXEC_FAIL 0")
+
+      probe_status="${probe_output%% *}"
+      latency_ms="${probe_output##* }"
+      [[ ! "$latency_ms" =~ ^[0-9]+$ ]] && latency_ms="?"
+
+      if [[ "$probe_status" == "OK" ]]; then
+        # Apply latency thresholds
+        if [[ "$latency_ms" != "?" && "$latency_ms" -ge "$NET_PROBE_CRITICAL_MS" ]]; then
+          net_probe_slow=$((net_probe_slow + 1))
+          net_probe_details+=("  [SLOW] $src_label ($src_pod → $target_host:$target_port) ${latency_ms}ms ⚠️  CRITICAL (>${NET_PROBE_CRITICAL_MS}ms)")
+          issue_details+=("  [NETWORK] $src_label SLOW: ${latency_ms}ms (critical >${NET_PROBE_CRITICAL_MS}ms) — timeouts likely")
+          echo "$(date '+%Y-%m-%d %H:%M:%S')|SLOW_CRITICAL|$src_label|$src_pod|$target_host:$target_port|${latency_ms}ms" >> "$NET_PROBE_LOG"
+        elif [[ "$latency_ms" != "?" && "$latency_ms" -ge "$NET_PROBE_WARN_MS" ]]; then
+          net_probe_slow=$((net_probe_slow + 1))
+          net_probe_details+=("  [WARN] $src_label ($src_pod → $target_host:$target_port) ${latency_ms}ms (>${NET_PROBE_WARN_MS}ms)")
+          issue_details+=("  [NETWORK] $src_label degraded: ${latency_ms}ms (warn >${NET_PROBE_WARN_MS}ms)")
+          echo "$(date '+%Y-%m-%d %H:%M:%S')|SLOW_WARN|$src_label|$src_pod|$target_host:$target_port|${latency_ms}ms" >> "$NET_PROBE_LOG"
+        else
+          net_probe_details+=("  [OK] $src_label ($src_pod → $target_host:$target_port) ${latency_ms}ms")
+        fi
+      else
+        net_probe_failures=$((net_probe_failures + 1))
+        net_probe_details+=("  [FAIL] $src_label ($src_pod → $target_host:$target_port) - TCP connect failed after 5s")
+        issue_details+=("  [NETWORK] $src_label FAILED: $src_pod cannot reach $target_host:$target_port")
+
+        # Log to persistent file for incident evidence
+        echo "$(date '+%Y-%m-%d %H:%M:%S')|FAIL|$src_label|$src_pod|$target_host:$target_port" >> "$NET_PROBE_LOG"
+      fi
+    done
+
+    # Summary
+    if [[ $net_probe_failures -gt 0 ]]; then
+      echo "$(date): ❌ Network probe: $net_probe_failures/$net_probe_tests path(s) FAILED"
+      for detail in "${net_probe_details[@]}"; do echo "$detail"; done
+      service_summary+=("  [ALERT] network - $net_probe_failures/$net_probe_tests path(s) failed")
+      total_issues=$((total_issues + net_probe_failures))
+
+      send_notification "NETWORK_PROBE_FAILURE" "Pod Network Connectivity Issue" \
+        "$net_probe_failures/$net_probe_tests cross-service network paths failed in $DEPLOY_NAMESPACE. Possible OVN/SDN issue. Check network-probe.log for history." \
+        "error" "$DEPLOY_NAMESPACE"
+
+      # Log failure batch to persistent file
+      echo "$(date '+%Y-%m-%d %H:%M:%S')|SUMMARY|$net_probe_failures/$net_probe_tests paths failed" >> "$NET_PROBE_LOG"
+    elif [[ $net_probe_slow -gt 0 ]]; then
+      echo "$(date): ⚠️  Network probe: $net_probe_slow/$net_probe_tests path(s) SLOW (all connected)"
+      for detail in "${net_probe_details[@]}"; do echo "$detail"; done
+      service_summary+=("  [WARN] network - $net_probe_slow/$net_probe_tests path(s) slow, $net_probe_tests/$net_probe_tests connected")
+      total_issues=$((total_issues + 1))
+
+      send_notification "NETWORK_PROBE_SLOW" "Pod Network Latency Degraded" \
+        "$net_probe_slow/$net_probe_tests network paths have elevated latency (>${NET_PROBE_WARN_MS}ms) in $DEPLOY_NAMESPACE. Possible OVN/SDN degradation. Timeouts may occur under load." \
+        "warning" "$DEPLOY_NAMESPACE"
+
+      echo "$(date '+%Y-%m-%d %H:%M:%S')|SUMMARY|$net_probe_slow/$net_probe_tests paths slow" >> "$NET_PROBE_LOG"
+    else
+      echo "$(date): ✅ Network probe: all $net_probe_tests path(s) OK"
+      for detail in "${net_probe_details[@]}"; do echo "$detail"; done
+      service_summary+=("  [OK] network - $net_probe_tests/$net_probe_tests paths verified")
+
+      # Log successful probe periodically (every ~10th check) for baseline evidence
+      if [[ $((check_cycle % 10)) -eq 0 ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S')|OK|all $net_probe_tests paths|baseline" >> "$NET_PROBE_LOG"
+      fi
+    fi
+
     # -- Galera health check --
     echo "$(date): Performing comprehensive Galera health check..."
 
@@ -427,6 +553,139 @@ while true; do
     galera_expected_size=""
     if oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" &> /dev/null; then
       galera_expected_size=$(oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" -o jsonpath='{.spec.replicas}')
+    fi
+
+    # -- Pre-health-check remediation --
+    # Fix known issues BEFORE the health verdict so the final status reflects reality.
+    # wsrep can report Synced/Primary while nodes are in read_only mode or while
+    # stale bootstrap env vars persist — both cause Moodle errors.
+    if [[ -n "$galera_expected_size" && "$galera_expected_size" -gt 0 ]]; then
+      galera_running_pods=$(oc get pods -l app.kubernetes.io/name=mariadb-galera --field-selector=status.phase=Running -n "$DEPLOY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+      if [[ -n "$galera_running_pods" ]]; then
+        # --- READ-ONLY MODE CHECK ---
+        echo "$(date): 🔒 Checking for read-only Galera nodes..."
+        read_only_fixed=0
+        read_only_count=0
+
+        for g_pod in $galera_running_pods; do
+          ro_status=$(oc exec "$g_pod" -n "$DEPLOY_NAMESPACE" -c mariadb-galera -- bash -c \
+            'PASS=$(cat /opt/bitnami/mariadb/secrets/mariadb-password 2>/dev/null | tr -d "\n\r"); mysql -u $(printenv MARIADB_USER) --password="$PASS" -sN -e "SELECT @@read_only;" 2>/dev/null' 2>/dev/null || echo "UNKNOWN")
+
+          read_only_count=$((read_only_count + 1))
+          if [[ "$ro_status" == "1" ]]; then
+            echo "$(date): ⚠️  $g_pod: read_only=ON — Moodle cannot write to this node"
+
+            if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+              echo "$(date): [MANUAL MODE] Would run SET GLOBAL read_only=OFF on $g_pod"
+            else
+              oc exec "$g_pod" -n "$DEPLOY_NAMESPACE" -c mariadb-galera -- bash -c \
+                'PASS=$(cat /opt/bitnami/mariadb/secrets/mariadb-root-password 2>/dev/null | tr -d "\n\r"); mysql -u root --password="$PASS" -e "SET GLOBAL read_only=OFF;" 2>/dev/null' 2>/dev/null
+
+              if [[ $? -eq 0 ]]; then
+                echo "$(date): ✅ Fixed: SET GLOBAL read_only=OFF on $g_pod"
+                read_only_fixed=$((read_only_fixed + 1))
+              else
+                echo "$(date): ❌ Failed to disable read_only on $g_pod"
+                issue_details+=("  [ERROR] Failed to disable read_only on $g_pod")
+              fi
+            fi
+          elif [[ "$ro_status" == "UNKNOWN" ]]; then
+            echo "$(date): ⚠️  $g_pod: could not query read_only status"
+          fi
+        done
+
+        if [[ $read_only_fixed -gt 0 ]]; then
+          send_notification "GALERA_READONLY_FIXED" "Galera Read-Only Nodes Fixed" \
+            "Disabled read_only on $read_only_fixed node(s) in $DEPLOY_NAMESPACE. Nodes were left in read-only state after bootstrap recovery or restore." \
+            "healing" "$DEPLOY_NAMESPACE"
+          service_summary+=("  [HEALED] mariadb-galera - $read_only_fixed read-only node(s) fixed")
+        else
+          echo "$(date): ✅ All $read_only_count node(s) are read-write"
+        fi
+
+        # --- STALE BOOTSTRAP ENV VAR CHECK ---
+        echo "$(date): 🔧 Checking for stale bootstrap environment variables..."
+        bootstrap_val=$(oc get statefulset mariadb-galera -n "$DEPLOY_NAMESPACE" \
+          -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MARIADB_GALERA_CLUSTER_BOOTSTRAP")].value}' 2>/dev/null || echo "")
+
+        if [[ "$bootstrap_val" == "yes" ]]; then
+          echo "$(date): ⚠️  MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes still set on StatefulSet!"
+
+          if [[ "${MANUAL_MODE,,}" == "true" ]]; then
+            echo "$(date): [MANUAL MODE] Would remove bootstrap env vars from StatefulSet"
+          else
+            echo "$(date): [ACTION] Removing stale bootstrap env vars..."
+            oc set env statefulset/mariadb-galera -n "$DEPLOY_NAMESPACE" \
+              MARIADB_GALERA_CLUSTER_BOOTSTRAP- \
+              MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP- \
+              MARIADB_GALERA_CLUSTER_ADDRESS- 2>/dev/null
+
+            if [[ $? -eq 0 ]]; then
+              echo "$(date): ✅ Removed stale bootstrap env vars from StatefulSet"
+              send_notification "GALERA_BOOTSTRAP_VARS_CLEANED" "Stale Bootstrap Env Vars Removed" \
+                "Removed MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes and related vars from StatefulSet in $DEPLOY_NAMESPACE." \
+                "healing" "$DEPLOY_NAMESPACE"
+            else
+              echo "$(date): ❌ Failed to remove bootstrap env vars"
+              issue_details+=("  [ERROR] Failed to remove stale bootstrap env vars")
+            fi
+          fi
+        else
+          echo "$(date): ✅ No stale bootstrap env vars found"
+        fi
+
+        # --- MOODLE DATABASE CONNECTIVITY PROBE ---
+        # Verify that Moodle's DB credentials can actually reach the database and
+        # that expected tables exist. Catches credential mismatches, empty databases,
+        # or wrong database names that wsrep health checks cannot detect.
+        echo "$(date): 🔍 Probing Moodle database connectivity..."
+        moodle_db_ok=false
+        probe_pod="${galera_running_pods%% *}"  # Use first running pod
+
+        # Get Moodle's DB credentials from the same secret Moodle uses
+        # Secret keys: database-name, database-user, database-password (not DB_NAME etc.)
+        moodle_db_name=$(oc get secret moodle-secrets -n "$DEPLOY_NAMESPACE" -o jsonpath='{.data.database-name}' 2>/dev/null | base64 -d 2>/dev/null)
+        moodle_db_user=$(oc get secret moodle-secrets -n "$DEPLOY_NAMESPACE" -o jsonpath='{.data.database-user}' 2>/dev/null | base64 -d 2>/dev/null)
+        moodle_db_pass=$(oc get secret moodle-secrets -n "$DEPLOY_NAMESPACE" -o jsonpath='{.data.database-password}' 2>/dev/null | base64 -d 2>/dev/null)
+
+        if [[ -z "$moodle_db_name" || -z "$moodle_db_user" ]]; then
+          echo "$(date): ⚠️  Could not read moodle-secrets — skipping Moodle DB probe"
+        else
+          # Test 1: Can Moodle's user connect and select the database?
+          probe_result=$(oc exec "$probe_pod" -n "$DEPLOY_NAMESPACE" -c mariadb-galera -- bash -c \
+            "mysql -u '${moodle_db_user}' --password='${moodle_db_pass}' -sN -e 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=\"${moodle_db_name}\";' 2>&1" 2>/dev/null || echo "CONNECT_FAILED")
+
+          if [[ "$probe_result" == "CONNECT_FAILED" || "$probe_result" == *"ERROR"* || "$probe_result" == *"Access denied"* ]]; then
+            echo "$(date): ❌ MOODLE DB PROBE FAILED: Moodle user '${moodle_db_user}' cannot connect to database '${moodle_db_name}'"
+            echo "$(date):    Result: $probe_result"
+            issue_details+=("  [CRITICAL] Moodle DB connectivity failed: user='${moodle_db_user}', db='${moodle_db_name}', error: $probe_result")
+            total_issues=$((total_issues + 5))
+            send_notification "MOODLE_DB_CONNECT_FAILED" "Moodle Database Connection Failed" \
+              "Moodle user '${moodle_db_user}' cannot connect to database '${moodle_db_name}' on pod ${probe_pod}. Error: ${probe_result}" \
+              "error" "$DEPLOY_NAMESPACE"
+          elif [[ "$probe_result" =~ ^[0-9]+$ ]]; then
+            if [[ "$probe_result" -eq 0 ]]; then
+              echo "$(date): ❌ MOODLE DB PROBE: Database '${moodle_db_name}' exists but has 0 tables!"
+              echo "$(date):    This means the restore may have failed or restored to the wrong database."
+              issue_details+=("  [CRITICAL] Moodle database '${moodle_db_name}' is empty (0 tables)")
+              total_issues=$((total_issues + 5))
+              send_notification "MOODLE_DB_EMPTY" "Moodle Database Empty" \
+                "Database '${moodle_db_name}' has 0 tables in $DEPLOY_NAMESPACE. Backup restore may have failed." \
+                "error" "$DEPLOY_NAMESPACE"
+            elif [[ "$probe_result" -lt 100 ]]; then
+              echo "$(date): ⚠️  MOODLE DB PROBE: Database '${moodle_db_name}' has only $probe_result tables (expected 400+)"
+              issue_details+=("  [WARN] Moodle database '${moodle_db_name}' has only $probe_result tables (expected 400+)")
+            else
+              echo "$(date): ✅ Moodle DB probe OK: user='${moodle_db_user}', db='${moodle_db_name}', tables=$probe_result"
+              moodle_db_ok=true
+            fi
+          else
+            echo "$(date): ⚠️  MOODLE DB PROBE: unexpected result: $probe_result"
+            issue_details+=("  [WARN] Moodle DB probe unexpected result: $probe_result")
+          fi
+        fi
+      fi
     fi
 
     if [[ -n "$galera_expected_size" ]]; then
