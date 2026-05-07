@@ -1,30 +1,26 @@
+# ============================================================================
+# 🚀 Build and Deploy to OpenShift
+# ============================================================================
+# This file lives on the DEFAULT branch (main) so GitHub shows the
+# "Run workflow" button in the Actions tab.
+#
+# HOW IT WORKS:
+#   push / pull_request on 950003-* branches:
+#     → GitHub automatically uses THAT branch's copy of build.yml (same path).
+#     → Main's code is never reached for push/PR events.
+#
+#   workflow_dispatch (manual trigger):
+#     → If someone selects a 950003-* branch in the dropdown, that branch's
+#       copy runs directly — this file is not used.
+#     → If someone accidentally leaves "main" selected, this file catches it,
+#       dispatches the build to the correct target branch, and exits cleanly.
+#
+#   workflow_call:
+#     → Used by scheduled-rebuild.yml to trigger builds on target branches.
+# ============================================================================
 name: 🚀 Build and Deploy to OpenShift
 
-concurrency:
-  group: deploy-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  APP: moodle
-  USER: ${{ github.actor }}
-
-  # Skip builds for faster deployments / testing ("YES" or build)
-  SKIP_BUILDS: "NO"
-  # Clean builds before deployments (delete all resources, other than backups) ("YES" or allow collisions)
-  CLEAN_BUILDS: "YES"
-  BUILD_ID: ${{ github.event.number }}
-  # BRANCH: ${{ env.BRANCH }}
-  BRANCH: dev
-  INSPECT_JOB_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-  BUILD_ICON_URL: https://cdn-icons-png.flaticon.com/128/5110/5110294.png
-  SUCCESS_ICON_URL: https://cdn-icons-png.flaticon.com/128/1356/1356479.png
-  FAIL_ICON_URL: https://www.flaticon.com/free-icon/rocket_6818114
-
 on:
-  # Manual trigger — the "Run workflow" button appears in the Actions tab.
-  # When triggered, select the target branch (950003-dev, 950003-test, or 950003-prod).
-  # GitHub will execute THAT branch's version of this workflow, not main's.
   workflow_dispatch:
     inputs:
       target_environment:
@@ -59,179 +55,42 @@ on:
       - 950003-test
       - 950003-prod
 
-  workflow_call:
-    secrets:
-      DB_NAME:
-        required: true
-      DB_USER:
-        required: true
-      DB_PASSWORD:
-        required: true
+permissions:
+  contents: read
+  actions: write      # Required to dispatch workflow on target branch
 
 jobs:
-  #Print variables for logging and debugging purposes
-  checkEnv:
-    name: 📋 Environment Check
-    runs-on: ubuntu-latest
-    outputs: # Define the output parameter
-      APP: ${{ env.APP }}
-      BRANCH: ${{ env.BRANCH }}
-      MOODLE_ENVIRONMENT: ${{ env.MOODLE_ENVIRONMENT }}
-      DEPLOY_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
-      IMAGE_REPO: ${{ env.IMAGE_REPO }}
-      BUILD_NAMESPACE: ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
-      DB_DEPLOYMENT_NAME: ${{ env.DB_DEPLOYMENT_NAME }}
-      WEB_DEPLOYMENT_NAME: ${{ env.WEB_DEPLOYMENT_NAME }}
-      WEB_IMAGE: ${{ env.WEB_IMAGE }}
-      DB_IMAGE: ${{ env.DB_IMAGE }}
-      PHP_DEPLOYMENT_NAME: ${{ env.PHP_DEPLOYMENT_NAME }}
-      CRON_DEPLOYMENT_NAME: ${{ env.CRON_DEPLOYMENT_NAME }}
-      CRON_IMAGE: ${{ env.CRON_IMAGE}}
-      REDIS_DEPLOYMENT_NAME: ${{ env.REDIS_DEPLOYMENT_NAME }}
-      BACKUP_IMAGE: ${{ env.BACKUP_IMAGE }}
-      CLEAN_BUILDS: ${{ env.CLEAN_BUILDS }}
-      SKIP_BUILDS: ${{ env.SKIP_BUILDS }}
+  # -------------------------------------------------------------------------
+  # When workflow_dispatch runs on main, redirect to the target branch.
+  # The target branch's build.yml has the real pipeline (checkEnv, builds,
+  # deploy, lighthouse, notify). This job dispatches to it and exits.
+  # -------------------------------------------------------------------------
+  redirect:
+    name: 🔀 Redirect to target branch
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: 📤 Checkout Target Branch
-        uses: actions/checkout@v4
+      - name: Dispatch build to ${{ inputs.target_environment }}
+        uses: actions/github-script@v7
         with:
-          ref: dev
-          sparse-checkout: |
-            config/mariadb
-            example.env
-            example.versions.env
+          script: |
+            const target = '${{ inputs.target_environment }}';
 
-      - name: Setup Env Vars
-        id: dotenv
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.env
-          export-variables: true
-          keys-case: upper
+            console.log(`🔀 Manual trigger detected on main — redirecting to branch: ${target}`);
+            console.log(`   Reason: ${{ inputs.reason }}`);
 
-      - name: Setup Env Version Vars
-        id: dotenv_versions
-        uses: falti/dotenv-action@v1
-        with:
-          path: example.versions.env
-          export-variables: true
-          keys-case: upper
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build.yml',
+              ref: target,
+              inputs: {
+                target_environment: target,
+                reason: `${{ inputs.reason }}`,
+                skip_deploy: '${{ inputs.skip_deploy }}',
+                confirm_production: '${{ inputs.confirm_production }}'
+              }
+            });
 
-      - name: Print Env Vars
-        run: |
-          echo Deploying ${{ env.PROJECT }} > ${{ env.APP }} on ${{ env.OPENSHIFT_DEPLOY_PROJECT }}-${{ env.BRANCH }}
-          echo "-----------------------"
-          echo URL: https://${{ env.APP }}-${{ env.DEPLOY_NAMESPACE }}-${{ env.BRANCH }}.apps.silver.devops.gov.bc.ca
-
-  # Build Images and deploy to JFrog
-  db:
-    name: 🔨 DB
-    needs: [checkEnv]
-    uses: ./.github/workflows/db.yml
-    secrets: inherit
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    with:
-      DB_IMAGE: ${{ needs.checkEnv.outputs.DB_IMAGE }}
-
-  php:
-    name: 🔨 PHP
-    needs: [checkEnv]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/php.yml
-    secrets: inherit
-
-  cron:
-    name: 🔨 Cron
-    needs: [checkEnv]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/cron.yml
-    secrets: inherit
-
-  moodle:
-    name: 🔨 Moodle
-    needs: [checkEnv, php]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/moodle.yml
-    secrets: inherit
-
-  web:
-    name: 🔨 Web
-    needs: [checkEnv, php, db, moodle]
-    if: needs.checkEnv.outputs.SKIP_BUILDS == 'NO'
-    uses: ./.github/workflows/web.yml
-    secrets: inherit
-
-  call-cleanup-workflow:
-    name: 🧹️ Clean-up
-    uses: ./.github/workflows/cleanup.yml
-    secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, web]
-    # if: success()
-    if: needs.checkEnv.outputs.CLEAN_BUILDS == 'YES'
-    with:
-      APP: ${{ needs.checkEnv.outputs.APP }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
-      BRANCH: ${{ needs.checkEnv.outputs.BRANCH }}
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
-      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
-      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
-      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
-      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
-      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-
-  call-deploy-workflow:
-    name: 🚀 Deploy
-    uses: ./.github/workflows/deploy.yml
-    secrets: inherit
-    needs: [checkEnv, db, php, cron, moodle, call-cleanup-workflow]
-    if: |
-      always() &&
-      needs.checkEnv.result == 'success' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
-    with:
-      MOODLE_ENVIRONMENT: ${{ needs.checkEnv.outputs.MOODLE_ENVIRONMENT }}
-      APP: ${{ needs.checkEnv.outputs.APP }}
-      WEB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.WEB_DEPLOYMENT_NAME }}
-      WEB_IMAGE: ${{ needs.checkEnv.outputs.WEB_IMAGE }}
-      PHP_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.PHP_DEPLOYMENT_NAME }}
-      DB_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.DB_DEPLOYMENT_NAME }}
-      BACKUP_IMAGE: ${{ needs.checkEnv.outputs.BACKUP_IMAGE }}
-      CRON_IMAGE: ${{ needs.checkEnv.outputs.CRON_IMAGE }}
-      CRON_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.CRON_DEPLOYMENT_NAME }}
-      REDIS_DEPLOYMENT_NAME: ${{ needs.checkEnv.outputs.REDIS_DEPLOYMENT_NAME }}
-      APP_HOST_URL: ${{ needs.checkEnv.outputs.APP }}-${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}-${{ needs.checkEnv.outputs.BRANCH }}.apps.silver.devops.gov.bc.ca
-      BUILD_NAMESPACE: ${{ needs.checkEnv.outputs.BUILD_NAMESPACE }}
-      DEPLOY_NAMESPACE: ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}
-      IMAGE_REPO: ${{ needs.checkEnv.outputs.IMAGE_REPO }}
-
-  notify:
-    name: 📫 Notify
-    needs:
-      [
-        checkEnv,
-        web,
-        moodle,
-        cron,
-        php,
-        db,
-        call-cleanup-workflow,
-        call-deploy-workflow,
-      ]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Rocket.Chat Notification
-        uses: muinmomin/webhook-action@v1.0.0
-        with:
-          url: ${{ secrets.ROCKETCHAT_WEBHOOK_URL }}
-          data: >
-            {
-              "emoji": ":rocket:",
-              "text": "Deployment to ${{ needs.checkEnv.outputs.DEPLOY_NAMESPACE }}: ${{ needs.call-deploy-workflow.result }}",
-              "attachments": [{
-                "title": "View Job on GitHub",
-                "title_link": "${{ env.INSPECT_JOB_URL }}"
-              }]
-            }
+            console.log(`✅ Build dispatched to ${target}. Check the Actions tab for the new run.`);
+            console.log(`   This run on main will now exit — the real pipeline runs on ${target}.`);
