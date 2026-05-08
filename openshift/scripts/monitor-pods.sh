@@ -510,39 +510,21 @@ while true; do
 
       net_probe_tests=$((net_probe_tests + 1))
 
-      # TCP connectivity test with in-pod latency measurement.
-      # Uses multiple fallback methods since containers vary:
-      #   1. bash /dev/tcp  — fast, but Debian bash lacks --enable-net-redirections
-      #   2. php fsockopen  — available in PHP-FPM pods
-      #   3. timeout + cat /dev/tcp — fallback for minimal containers
-      # The probe runs inside the container so latency reflects actual pod-to-pod timing.
-      probe_output=$(oc exec "$src_pod" -n "$DEPLOY_NAMESPACE" -- \
-        sh -c '
-          HOST="'"$target_host"'"
-          PORT="'"$target_port"'"
-          # Try php first (always present in PHP-FPM pods)
-          if command -v php >/dev/null 2>&1; then
-            php -r "
-              \$s=microtime(true);
-              \$c=@fsockopen(\"'"\$HOST"'\", '"\$PORT"', \$e, \$m, 5);
-              if(\$c){fclose(\$c);printf(\"OK %d\",round((microtime(true)-\$s)*1000));}
-              else{echo \"FAIL 0\";}
-            " 2>/dev/null && exit 0
-          fi
-          # Fallback: bash /dev/tcp (works on RHEL/MariaDB containers)
-          if bash -c "echo 2>/dev/null >/dev/tcp/localhost/1" 2>/dev/null || true; then
-            S=$(date +%s%N 2>/dev/null || date +%s)
-            if timeout 5 bash -c "echo > /dev/tcp/$HOST/$PORT" 2>/dev/null; then
-              E=$(date +%s%N 2>/dev/null || date +%s)
-              MS=$(( (E - S) / 1000000 ))
-              echo "OK $MS"
-            else
-              echo "FAIL 0"
-            fi
-            exit 0
-          fi
-          echo "FAIL 0"
-        ' 2>/dev/null || echo "EXEC_FAIL 0")
+      # TCP connectivity test — choose method based on what the container has.
+      # PHP pods: use php fsockopen (avoids Debian bash /dev/tcp limitation)
+      # MariaDB pods: use bash /dev/tcp (RHEL bash supports it)
+      # Latency is measured inside the container for accurate pod-to-pod timing.
+      if [[ "$src_selector" == *"php"* ]]; then
+        # PHP-FPM pods — use php CLI directly (no sh wrapper, no quoting issues)
+        probe_output=$(oc exec "$src_pod" -n "$DEPLOY_NAMESPACE" -- \
+          php -r "\$s=microtime(true);\$c=@fsockopen('${target_host}',${target_port},\$e,\$m,5);if(\$c){fclose(\$c);printf('OK %d',round((microtime(true)-\$s)*1000));}else{echo 'FAIL 0';}" \
+          2>/dev/null || echo "EXEC_FAIL 0")
+      else
+        # MariaDB/RHEL pods — bash /dev/tcp works here
+        probe_output=$(oc exec "$src_pod" -n "$DEPLOY_NAMESPACE" -- \
+          bash -c "S=\$(date +%s%N);if timeout 5 bash -c 'echo >/dev/tcp/${target_host}/${target_port}' 2>/dev/null;then E=\$(date +%s%N);echo \"OK \$(((E-S)/1000000))\";else echo 'FAIL 0';fi" \
+          2>/dev/null || echo "EXEC_FAIL 0")
+      fi
 
       probe_status="${probe_output%% *}"
       latency_ms="${probe_output##* }"
