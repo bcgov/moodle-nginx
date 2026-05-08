@@ -457,7 +457,7 @@ compare_image_security() {
 scan_public_base_images() {
   local versions_file="${1:-example.versions.env}"
   local severity="${2:-HIGH,CRITICAL}"
-  local exit_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
 
   log_info "🔍 Scanning public base images for vulnerabilities..."
 
@@ -481,6 +481,7 @@ scan_public_base_images() {
 
   local total_critical=0
   local total_high=0
+  local total_medium=0
   local failed_scans=0
 
   for image in "${images_to_scan[@]}"; do
@@ -517,9 +518,11 @@ scan_public_base_images() {
     # Parse results using safe helper functions
     local critical_count=$(parse_vulnerability_count "$scan_output" "CRITICAL")
     local high_count=$(parse_vulnerability_count "$scan_output" "HIGH")
+    local medium_count=$(parse_vulnerability_count "$scan_output" "MEDIUM")
 
     total_critical=$((total_critical + critical_count))
     total_high=$((total_high + high_count))
+    total_medium=$((total_medium + medium_count))
 
     if [ "$critical_count" -gt 0 ]; then
       log_error "  🔴 CRITICAL: $critical_count vulnerabilities"
@@ -541,7 +544,11 @@ scan_public_base_images() {
       fi
     fi
 
-    if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
+    if [ "$medium_count" -gt 0 ]; then
+      log_warn "  🟠 MEDIUM: $medium_count vulnerabilities"
+    fi
+
+    if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ] && [ "$medium_count" -eq 0 ]; then
       log_success "  ✅ No $severity vulnerabilities found"
     fi
   done
@@ -552,7 +559,9 @@ scan_public_base_images() {
   log_info "  Images scanned: ${#images_to_scan[@]}"
   log_info "  Critical vulnerabilities: $total_critical"
   log_info "  High vulnerabilities: $total_high"
+  log_info "  Medium vulnerabilities: $total_medium"
   log_info "  Failed scans: $failed_scans"
+  log_info "  Abort threshold: $abort_on"
 
   # Provide version upgrade recommendations if vulnerabilities found
   if [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ]; then
@@ -610,15 +619,42 @@ scan_public_base_images() {
     fi
   fi
 
-  # Determine exit code
-  if [ "$exit_on_critical" = "true" ] && [ "$total_critical" -gt 0 ]; then
+  # Determine exit code based on graduated abort threshold
+  local should_abort=false
+  local abort_reason=""
+
+  case "$abort_on" in
+    MEDIUM)
+      if [ "$total_medium" -gt 0 ] || [ "$total_high" -gt 0 ] || [ "$total_critical" -gt 0 ]; then
+        should_abort=true
+        abort_reason="medium+ vulnerabilities (${total_medium} medium, ${total_high} high, ${total_critical} critical)"
+      fi
+      ;;
+    HIGH)
+      if [ "$total_high" -gt 0 ] || [ "$total_critical" -gt 0 ]; then
+        should_abort=true
+        abort_reason="high+ vulnerabilities (${total_high} high, ${total_critical} critical)"
+      fi
+      ;;
+    CRITICAL)
+      if [ "$total_critical" -gt 0 ]; then
+        should_abort=true
+        abort_reason="critical vulnerabilities (${total_critical} critical)"
+      fi
+      ;;
+    NEVER|*)
+      # Never abort, just report
+      ;;
+  esac
+
+  if [ "$should_abort" = "true" ]; then
     log_error ""
-    log_error "Blocking build due to critical vulnerabilities in base images"
+    log_error "Aborting deployment — $abort_reason exceeded threshold ($abort_on)"
     log_error "   Apply recommended version updates above to resolve"
     return 2
-  elif [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ]; then
+  elif [ "$total_critical" -gt 0 ] || [ "$total_high" -gt 0 ] || [ "$total_medium" -gt 0 ]; then
     log_warn ""
-    log_warn "Vulnerabilities detected but allowing build to continue"
+    log_warn "Vulnerabilities detected but below abort threshold ($abort_on) — continuing"
     log_warn "   Consider applying recommended updates for improved security"
     return 1
   else
@@ -634,7 +670,7 @@ scan_public_base_images() {
 scan_built_image() {
   local image_tag="$1"
   local severity="${2:-HIGH,CRITICAL}"
-  local exit_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
   local output_file="${4:-}"
 
   log_info "🔍 Scanning built image: $image_tag"
@@ -716,19 +752,44 @@ scan_built_image() {
     jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH") | "  • \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix") - \(.Title // "No description")"' "$json_output" 2>/dev/null | head -3 | cut -c1-120
   fi
 
-  # Determine exit code
-  if [ "$exit_on_critical" = "true" ] && [ "$critical_count" -gt 0 ]; then
+  # Determine exit code based on graduated abort threshold
+  local should_abort=false
+  local abort_reason=""
+
+  case "$abort_on" in
+    MEDIUM)
+      if [ "$medium_count" -gt 0 ] || [ "$high_count" -gt 0 ] || [ "$critical_count" -gt 0 ]; then
+        should_abort=true
+        abort_reason="medium+ vulnerabilities (${medium_count} medium, ${high_count} high, ${critical_count} critical)"
+      fi
+      ;;
+    HIGH)
+      if [ "$high_count" -gt 0 ] || [ "$critical_count" -gt 0 ]; then
+        should_abort=true
+        abort_reason="high+ vulnerabilities (${high_count} high, ${critical_count} critical)"
+      fi
+      ;;
+    CRITICAL)
+      if [ "$critical_count" -gt 0 ]; then
+        should_abort=true
+        abort_reason="critical vulnerabilities (${critical_count} critical)"
+      fi
+      ;;
+    NEVER|*)
+      # Never abort, just report
+      ;;
+  esac
+
+  if [ "$should_abort" = "true" ]; then
     log_error ""
-    log_error "❌ BLOCKING PUSH: Critical vulnerabilities detected"
+    log_error "❌ ABORTING PUSH — $abort_reason exceeded threshold ($abort_on)"
     log_error "   Image will NOT be pushed to registry"
     log_error "   Review scan results and fix vulnerabilities before retrying"
     return 2
-  elif [ "$critical_count" -gt 0 ] || [ "$high_count" -gt 0 ]; then
+  elif [ "$critical_count" -gt 0 ] || [ "$high_count" -gt 0 ] || [ "$medium_count" -gt 0 ]; then
     log_warn ""
-    log_warn "⚠️  Vulnerabilities detected but allowing push"
-    log_warn "   Review recommended: $critical_count critical, $high_count high"
-    # Return 0 (success) when exit_on_critical is false
-    # Vulnerabilities logged but don't fail the build
+    log_warn "⚠️  Vulnerabilities detected but below abort threshold ($abort_on)"
+    log_warn "   Review recommended: $critical_count critical, $high_count high, $medium_count medium"
     return 0
   else
     log_success ""
@@ -749,16 +810,16 @@ scan_built_image() {
 #       scan_built_image_for_github_actions \
 #         "${{ secrets.ARTIFACTORY_URL }}/${{ env.PHP_DEPLOYMENT_NAME }}:${{ github.ref_name }}" \
 #         "CRITICAL,HIGH" \
-#         "true"
+#         "CRITICAL"
 scan_built_image_for_github_actions() {
   local image_tag="$1"
   local severity="${2:-HIGH,CRITICAL}"
-  local exit_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
 
   log_info "🔒 Post-Build Security Scan"
   log_info "Image: $image_tag"
   log_info "Severity threshold: $severity"
-  log_info "Block on critical: $exit_on_critical"
+  log_info "Abort deployment on: $abort_on"
   echo ""
 
   # Create artifacts directory
@@ -766,7 +827,7 @@ scan_built_image_for_github_actions() {
   local output_file="tmp/security-scans/$(basename "$image_tag" | tr ':/' '__').json"
 
   # Run scan
-  scan_built_image "$image_tag" "$severity" "$exit_on_critical" "$output_file"
+  scan_built_image "$image_tag" "$severity" "$abort_on" "$output_file"
   local scan_result=$?
 
   # Add to GitHub Actions summary if available

@@ -52,13 +52,14 @@ This protects the pipeline from known vulnerable Lighthouse dependency states be
 
 ## Configuration
 
-Settings are in `.github/workflows/build.yml` (per branch):
+Security scan settings are centralized in `example.env` (shared across branches).
+Override per-branch in `.github/workflows/build.yml` env section if needed.
 
 ```yaml
-env:
-  SECURITY_SCAN_LEVEL: "BASIC"      # OFF, MINIMAL, BASIC, FULL
-  SECURITY_SCAN_EXIT_ON: "WARN"     # WARN, CRITICAL, HIGH, MEDIUM, ANY
-  SECURITY_SCAN_CONTAINERS: "NO"    # YES, NO
+# In example.env
+SECURITY_SCAN_LEVEL="BASIC"                    # OFF, MINIMAL, BASIC, FULL
+SECURITY_SCAN_ABORT_DEPLOYMENT_ON="NEVER"      # NEVER, CRITICAL, HIGH, MEDIUM
+SECURITY_SCAN_CONTAINERS="YES"                 # YES, NO
 ```
 
 ---

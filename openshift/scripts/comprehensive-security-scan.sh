@@ -23,7 +23,7 @@
 # CONFIGURATION:
 #   SECURITY_SCAN_ENABLED    - YES/NO (default: YES)
 #   SECURITY_SCAN_LEVEL      - OFF/BASIC/MEDIUM/FULL (default: BASIC)
-#   SECURITY_SCAN_EXIT_ON    - CRITICAL/HIGH/MEDIUM/LOW/NEVER (default: HIGH)
+#   SECURITY_SCAN_ABORT_DEPLOYMENT_ON - CRITICAL/HIGH/MEDIUM/NEVER (default: CRITICAL)
 #   SECURITY_SCAN_CONTAINERS - YES/NO scan container images (default: NO)
 #   SECURITY_SCAN_CACHE      - YES/NO use vulnerability cache (default: YES)
 #
@@ -78,7 +78,7 @@ fi
 # Read configuration from environment variables (set in build.yml)
 SCAN_ENABLED="${SECURITY_SCAN_ENABLED:-YES}"
 SCAN_LEVEL="${SECURITY_SCAN_LEVEL:-BASIC}"
-EXIT_ON="${SECURITY_SCAN_EXIT_ON:-HIGH}"
+EXIT_ON="${SECURITY_SCAN_ABORT_DEPLOYMENT_ON:-CRITICAL}"
 SCAN_CONTAINERS="${SECURITY_SCAN_CONTAINERS:-NO}"
 USE_CACHE="${SECURITY_SCAN_CACHE:-YES}"
 
@@ -106,29 +106,27 @@ if [[ "$SCAN_CONTAINERS" == "YES" ]]; then
   SCAN_CONTAINERS_BOOL="true"
 fi
 
-# Convert EXIT_ON to abort_on_critical parameter
-ABORT_ON_CRITICAL="true"
-if [[ "$EXIT_ON" == "WARN" ]]; then
-  ABORT_ON_CRITICAL="false"
-fi
+# Convert EXIT_ON (NEVER/CRITICAL/HIGH/MEDIUM) to abort_on parameter
+# The scan functions now accept graduated thresholds directly
+ABORT_ON="$EXIT_ON"
 
 # Run scans based on level
 case "$SCAN_LEVEL" in
   MINIMAL)
     log_info "Running MINIMAL security scan (~1 min, critical advisories only)"
-    comprehensive_security_scan "$PROJECT_ROOT" "minimal" "$ABORT_ON_CRITICAL" "false"
+    comprehensive_security_scan "$PROJECT_ROOT" "minimal" "$ABORT_ON" "false"
     ;;
   BASIC)
     log_info "Running BASIC security scan (~3 min, supply chain + dependencies)"
-    comprehensive_security_scan "$PROJECT_ROOT" "basic" "$ABORT_ON_CRITICAL" "false"
+    comprehensive_security_scan "$PROJECT_ROOT" "basic" "$ABORT_ON" "false"
     ;;
   FULL)
     log_info "Running FULL security scan (~8 min, comprehensive + containers)"
-    comprehensive_security_scan "$PROJECT_ROOT" "full" "$ABORT_ON_CRITICAL" "$SCAN_CONTAINERS_BOOL"
+    comprehensive_security_scan "$PROJECT_ROOT" "full" "$ABORT_ON" "$SCAN_CONTAINERS_BOOL"
     ;;
   *)
     log_warn "⚠️ Unknown SECURITY_SCAN_LEVEL: $SCAN_LEVEL, defaulting to BASIC"
-    comprehensive_security_scan "$PROJECT_ROOT" "basic" "$ABORT_ON_CRITICAL" "false"
+    comprehensive_security_scan "$PROJECT_ROOT" "basic" "$ABORT_ON" "false"
     ;;
 esac
 
@@ -139,19 +137,14 @@ if [ $SCAN_EXIT -eq 0 ]; then
   log_success "✅ Security scan PASSED - no blocking issues found"
   exit 0
 elif [ $SCAN_EXIT -eq 1 ]; then
-  if [[ "$EXIT_ON" == "WARN" ]]; then
-    log_info "⚠️ Security warnings found (WARN mode - not failing build)"
-    exit 0
-  else
-    log_warn "⚠️ Security issues found but below blocking threshold"
-    exit 0
-  fi
+  log_warn "⚠️ Vulnerabilities detected but below abort threshold ($ABORT_ON)"
+  exit 0
 elif [ $SCAN_EXIT -eq 2 ]; then
-  if [[ "$EXIT_ON" == "WARN" ]]; then
-    log_error "❌ CRITICAL security issues found (WARN mode - not failing build)"
+  if [[ "$ABORT_ON" == "NEVER" ]]; then
+    log_error "❌ Critical security issues found (NEVER mode — not aborting deployment)"
     exit 0
   else
-    log_error "❌ CRITICAL security issues found - build BLOCKED"
+    log_error "❌ Security issues exceeded abort threshold ($ABORT_ON) — deployment BLOCKED"
     log_error "Review security scan results above and apply fixes"
     exit 2
   fi

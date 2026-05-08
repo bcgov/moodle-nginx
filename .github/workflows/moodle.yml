@@ -190,28 +190,21 @@ jobs:
             SEVERITY="CRITICAL"
           fi
 
-          # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
-          EXIT_ON_CRITICAL="false"
-          if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ]; then
-            EXIT_ON_CRITICAL="true"
-          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "HIGH" ]; then
-            EXIT_ON_CRITICAL="true"
-          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "MEDIUM" ]; then
-            EXIT_ON_CRITICAL="true"
-          elif [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
-            EXIT_ON_CRITICAL="true"
-          fi
+          # SECURITY_SCAN_ABORT_DEPLOYMENT_ON controls the graduated abort threshold
+          # Values: NEVER, CRITICAL, HIGH, MEDIUM
+          ABORT_ON="${{ env.SECURITY_SCAN_ABORT_DEPLOYMENT_ON }}"
+          ABORT_ON="${ABORT_ON:-NEVER}"
 
           echo "🔒 Moodle Image Security Scan Configuration:"
           echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
-          echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
+          echo "  Abort deployment on: $ABORT_ON"
           echo ""
 
           # Scan the built image (now available locally)
           scan_built_image_for_github_actions \
             "${{ secrets.ARTIFACTORY_URL }}/${{ env.MOODLE_DEPLOYMENT_NAME }}:${{ github.ref_name }}" \
             "$SEVERITY" \
-            "$EXIT_ON_CRITICAL"      # Only push if security scan passed
+            "$ABORT_ON"      # Only push if security scan passed
 
       # Push to Artifactory
       - name: 📤 Push to Artifactory

@@ -36,7 +36,7 @@ readonly EXIT_CRITICAL=2
 
 # Default configurations
 readonly DEFAULT_SCAN_LEVEL="$SCAN_LEVEL_MODERATE"
-readonly DEFAULT_ABORT_ON_CRITICAL="true"
+readonly DEFAULT_ABORT_ON="CRITICAL"
 readonly DEFAULT_CACHE_DIR="/tmp/security-cache"
 
 # =============================================================================
@@ -797,7 +797,7 @@ scan_git_dependencies() {
 comprehensive_security_scan() {
   local project_dir="${1:-.}"
   local scan_level="${2:-$DEFAULT_SCAN_LEVEL}"
-  local abort_on_critical="${3:-$DEFAULT_ABORT_ON_CRITICAL}"
+  local abort_on="${3:-$DEFAULT_ABORT_ON}"
   local skip_containerized="${4:-true}"  # Skip container builds by default (handled post-build)
 
   log_info "Running comprehensive security scan..."
@@ -809,7 +809,7 @@ comprehensive_security_scan() {
     log_info "Automated tools: Composer Audit + Trivy + System Updates + Git Analysis"
   fi
 
-  log_trace "Project: $project_dir, Level: $scan_level, Abort on critical: $abort_on_critical"
+  log_trace "Project: $project_dir, Level: $scan_level, Abort on: $abort_on"
 
   # Save original directory to return to it later
   local original_dir="$(pwd)"
@@ -915,9 +915,31 @@ comprehensive_security_scan() {
 
   log_info "  Automation: Dependabot handles updates automatically"
 
-  # Determine exit code before writing cache
+  # Determine exit code based on graduated abort threshold
   local final_exit_code=0
-  if [ "$overall_status" = "CRITICAL" ] && [ "$abort_on_critical" = "true" ]; then
+  local should_abort=false
+
+  case "$abort_on" in
+    MEDIUM)
+      if [ $critical_issues -gt 0 ] || [ $high_issues -gt 0 ] || [ $warnings -gt 0 ]; then
+        should_abort=true
+      fi
+      ;;
+    HIGH)
+      if [ $critical_issues -gt 0 ] || [ $high_issues -gt 0 ]; then
+        should_abort=true
+      fi
+      ;;
+    CRITICAL)
+      if [ $critical_issues -gt 0 ]; then
+        should_abort=true
+      fi
+      ;;
+    NEVER|*)
+      ;;
+  esac
+
+  if [ "$should_abort" = "true" ]; then
     final_exit_code=2
   elif [ $critical_issues -gt 0 ] || [ $high_issues -gt 0 ]; then
     final_exit_code=1

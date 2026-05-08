@@ -265,8 +265,8 @@ jobs:
     source openshift/scripts/utils/github-actions.sh
 
     # Run comprehensive pre-build security scan
-    # Parameters: project_dir, scan_level, abort_on_critical, scan_images
-    if ! run_comprehensive_security_scan "." "moderate" "true" "true"; then
+    # Parameters: project_dir, scan_level, abort_on, scan_images
+    if ! run_comprehensive_security_scan "." "moderate" "CRITICAL" "true"; then
       echo "❌ CRITICAL: Pre-build security scan failed"
       echo "SECURITY_STATUS=❌ CRITICAL ISSUES" >> $GITHUB_OUTPUT
       exit 1  # Block the build

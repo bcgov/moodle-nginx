@@ -10,7 +10,7 @@
 run_comprehensive_security_scan() {
   local project_dir="${1:-.}"
   local scan_level="${2:-moderate}"
-  local abort_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
   local scan_docker_images="${4:-false}"
   local verbose="${5:-false}"
 
@@ -27,7 +27,7 @@ run_comprehensive_security_scan() {
   setup_security_tools "true"
 
   # Run comprehensive scan
-  comprehensive_security_scan "$project_dir" "$scan_level" "$abort_on_critical" "$scan_docker_images"
+  comprehensive_security_scan "$project_dir" "$scan_level" "$abort_on" "$scan_docker_images"
   local scan_exit=$?
 
   if [ "$verbose" = "true" ]; then
@@ -57,7 +57,7 @@ run_comprehensive_security_scan() {
 run_github_actions_npm_security_scan() {
   local project_dir="${1:-.}"
   local audit_level="${2:-moderate}"
-  local abort_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
   local verbose="${4:-false}"
 
   log_info "Running GitHub Actions NPM security scan..."
@@ -69,7 +69,7 @@ run_github_actions_npm_security_scan() {
   source "$(dirname "${BASH_SOURCE[0]}")/npm.sh"
 
   # Run streamlined security scan (no manual lists)
-  npm_security_scan "$project_dir" "$audit_level" "$abort_on_critical"
+  npm_security_scan "$project_dir" "$audit_level" "$abort_on"
   local scan_exit=$?
 
   if [ "$verbose" = "true" ]; then

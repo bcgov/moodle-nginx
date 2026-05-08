@@ -15,17 +15,10 @@ env:
   # TRACE: Full verbosity with command tracing (set -x)
   CLUSTER_HEALTH_MONITORING: "YES" # Options: YES, NO - Enable cluster health monitoring for graceful handling of storage issues
 
-  # Security Scanning Configuration (CI/CD only)
-  # Modify these values in each branch (950003-dev, 950003-test, 950003-prod)
-  SECURITY_SCAN_ENABLED: "YES"          # YES, NO - Enable/disable security scanning
-  SECURITY_SCAN_LEVEL: "BASIC"          # OFF, MINIMAL, BASIC, FULL - Scan thoroughness
-  SECURITY_SCAN_EXIT_ON: "WARN"         # WARN, CRITICAL, HIGH, MEDIUM, ANY - When to fail builds
-  SECURITY_SCAN_CONTAINERS: "YES"        # YES, NO - Enable expensive container image scanning
-  SECURITY_SCAN_CACHE: "YES"            # YES, NO - Cache Trivy vulnerability database
-  # Recommended per environment:
-  # Dev:  LEVEL=BASIC, EXIT_ON=WARN,     CONTAINERS=NO  (~2-3 min, never blocks)
-  # Test: LEVEL=FULL,  EXIT_ON=HIGH,     CONTAINERS=YES (~6-8 min, blocks High/Critical)
-  # Prod: LEVEL=FULL,  EXIT_ON=CRITICAL, CONTAINERS=YES (~6-8 min, blocks Critical only)
+  # Security scanning settings are centralized in example.env to avoid
+  # merge conflicts between branches. Override per-branch here if needed:
+  # SECURITY_SCAN_LEVEL: "FULL"                    # Override scan thoroughness
+  # SECURITY_SCAN_ABORT_DEPLOYMENT_ON: "CRITICAL"  # Override abort threshold
 
   # Audit Failure Response — Automatic maintenance mode on critical issues
   # Controls whether the site enters maintenance mode when the Lighthouse audit detects failures.
@@ -528,7 +521,7 @@ jobs:
           echo "🔍 Scanning public Docker base images for vulnerabilities..."
           source openshift/scripts/utils/docker-security.sh
 
-          # Determine severity based on SECURITY_SCAN_LEVEL
+          # Determine severity filter based on SECURITY_SCAN_LEVEL
           SEVERITY="HIGH,CRITICAL"
           if [ "${{ env.SECURITY_SCAN_LEVEL }}" = "FULL" ]; then
             SEVERITY="MEDIUM,HIGH,CRITICAL"
@@ -538,25 +531,22 @@ jobs:
             SEVERITY="CRITICAL"
           fi
 
-          # Determine if we should exit on critical based on SECURITY_SCAN_EXIT_ON
-          EXIT_ON_CRITICAL="false"
-          if [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "CRITICAL" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "HIGH" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "MEDIUM" ] || [ "${{ env.SECURITY_SCAN_EXIT_ON }}" = "ANY" ]; then
-            EXIT_ON_CRITICAL="true"
-          fi
+          # SECURITY_SCAN_ABORT_DEPLOYMENT_ON controls the graduated abort threshold
+          # Values: NEVER, CRITICAL, HIGH, MEDIUM
+          ABORT_ON="${{ env.SECURITY_SCAN_ABORT_DEPLOYMENT_ON }}"
+          ABORT_ON="${ABORT_ON:-NEVER}"
 
           echo "Scan configuration:"
-          echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity: $SEVERITY"
-          echo "  Exit on: ${{ env.SECURITY_SCAN_EXIT_ON }} → Block build: $EXIT_ON_CRITICAL"
+          echo "  Level: ${{ env.SECURITY_SCAN_LEVEL }} → Severity filter: $SEVERITY"
+          echo "  Abort deployment on: $ABORT_ON"
           echo ""
 
-          # Scan all public base images defined in example.versions.env
-          # This catches vulnerabilities in PHP, Nginx, Redis, MariaDB, Golang, Ubuntu, etc.
-          if scan_public_base_images "example.versions.env" "$SEVERITY" "$EXIT_ON_CRITICAL"; then
+          if scan_public_base_images "example.versions.env" "$SEVERITY" "$ABORT_ON"; then
             echo "✅ All public base images passed security scan"
           else
             scan_exit=$?
             if [ $scan_exit -eq 2 ]; then
-              echo "❌ Critical vulnerabilities detected - blocking build"
+              echo "❌ Vulnerabilities exceeded abort threshold ($ABORT_ON) — blocking deployment"
               exit 2
             fi
           fi

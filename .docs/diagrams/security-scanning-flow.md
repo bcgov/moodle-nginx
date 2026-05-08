@@ -102,43 +102,43 @@ graph LR
     subgraph Environment Variables
         ENABLED[SECURITY_SCAN_ENABLED]
         LEVEL[SECURITY_SCAN_LEVEL]
-        EXIT[SECURITY_SCAN_EXIT_ON]
+        ABORT[SECURITY_SCAN_ABORT_DEPLOYMENT_ON]
         CONTAINERS[SECURITY_SCAN_CONTAINERS]
         CACHE[SECURITY_SCAN_CACHE]
     end
 
-    subgraph "Dev Environment"
-        DevConfig["LEVEL: BASIC<br/>EXIT: WARN<br/>CONTAINERS: NO"]
-        DevResult["⚡ ~2-3 min<br/>🟢 Core scan warn-only<br/>⚠️ Preflight may fail unresolved High/Critical"]
+    subgraph "Default (example.env)"
+        DefaultConfig["LEVEL: BASIC<br/>ABORT: NEVER<br/>CONTAINERS: YES"]
+        DefaultResult["⚡ ~6-8 min<br/>🟢 Report only, never abort<br/>⚠️ Preflight may fail unresolved High/Critical"]
     end
 
-    subgraph "Test Environment"
-        TestConfig["LEVEL: FULL<br/>EXIT: HIGH<br/>CONTAINERS: YES"]
-        TestResult["⏱️ ~6-8 min<br/>🟡 Blocks High/Critical<br/>🛡️ Comprehensive"]
+    subgraph "Test Override (build.yml)"
+        TestConfig["LEVEL: FULL<br/>ABORT: HIGH<br/>CONTAINERS: YES"]
+        TestResult["⏱️ ~6-8 min<br/>🟡 Aborts on High/Critical<br/>🛡️ Comprehensive"]
     end
 
-    subgraph "Prod Environment"
-        ProdConfig["LEVEL: FULL<br/>EXIT: CRITICAL<br/>CONTAINERS: YES"]
-        ProdResult["⏱️ ~6-8 min<br/>🔴 Blocks Critical Only<br/>🛡️ Maximum Security"]
+    subgraph "Prod Override (build.yml)"
+        ProdConfig["LEVEL: FULL<br/>ABORT: CRITICAL<br/>CONTAINERS: YES"]
+        ProdResult["⏱️ ~6-8 min<br/>🔴 Aborts on Critical Only<br/>🛡️ Maximum Security"]
     end
 
-    LEVEL --> DevConfig
-    EXIT --> DevConfig
-    CONTAINERS --> DevConfig
+    LEVEL --> DefaultConfig
+    ABORT --> DefaultConfig
+    CONTAINERS --> DefaultConfig
 
     LEVEL --> TestConfig
-    EXIT --> TestConfig
+    ABORT --> TestConfig
     CONTAINERS --> TestConfig
 
     LEVEL --> ProdConfig
-    EXIT --> ProdConfig
+    ABORT --> ProdConfig
     CONTAINERS --> ProdConfig
 
-    DevConfig --> DevResult
+    DefaultConfig --> DefaultResult
     TestConfig --> TestResult
     ProdConfig --> ProdResult
 
-    style DevResult fill:#d4edda
+    style DefaultResult fill:#d4edda
     style TestResult fill:#fff3cd
     style ProdResult fill:#f8d7da
 ```

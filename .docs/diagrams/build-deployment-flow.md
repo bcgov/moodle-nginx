@@ -570,9 +570,9 @@ stateDiagram-v2
 | Scenario | Configuration | Duration |
 |----------|--------------|----------|
 | **🔥 Hotfix (Emergency)** | `SKIP_BUILDS=YES`<br/>`SECURITY_SCAN_LEVEL=OFF`<br/>`FORCE_MIGRATE=NO` | ~5-8 min |
-| **🚀 Feature Deploy (Dev)** | `SKIP_BUILDS=YES`<br/>`SECURITY_SCAN_LEVEL=BASIC`<br/>`SCAN_EXIT_ON=WARN` | ~8-12 min |
-| **✅ Full Build (Test)** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=HIGH`<br/>`CLEAN_BUILDS=YES` | ~50-60 min |
-| **🔒 Production Release** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`SCAN_EXIT_ON=CRITICAL`<br/>`FORCE_MIGRATE=NO` | ~55-65 min |
+| **🚀 Feature Deploy (Dev)** | `SKIP_BUILDS=YES`<br/>`SECURITY_SCAN_LEVEL=BASIC`<br/>`ABORT_DEPLOYMENT_ON=NEVER` | ~8-12 min |
+| **✅ Full Build (Test)** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`ABORT_DEPLOYMENT_ON=HIGH`<br/>`CLEAN_BUILDS=YES` | ~50-60 min |
+| **🔒 Production Release** | `SKIP_BUILDS=NO`<br/>`SECURITY_SCAN_LEVEL=FULL`<br/>`ABORT_DEPLOYMENT_ON=CRITICAL`<br/>`FORCE_MIGRATE=NO` | ~55-65 min |
 
 ### Environment URLs
 

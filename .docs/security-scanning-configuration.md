@@ -16,15 +16,16 @@ Flexible, environment-aware security scanning that balances thoroughness with pe
 
 ## Configuration Variables
 
-Set these in `.github/workflows/build.yml` env section (CI/CD-specific, not for local development):
+Security scan settings are centralized in `example.env` (shared across branches).
+Override per-branch in `.github/workflows/build.yml` env section if needed.
 
-```yaml
-# In .github/workflows/build.yml env section
-SECURITY_SCAN_ENABLED: "YES"          # Enable/disable security scanning
-SECURITY_SCAN_LEVEL: "BASIC"          # Scan thoroughness: MINIMAL, BASIC, FULL, OFF
-SECURITY_SCAN_EXIT_ON: "HIGH"         # When to fail: WARN, CRITICAL, HIGH, MEDIUM, ANY
-SECURITY_SCAN_CONTAINERS: "NO"        # Include container scanning (expensive)
-SECURITY_SCAN_CACHE: "YES"            # Cache scan databases (faster)
+```bash
+# In example.env
+SECURITY_SCAN_ENABLED="YES"                    # Enable/disable security scanning
+SECURITY_SCAN_LEVEL="BASIC"                    # Scan thoroughness: MINIMAL, BASIC, FULL, OFF
+SECURITY_SCAN_ABORT_DEPLOYMENT_ON="NEVER"      # When to abort: NEVER, CRITICAL, HIGH, MEDIUM
+SECURITY_SCAN_CONTAINERS="YES"                 # Include container scanning (expensive)
+SECURITY_SCAN_CACHE="YES"                      # Cache scan databases (faster)
 ```
 
 Additional preflight gate in `checkEnv`:
@@ -47,57 +48,49 @@ Additional preflight gate in `checkEnv`:
 
 ---
 
-## Exit Strategies
+## Abort Thresholds
 
-Controls when the build fails based on vulnerability severity:
+Controls when the deployment is aborted based on vulnerability severity:
 
-| Strategy | Build Fails On | Use Case |
-|----------|----------------|----------|
-| **WARN** | Never (warnings only) | Dev branches, rapid iteration |
+| Threshold | Deployment Aborted On | Use Case |
+|-----------|----------------------|----------|
+| **NEVER** | Never (log only) | Dev branches, upstream vuln periods |
 | **CRITICAL** | Critical vulnerabilities only | Production (managed risk) |
 | **HIGH** | High or Critical | Test environments, pre-prod |
 | **MEDIUM** | Medium, High, or Critical | Strict security requirements |
-| **ANY** | Any vulnerability | Maximum security (gov/healthcare) |
 
 ---
 
 ## Environment-Specific Settings
 
-### Development (950003-dev branch)
-```yaml
-SECURITY_SCAN_LEVEL: "BASIC"       # Fast, standard checks
-SECURITY_SCAN_EXIT_ON: "WARN"      # Never block builds
-SECURITY_SCAN_CONTAINERS: "NO"     # Skip expensive scans
+### Default (example.env — shared across branches)
+```bash
+SECURITY_SCAN_LEVEL="BASIC"                    # Fast, standard checks
+SECURITY_SCAN_ABORT_DEPLOYMENT_ON="NEVER"      # Never abort deployment
+SECURITY_SCAN_CONTAINERS="YES"                 # Include container scanning
 ```
-**Result**: Core security scan is warning-only (~2-3 min). Preflight can still fail on unresolved high/critical Lighthouse dependencies.
+**Result**: Full scan with reporting only (~6-8 min). Preflight can still fail on unresolved high/critical Lighthouse dependencies.
 
 ---
 
-### Test (950003-test branch)
+### Override Examples (build.yml per branch)
 ```yaml
-SECURITY_SCAN_LEVEL: "FULL"        # Comprehensive
-SECURITY_SCAN_EXIT_ON: "HIGH"      # Block High/Critical
-SECURITY_SCAN_CONTAINERS: "YES"    # Full container scanning
-```
-**Result**: ~6-8 min, blocks serious issues before prod
+# Test — abort on high+ vulnerabilities
+SECURITY_SCAN_LEVEL: "FULL"
+SECURITY_SCAN_ABORT_DEPLOYMENT_ON: "HIGH"
 
----
-
-### Production (950003-prod branch)
-```yaml
-SECURITY_SCAN_LEVEL: "FULL"        # Comprehensive
-SECURITY_SCAN_EXIT_ON: "CRITICAL"  # Block Critical only
-SECURITY_SCAN_CONTAINERS: "YES"    # Full container scanning
+# Production — abort on critical only
+SECURITY_SCAN_LEVEL: "FULL"
+SECURITY_SCAN_ABORT_DEPLOYMENT_ON: "CRITICAL"
 ```
-**Result**: ~6-8 min, blocks only critical threats
 
 ---
 
 ## Summary
 
 ✅ **Scan Levels**: Control what gets scanned (MINIMAL/BASIC/FULL)
-✅ **Exit Strategies**: Control when builds fail (WARN/CRITICAL/HIGH/MEDIUM/ANY)
-✅ **Environment-Aware**: Different settings per branch (dev/test/prod)
+✅ **Abort Thresholds**: Control when deployments abort (NEVER/CRITICAL/HIGH/MEDIUM)
+✅ **Centralized Config**: Settings in `example.env`, override per-branch in `build.yml`
 ✅ **Performance**: Skip expensive scans in dev, enable in prod
 
 **Quick Reference**:

@@ -156,11 +156,11 @@ npm_audit_scan() {
 npm_security_scan() {
   local project_dir="${1:-.}"
   local audit_level="${2:-moderate}"
-  local abort_on_critical="${3:-true}"
+  local abort_on="${3:-CRITICAL}"
 
   log_info "Running comprehensive NPM security scan..."
   log_info "Leveraging: NPM Audit + GitHub Security Advisory + Dependabot"
-  log_debug "Project: $project_dir, Audit level: $audit_level, Abort on critical: $abort_on_critical"
+  log_debug "Project: $project_dir, Audit level: $audit_level, Abort on: $abort_on"
 
   cd "$project_dir" || return 1
 
@@ -203,7 +203,7 @@ npm_security_scan() {
   # Determine exit code
   case "$overall_status" in
     "CRITICAL_FAIL")
-      if [ "$abort_on_critical" = "true" ]; then
+      if [ "$abort_on" != "NEVER" ]; then
         log_error "Build aborted due to critical security issues!"
         log_error "Note: Dependabot should prevent most issues via auto-updates"
         return 2
