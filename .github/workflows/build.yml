@@ -20,6 +20,9 @@ env:
   SECURITY_SCAN_ENABLED: "YES"          # YES, NO - Enable/disable security scanning
   SECURITY_SCAN_LEVEL: "FULL"           # OFF, MINIMAL, BASIC, FULL - Scan thoroughness
   SECURITY_SCAN_EXIT_ON: "WARN"         # WARN, CRITICAL, HIGH, MEDIUM, ANY - When to fail builds
+  #       ⚠ Temporarily set to WARN while upstream base image vulnerabilities
+  #         (php:8.3 gnutls, golang:1.12) have no available patches.
+  #         TODO: Restore EXIT_ON=HIGH after PHP 8.4-alpine + Go upgrade
   SECURITY_SCAN_CONTAINERS: "YES"        # YES, NO - Enable expensive container image scanning
   SECURITY_SCAN_CACHE: "YES"            # YES, NO - Cache Trivy vulnerability database
   # Recommended per environment:
