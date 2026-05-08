@@ -433,6 +433,40 @@ while true; do
     #   TCP connect fail  : broken path
     NET_PROBE_WARN_MS=${NET_PROBE_WARN_MS:-100}       # >100ms = degraded
     NET_PROBE_CRITICAL_MS=${NET_PROBE_CRITICAL_MS:-500}  # >500ms = near-failure
+
+    # ── Deployment detection: suppress noisy alerts during rollouts ──────────
+    # When pods are rolling, network failures are expected and not actionable.
+    # Also suppress for 10 minutes after a rollout completes (pod warmup).
+    deployment_in_progress=false
+    DEPLOY_COOLDOWN_FILE="/tmp/logs/last-deployment-seen.ts"
+    DEPLOY_COOLDOWN_SECONDS=${DEPLOY_COOLDOWN_SECONDS:-600}  # 10 minutes
+
+    for deploy_name in php moodle-cron web redis-proxy; do
+      rollout_status=$(oc rollout status deployment/"$deploy_name" -n "$DEPLOY_NAMESPACE" --timeout=1s 2>&1) || true
+      if echo "$rollout_status" | grep -qiE "waiting|progressing|not found"; then
+        deployment_in_progress=true
+        # Record that we saw a deployment in progress (for cooldown after it completes)
+        date +%s > "$DEPLOY_COOLDOWN_FILE"
+        echo "$(date): 🚧 Deployment '$deploy_name' is rolling — suppressing network probe alerts"
+        break
+      fi
+    done
+
+    # Check cooldown: if deployment recently completed, still suppress
+    if [[ "$deployment_in_progress" == "false" && -f "$DEPLOY_COOLDOWN_FILE" ]]; then
+      last_deploy_ts=$(cat "$DEPLOY_COOLDOWN_FILE" 2>/dev/null || echo "0")
+      now_ts=$(date +%s)
+      elapsed=$(( now_ts - last_deploy_ts ))
+      if [[ $elapsed -lt $DEPLOY_COOLDOWN_SECONDS ]]; then
+        deployment_in_progress=true
+        remaining=$(( DEPLOY_COOLDOWN_SECONDS - elapsed ))
+        echo "$(date): 🚧 Deployment completed ${elapsed}s ago — cooldown active (${remaining}s remaining)"
+      else
+        # Cooldown expired, clean up
+        rm -f "$DEPLOY_COOLDOWN_FILE"
+      fi
+    fi
+
     echo "$(date): 🌐 Running cross-service network connectivity probe..."
     echo "$(date):    Latency thresholds: warn=${NET_PROBE_WARN_MS}ms, critical=${NET_PROBE_CRITICAL_MS}ms"
     NET_PROBE_LOG="/tmp/logs/network-probe.log"
@@ -518,9 +552,14 @@ while true; do
       service_summary+=("  [ALERT] network - $net_probe_failures/$net_probe_tests path(s) failed")
       total_issues=$((total_issues + net_probe_failures))
 
-      send_notification "NETWORK_PROBE_FAILURE" "Pod Network Connectivity Issue" \
-        "$net_probe_failures/$net_probe_tests cross-service network paths failed in $DEPLOY_NAMESPACE. Possible OVN/SDN issue. Check network-probe.log for history." \
-        "error" "$DEPLOY_NAMESPACE"
+      if [[ "$deployment_in_progress" == "true" ]]; then
+        echo "$(date): 🚧 Suppressing RocketChat alert — deployment in progress (failures expected)"
+        echo "$(date '+%Y-%m-%d %H:%M:%S')|SUPPRESSED|deployment_in_progress|$net_probe_failures/$net_probe_tests paths failed" >> "$NET_PROBE_LOG"
+      else
+        send_notification "NETWORK_PROBE_FAILURE" "Pod Network Connectivity Issue" \
+          "$net_probe_failures/$net_probe_tests cross-service network paths failed in $DEPLOY_NAMESPACE. Possible OVN/SDN issue. Check network-probe.log for history." \
+          "error" "$DEPLOY_NAMESPACE"
+      fi
 
       # Log failure batch to persistent file
       echo "$(date '+%Y-%m-%d %H:%M:%S')|SUMMARY|$net_probe_failures/$net_probe_tests paths failed" >> "$NET_PROBE_LOG"
@@ -530,9 +569,13 @@ while true; do
       service_summary+=("  [WARN] network - $net_probe_slow/$net_probe_tests path(s) slow, $net_probe_tests/$net_probe_tests connected")
       total_issues=$((total_issues + 1))
 
-      send_notification "NETWORK_PROBE_SLOW" "Pod Network Latency Degraded" \
-        "$net_probe_slow/$net_probe_tests network paths have elevated latency (>${NET_PROBE_WARN_MS}ms) in $DEPLOY_NAMESPACE. Possible OVN/SDN degradation. Timeouts may occur under load." \
-        "warning" "$DEPLOY_NAMESPACE"
+      if [[ "$deployment_in_progress" == "true" ]]; then
+        echo "$(date): 🚧 Suppressing latency alert — deployment in progress"
+      else
+        send_notification "NETWORK_PROBE_SLOW" "Pod Network Latency Degraded" \
+          "$net_probe_slow/$net_probe_tests network paths have elevated latency (>${NET_PROBE_WARN_MS}ms) in $DEPLOY_NAMESPACE. Possible OVN/SDN degradation. Timeouts may occur under load." \
+          "warning" "$DEPLOY_NAMESPACE"
+      fi
 
       echo "$(date '+%Y-%m-%d %H:%M:%S')|SUMMARY|$net_probe_slow/$net_probe_tests paths slow" >> "$NET_PROBE_LOG"
     else
