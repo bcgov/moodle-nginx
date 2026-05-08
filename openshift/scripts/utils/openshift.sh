@@ -1,417 +1,752 @@
 #!/bin/bash
+# =============================================================================
+# openshift.sh - Core OpenShift Operations (Minimal - Week 2+ Refactored)
+# =============================================================================
+# PURPOSE:
+#   Provides core OpenShift operations that have NOT yet been extracted to
+#   specialized modules. This file is intentionally minimal after Week 1-2
+#   refactoring extracted 3,350 lines to modular utilities.
+#
+# CONTENTS (Remaining ~700 lines):
+#   - Scaling functions (scale_resource, scale_galera_statefulset)
+#   - Resource management (create/delete, template processing)
+#   - Platform detection (is_openshift, is_docker, platform_exec)
+#   - Resource sizing (set_resources, QoS management)
+#   - HPA management (create_hpa)
+#
+# EXTRACTED TO MODULES (Week 1-2):
+#   - Cluster health → cluster-health.sh
+#   - Validation → validation.sh
+#   - Coordination → coordination.sh
+#   - Monitoring → monitoring.sh
+#   - Secrets → secrets.sh
+#   - PVC → pvc.sh
+#
+# DEPENDENCIES:
+#   - logging.sh (log_* functions)
+#   - validation.sh (resource_exists, get_pods_for_resource)
+#   - cluster-health.sh (wait_for_resource_ready)
+#
+# RELATED DOCS:
+#   - docs/openshift-utilities-refactoring-plan.md
+#   - openshift/scripts/utils/openshift-legacy.sh (original 3,443-line monolith)
+# =============================================================================
+
+# =============================================================================
+# ERROR HANDLING
+# =============================================================================
+
+delete_pod() {
+  local pod=$1
+  echo "Restarting (deleting) pod..."
+  delete_resource_if_exists pod "$pod"
+}
+
+# =============================================================================
+# SCALING FUNCTIONS
+# =============================================================================
+
+# Unified resource scaling function
+scale_resource() {
+  local type="$1"
+  local resource_name="$2"
+  local target_replicas="$3"
+  local max_replicas="${4:-$target_replicas}"  # Default to target_replicas if not specified
+  local namespace="${5:-$DEPLOY_NAMESPACE}"
+  local timeout="${6:-300s}"
+  local enable_hpa="${7:-false}"  # New flag to control HPA behavior
+
+  # Standardize resource type names
+  case "$type" in
+    "sts" | "statefulset") type="statefulset" ;;
+    "deploy") type="deployment" ;;
+  esac
+
+  # Check if the resource exists
+  if ! oc get "$type" "$resource_name" -n "$namespace" &>/dev/null; then
+    log_error "Resource $type/$resource_name not found in namespace $namespace"
+    return 1
+  fi
+
+  echo "🔄 Scaling $type/$resource_name to $target_replicas replicas (max: $max_replicas)..."
+
+  # Handle HPA for deployments (backward compatibility with scale_deployment)
+  if [[ "$type" == "deployment" && "$enable_hpa" == "true" ]]; then
+    # Delete existing HPA if present
+    if oc get hpa "$resource_name" -n "$namespace" &>/dev/null; then
+      log_info "Removing existing HPA for $resource_name..."
+      oc delete hpa "$resource_name" -n "$namespace" 2>/dev/null || true
+    fi
+    sleep 10
+  fi
+
+  # Perform the scaling operation
+  if ! oc scale "$type" "$resource_name" --replicas="$target_replicas" -n "$namespace"; then
+    log_error "Failed to scale $type/$resource_name to $target_replicas replicas"
+    return 1
+  fi
+
+  # Add HPA if requested and max_replicas > target_replicas (backward compatibility)
+  if [[ "$type" == "deployment" && "$enable_hpa" == "true" && $max_replicas -gt $target_replicas ]]; then
+    log_info "Creating HPA for $resource_name (min: $target_replicas, max: $max_replicas)..."
+    create_hpa "$resource_name" "deployment/$resource_name" "$target_replicas" "$max_replicas" "200m"
+
+    # Set aggressive rolling update strategy for autoscaled deployments
+    oc patch deployment "$resource_name" -n "$namespace" -p='{"spec":{"strategy":{"rollingUpdate":{"maxSurge":"100%","maxUnavailable":"33%"}}}}' 2>/dev/null || true
+  fi
+
+  # Wait for scaling to complete
+  echo "⏳ Waiting for $type/$resource_name to scale to $target_replicas replicas..."
+
+  if [[ "$target_replicas" == "0" ]]; then
+    # Scale down to 0 - use wait_for_scale_down
+    if ! wait_for_scale_down "$type/$resource_name" 30 10; then
+      log_error "Failed to scale down $type/$resource_name to 0"
+      return 1
+    fi
+  else
+    # Scale up - use wait_for with cluster health monitoring
+    if ! wait_for "$type/$resource_name" "ready" "$timeout" "up"; then
+      log_error "Failed to scale up $type/$resource_name to $target_replicas replicas"
+      return 1
+    fi
+  fi
+}
+
+# Legacy wrapper for backward compatibility
+scale_deployment() {
+  local type="$1"
+  local deployment="$2"
+  local pod_count="$3"
+  local max_pods="$4"
+
+  # Call new unified function with HPA enabled
+  scale_resource "$type" "$deployment" "$pod_count" "$max_pods" "$DEPLOY_NAMESPACE" "300s" "true"
+}
+
+# Convenience wrapper for simple scaling without HPA
+scale_simple() {
+  local type="$1"
+  local resource_name="$2"
+  local target_replicas="$3"
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local timeout="${5:-300s}"
+
+  scale_resource "$type" "$resource_name" "$target_replicas" "$target_replicas" "$namespace" "$timeout" "false"
+}
+
+# =============================================================================
+# Galera-Aware Scaling Function
+# =============================================================================
+# Scales Galera StatefulSets safely with:
+# - Pre-flight cluster address verification
+# - Incremental scale-up (1→2→3→...→N) with sync validation per node
+# - Safe scale-down (leverages OrderedReady for reverse shutdown)
+# - Split-brain prevention and health checks
+#
+# Parameters:
+#   $1 - sts_name: Name of the StatefulSet (e.g., "mariadb-galera")
+#   $2 - target_replicas: Desired number of replicas
+#   $3 - namespace: Kubernetes namespace (optional, defaults to $DEPLOY_NAMESPACE)
+#
+# Returns:
+#   0: Success
+#   1: Failure (cluster address invalid, scaling failed, or health check failed)
+#
+# Links: docs/galera-deployment-best-practices.md#solution-4
+# =============================================================================
+scale_galera_statefulset() {
+  local sts_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  log_header "Galera-Aware Scaling: $sts_name → $target_replicas replicas"
+
+  # ============================================================
+  # STEP 1: PRE-FLIGHT VERIFICATION
+  # ============================================================
+  log_info "Step 1/4: Pre-flight cluster address verification"
+
+  # Source Galera utilities if not already loaded
+  if ! command -v galera_verify_cluster_address &>/dev/null; then
+    local galera_utils
+    galera_utils="$(dirname "${BASH_SOURCE[0]}")/database.sh"
+    if [[ -f "$galera_utils" ]]; then
+      source "$galera_utils"
+    else
+      log_error "database.sh not found - cannot verify cluster address"
+      return 1
+    fi
+  fi
+
+  # Verify cluster address before any scaling operations
+  if ! galera_verify_cluster_address "$sts_name" "$namespace" "fix"; then
+    log_error "Cluster address verification failed - aborting scale operation"
+    log_error "Run galera-fix-cluster-address.sh manually to diagnose"
+    return 1
+  fi
+
+  # ============================================================
+  # STEP 2: DETERMINE SCALING DIRECTION
+  # ============================================================
+  log_info "Step 2/4: Determine scaling strategy"
+
+  local current_replicas
+  current_replicas=$(oc get sts/"$sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+
+  if [[ -z "$current_replicas" ]]; then
+    log_error "StatefulSet not found: $sts_name"
+    return 1
+  fi
+
+  log_debug "  Current replicas: $current_replicas"
+  log_debug "  Target replicas:  $target_replicas"
+
+  if [[ "$current_replicas" -eq "$target_replicas" ]]; then
+    log_success "Already at target replica count ($target_replicas)"
+    return 0
+  fi
+
+  # ============================================================
+  # STEP 3: EXECUTE SCALING OPERATION
+  # ============================================================
+  if [[ "$current_replicas" -lt "$target_replicas" ]]; then
+    # ------------------------------------------------------
+    # SCALE-UP: Incremental with sync validation
+    # ------------------------------------------------------
+    log_info "Step 3/4: Incremental scale-up ($current_replicas → $target_replicas)"
+    log_warn "⚠️  This will add nodes one-by-one with Galera sync validation"
+
+    for i in $(seq $((current_replicas + 1)) "$target_replicas"); do
+      log_info "  Scaling to $i replica(s)..."
+
+      if ! oc scale sts/"$sts_name" --replicas="$i" -n "$namespace"; then
+        log_error "Failed to scale to $i replicas"
+        return 1
+      fi
+
+      local new_pod="${sts_name}-$((i - 1))"
+      log_debug "  Waiting for pod $new_pod to be ready..."
+
+      if ! wait_for_resource_ready "app.kubernetes.io/name=$sts_name" "$namespace" 60 10 "$new_pod"; then
+        log_error "Pod $new_pod failed to become ready"
+        return 1
+      fi
+
+      # Wait for Galera cluster to sync
+      log_debug "  Verifying Galera cluster sync..."
+      sleep 10
+
+      if ! check_galera_cluster_health "app.kubernetes.io/name=$sts_name" "$namespace" "$i"; then
+        log_error "Galera cluster health check failed after adding $new_pod"
+        return 1
+      fi
+
+      log_success "  ✔️  Pod $new_pod joined cluster successfully"
+    done
+
+    log_success "Scale-up complete: $current_replicas → $target_replicas"
+
+  elif [[ "$current_replicas" -gt "$target_replicas" ]]; then
+    # ------------------------------------------------------
+    # SCALE-DOWN: Safe (OrderedReady handles reverse order)
+    # ------------------------------------------------------
+    log_info "Step 3/4: Scale-down ($current_replicas → $target_replicas)"
+    log_debug "  OrderedReady ensures pods shut down in reverse order (N→...→3→2→1)"
+    log_debug "  Pod-0 (primary) will remain untouched"
+
+    if ! oc scale sts/"$sts_name" --replicas="$target_replicas" -n "$namespace"; then
+      log_error "Failed to scale down to $target_replicas replicas"
+      return 1
+    fi
+
+    # Wait for scale-down to complete
+    log_debug "  Waiting for excess pods to terminate..."
+    for i in $(seq "$target_replicas" $((current_replicas - 1))); do
+      local removing_pod="${sts_name}-${i}"
+      oc wait --for=delete pod/"$removing_pod" -n "$namespace" --timeout=300s 2>/dev/null || true
+    done
+
+    log_success "Scale-down complete: $current_replicas → $target_replicas"
+  fi
+
+  # ============================================================
+  # STEP 4: POST-SCALING HEALTH CHECK
+  # ============================================================
+  log_info "Step 4/4: Final health verification"
+
+  # Wait a moment for cluster to stabilize
+  sleep 5
+
+  # Verify all pods are Ready
+  local ready_pods
+  ready_pods=$(oc get pods -l "app.kubernetes.io/name=${sts_name}" -n "$namespace" -o jsonpath='{.items[?(@.status.conditions[?(@.type=="Ready" && @.status=="True")])].metadata.name}' | wc -w)
+
+  if [[ "$ready_pods" -ne "$target_replicas" ]]; then
+    log_error "Health check failed: Expected $target_replicas Ready pods, found $ready_pods"
+    return 1
+  fi
+
+  # Verify Galera cluster health
+  if ! check_galera_cluster_health "app.kubernetes.io/name=$sts_name" "$namespace" "$target_replicas"; then
+    log_error "Galera cluster health check failed after scaling"
+    log_error "Run: oc exec ${sts_name}-0 -n $namespace -- mysql -e 'SHOW STATUS LIKE \"wsrep%\"'"
+    return 1
+  fi
+
+  log_success "✅ Galera cluster scaled successfully to $target_replicas replicas"
+  log_success "   Cluster is healthy and all nodes are in sync"
+  return 0
+}
+
+# =============================================================================
+# SIZING CSV QUERY
+# =============================================================================
+# get_sizing_replicas - Read Pod Count for a deployment from the sizing CSV
+#   $1 - deployment : Name matching column 1 of the CSV (e.g. "mariadb-galera")
+#   $2 - namespace  : OpenShift namespace (selects which CSV file to read)
+#
+# Returns the Pod Count (CSV column 3) via stdout, or empty string if not found.
+#
+# CSV is resolved in priority order:
+#   1. /openshift/${namespace}-sizing.csv   (in-cluster ConfigMap mount)
+#   2. ./openshift/${namespace}-sizing.csv  (local dev / CI execution)
+#
+# This is the single authoritative function for querying right-sizing data.
+# All auto-heal, Galera recovery, and scaling logic should call this instead
+# of reading the CSV inline.
+# =============================================================================
+get_sizing_replicas() {
+  local deployment="$1"
+  local namespace="${2:-${DEPLOY_NAMESPACE:-}}"
+  local csv_file=""
+
+  for csv_path in \
+    "/openshift/${namespace}-sizing.csv" \
+    "./openshift/${namespace}-sizing.csv"; do
+    if [[ -f "$csv_path" ]]; then
+      csv_file="$csv_path"
+      break
+    fi
+  done
+
+  [[ -z "$csv_file" ]] && return 1
+
+  awk -F',' -v dep="$deployment" '$1 == dep {print $3}' "$csv_file" | tr -d ' \r'
+}
+
+# =============================================================================
+# RESOURCE MANAGEMENT
+# =============================================================================
+
+# Function to check if a resource exists
+resource_exists() {
+  local resource_type=$1
+  local resource_name=$2
+
+  if oc get "$resource_type" "$resource_name" &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Wait for deployment to scale down [to 0 replicas]
+wait_for_scale_down() {
+  local resource=$1 # e.g., deployment/php
+  local max_retries=${2:-30}
+  local wait_time=${3:-10}
+  local retry_count=0
+
+  echo "Waiting for $resource to scale down to 0 replicas..."
+
+  while true; do
+    # Get the list of pods for the resource
+    local pods
+    pods=$(oc get pods --selector=deployment="${resource##*/}" -o jsonpath='{.items[*].metadata.name}')
+
+    if [[ -z "$pods" ]]; then
+      echo "✅ $resource has scaled down to 0 replicas."
+      return 0
+    else
+      echo "Pods still exist for $resource: $pods. Retrying..."
+    fi
+
+    # Retry logic
+    retry_count=$((retry_count + 1))
+    if [[ $retry_count -ge $max_retries ]]; then
+      echo "⚠️ Timeout waiting for $resource to scale down. Exiting..."
+      return 1
+    fi
+
+    sleep "$wait_time"
+  done
+}
+
+# Function to delete a resource if it exists
+delete_resource_if_exists() {
+  local resource_type=$1
+  local resource_name=$2
+
+  echo "Checking if $resource_type exists: $resource_name"
+
+  # Use oc get to check if the resource exists
+  if oc get "$resource_type" "$resource_name" &>/dev/null; then
+    echo "Deleting existing $resource_type: $resource_name"
+    oc delete "$resource_type" "$resource_name"
+  else
+    echo "$resource_type does not exist: $resource_name"
+  fi
+}
+
+# Function to deploy a resource from a template
+deploy_resource_from_template() {
+  local template_file=$1
+  shift
+  local params=("$@")
+
+  # Construct the oc process command with parameters
+  local process_cmd="oc process -f $template_file"
+  for param in "${params[@]}"; do
+    process_cmd+=" -p \"$param\""
+  done
+
+  echo "Deploying resource from template: $template_file"
+
+  # Process the template and print the output for debugging
+  local processed_template
+  processed_template=$(eval "$process_cmd")
+
+  # Extract the deployment name from the processed template
+  local deployment_name
+  deployment_name=$(echo "$processed_template" | jq -r '.items[] | select(.kind == "Deployment") | .metadata.name')
+
+  # Delete the existing deployment if it exists
+  if [ -n "$deployment_name" ]; then
+    delete_resource_if_exists deployment "$deployment_name"
+  fi
+
+  # Apply the processed template
+  echo "$processed_template" | oc apply -f -
+
+  echo "Resource deployed from template: $template_file"
+}
+
+# =============================================================================
+# PLATFORM DETECTION
+# =============================================================================
+
+# Platform detection functions
+is_openshift() {
+  [[ -n "$DEPLOY_NAMESPACE" ]]
+}
+
+is_docker() {
+  [[ -z "$DEPLOY_NAMESPACE" ]]
+}
+
+# Platform-specific execution
+platform_exec() {
+  local pod_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  shift 2
+  local command="$*"
+
+  if is_openshift; then
+    oc exec -n "$namespace" "$pod_name" -- bash -c "$command"
+  elif is_docker; then
+    docker exec "$pod_name" bash -c "$command"
+  else
+    echo "❌ Unknown platform"
+    return 1
+  fi
+}
+
+# Platform-specific copy operations
+platform_cp() {
+  local source="$1"
+  local destination="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  if is_openshift; then
+    oc cp -n "$namespace" "$source" "$destination"
+  elif is_docker; then
+    docker cp "$source" "$destination"
+  else
+    echo "❌ Unknown platform"
+    return 1
+  fi
+}
+
+# =============================================================================
+# RESOURCE SIZING
+# =============================================================================
+
+# Ensure openShift resource values are valid
+# Returns: "<value><unit>" for positive integers, "0" for zero, "null" for empty/invalid
+validate_and_format_resource_value() {
+  local value=$1
+  local unit=$2
+
+  # Check if the value is a valid positive integer (1, 25, 50, 100, 1500, etc.)
+  if [[ $value =~ ^[1-9][0-9]*$ ]]; then
+    echo "${value}${unit}"
+  elif [[ $value == "0" || $value == 0 ]]; then
+    echo "0"
+  else
+    echo "null"
+  fi
+}
+
+# Function to set resources for a deployment
+set_resources() {
+  local type=$1
+  local deployment=$2
+  local cpu_request=$3
+  local mem_request=$4
+  local cpu_limit=$5
+  local mem_limit=$6
+
+  log_info "Setting resources for $type/$deployment..."
+  log_debug "CPU Request: $cpu_request"
+  log_debug "Memory Request: $mem_request"
+  log_debug "CPU Limit: $cpu_limit"
+  log_debug "Memory Limit: $mem_limit"
+
+  # Validate and format resource values
+  cpu_request=$(validate_and_format_resource_value "$cpu_request" "m")
+  mem_request=$(validate_and_format_resource_value "$mem_request" "Mi")
+  cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
+  mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
+
+  # Resource limit philosophy (BC Gov Platform best practices):
+  #
+  # CPU LIMITS: Never set (0 in CSV = omit from spec)
+  #   - CPU is compressible: kernel throttles under contention, doesn't kill
+  #   - Bursting above request improves throughput when node has spare capacity
+  #   - Requests guarantee minimum CPU for scheduling
+  #
+  # MEMORY LIMITS: Optional (0 in CSV = omit from spec)
+  #   - Memory is incompressible: exceeding limit = OOMKill
+  #   - Setting limit = request creates HARD CAP (no burst) → OOMKills during spikes
+  #   - Omitting limit allows burst up to namespace quota (Burstable QoS)
+  #   - Workloads with variable memory (PHP cache ops) should use 0 limit
+  #   - Workloads with predictable memory can set explicit limits for safety
+  #
+  # When 0 is specified in CSV, it's treated as "intentionally unset" (not safety-forced to request).
+
+  # Validate: request must not exceed limit when both are set.
+  # If request > limit, auto-correct by raising the limit to match.
+  local mem_req_num=${mem_request//[!0-9]/}
+  local mem_lim_num=${mem_limit//[!0-9]/}
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
+        "$mem_limit" != "null" && "$mem_limit" != "0" && \
+        -n "$mem_req_num" && -n "$mem_lim_num" && \
+        "$mem_req_num" -gt "$mem_lim_num" ]]; then
+    log_warn "Memory request (${mem_request}) exceeds limit (${mem_limit}) for $type/$deployment -- raising limit to match"
+    mem_limit="$mem_request"
+  fi
+
+  local cpu_req_num=${cpu_request//[!0-9]/}
+  local cpu_lim_num=${cpu_limit//[!0-9]/}
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" && \
+        "$cpu_limit" != "null" && "$cpu_limit" != "0" && \
+        -n "$cpu_req_num" && -n "$cpu_lim_num" && \
+        "$cpu_req_num" -gt "$cpu_lim_num" ]]; then
+    log_warn "CPU request (${cpu_request}) exceeds limit (${cpu_limit}) for $type/$deployment -- raising limit to match"
+    cpu_limit="$cpu_request"
+  fi
+
+  # Build the desired resources JSON object.
+  # Values of "0" or "null" are OMITTED — any resource field not listed here
+  # will be REMOVED from the pod spec (declarative, not incremental).
+  # This enables:
+  #   - BestEffort QoS: all zeros → resources: {} → no requests or limits
+  #   - CPU bursting:   cpu_limit=0 → no cpu limit → burst on spare capacity
+  #   - Guaranteed QoS: all values set → requests and limits explicit
+  local requests_parts=()
+  local limits_parts=()
+
+  if [[ "$cpu_request" != "null" && "$cpu_request" != "0" ]]; then
+    requests_parts+=("\"cpu\":\"$cpu_request\"")
+  fi
+  if [[ "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+    requests_parts+=("\"memory\":\"$mem_request\"")
+  fi
+  if [[ "$cpu_limit" != "null" && "$cpu_limit" != "0" ]]; then
+    limits_parts+=("\"cpu\":\"$cpu_limit\"")
+  fi
+  if [[ "$mem_limit" != "null" && "$mem_limit" != "0" ]]; then
+    limits_parts+=("\"memory\":\"$mem_limit\"")
+  fi
+
+  local resources_obj="{}"
+  local resources_parts=()
+  if [[ ${#requests_parts[@]} -gt 0 ]]; then
+    local req_json
+    req_json=$(IFS=,; echo "${requests_parts[*]}")
+    resources_parts+=("\"requests\":{$req_json}")
+  fi
+  if [[ ${#limits_parts[@]} -gt 0 ]]; then
+    local lim_json
+    lim_json=$(IFS=,; echo "${limits_parts[*]}")
+    resources_parts+=("\"limits\":{$lim_json}")
+  fi
+  if [[ ${#resources_parts[@]} -gt 0 ]]; then
+    local parts_json
+    parts_json=$(IFS=,; echo "${resources_parts[*]}")
+    resources_obj="{$parts_json}"
+  fi
+
+  # Determine QoS class for logging
+  local qos="Burstable"
+  if [[ ${#requests_parts[@]} -eq 0 && ${#limits_parts[@]} -eq 0 ]]; then
+    qos="BestEffort"
+  elif [[ "$cpu_request" == "$cpu_limit" && "$mem_request" == "$mem_limit" && \
+          "$cpu_request" != "null" && "$cpu_request" != "0" && \
+          "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+    qos="Guaranteed"
+  fi
+
+  # Apply declaratively via JSON patch — replaces the ENTIRE resources block
+  # on every container. This ensures stale limits from prior Helm deploys or
+  # manual patches are removed. Uses "add" op which creates-or-replaces.
+  local num_containers
+  num_containers=$(oc get "$type/$deployment" -n "$DEPLOY_NAMESPACE" \
+    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c . || echo "0")
+
+  if [[ "$num_containers" -eq 0 ]]; then
+    log_warn "No containers found for $type/$deployment — skipping resource update"
+    return 0
+  fi
+
+  local patch_ops=()
+  for ((i=0; i<num_containers; i++)); do
+    patch_ops+=("{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/$i/resources\",\"value\":$resources_obj}")
+  done
+  local patch_json
+  patch_json="[$(IFS=,; echo "${patch_ops[*]}")]"
+
+  log_info "  Resources ($qos): $resources_obj (${num_containers} container(s))"
+  log_debug "  Patch: $patch_json"
+
+  if ! oc patch "$type/$deployment" -n "$DEPLOY_NAMESPACE" --type=json -p "$patch_json"; then
+    log_warn "JSON patch failed for $type/$deployment — falling back to oc set resources"
+    # Fallback: use oc set resources for positive values only (can't remove, but won't break)
+    local cmd="oc set resources $type $deployment"
+    local has_values=false
+    if [[ ${#requests_parts[@]} -gt 0 ]]; then
+      local req_csv=""
+      [[ "$cpu_request" != "null" && "$cpu_request" != "0" ]] && req_csv+="cpu=${cpu_request}"
+      if [[ "$mem_request" != "null" && "$mem_request" != "0" ]]; then
+        [[ -n "$req_csv" ]] && req_csv+=","
+        req_csv+="memory=${mem_request}"
+      fi
+      [[ -n "$req_csv" ]] && cmd+=" --requests=$req_csv" && has_values=true
+    fi
+    if [[ ${#limits_parts[@]} -gt 0 ]]; then
+      local lim_csv=""
+      [[ "$cpu_limit" != "null" && "$cpu_limit" != "0" ]] && lim_csv+="cpu=${cpu_limit}"
+      if [[ "$mem_limit" != "null" && "$mem_limit" != "0" ]]; then
+        [[ -n "$lim_csv" ]] && lim_csv+=","
+        lim_csv+="memory=${mem_limit}"
+      fi
+      [[ -n "$lim_csv" ]] && cmd+=" --limits=$lim_csv" && has_values=true
+    fi
+    if $has_values; then
+      log_debug "  Fallback: $cmd"
+      eval "$cmd"
+    fi
+  fi
+}
+
+# =============================================================================
+# HPA MANAGEMENT
+# =============================================================================
+
+# Function to create HorizontalPodAutoscaler
+create_hpa() {
+  local name=$1
+  local target=$2
+  local min_replicas=$3
+  local max_replicas=$4
+  local avg_value=$5
+
+  # Ensure avg_value includes "m" at the end
+  if [[ ! $avg_value =~ m$ ]]; then
+    avg_value="${avg_value}m"
+  fi
+
+  if [[ $avg_value == "0m" || $avg_value == "0.0m" || $max_replicas -le $min_replicas || $min_replicas == "0" ]]; then
+    log_error "Invalid HPA values. Exiting..."
+    return 1
+  fi
+
+  log_info "Creating HPA: $name > $target - Scale at $avg_value from $min_replicas to $max_replicas replicas"
+
+  # Determine the kind of the target resource
+  local kind="Deployment"
+  if [[ $target == sts/* ]]; then
+    kind="StatefulSet"
+    target=${target#sts/}
+  elif [[ $target == deployment/* ]]; then
+    target=${target#deployment/}
+  fi
+
+  # Create a temporary template file
+  cat <<EOF > hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: $name
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: $kind
+    name: $target
+  minReplicas: $min_replicas
+  maxReplicas: $max_replicas
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageValue: $avg_value
+EOF
+
+  # First, delete the HPA if it exists
+  delete_resource_if_exists hpa "$name"
+
+  log_info "Creating HPA from template:"
+  oc create -f hpa.yaml
+
+  wait_for_deployment_without_errors "$kind/$target"
+
+  return 0
+}
+#!/bin/bash
 
 # OpenShift Utilities Module
 # Contains core OpenShift operations, resource management, maintenance mode,
 # secret management, logging, and validation functions
+#
+# NOTE: Many functions have been extracted to modular utilities:
+#   - Cluster health: cluster-health.sh (check_cluster_health, show_cluster_events, etc.)
+#   - Validation: validation.sh (get_pods_for_resource, debug_deployment_pods, etc.)
+#   - Monitoring: monitoring.sh (wait_for, handle_job_status, etc.)
+#   - Secrets: secrets.sh (get_secret_value, create_or_update_secret, etc.)
+#   - PVC: pvc.sh (expand_pvc, expand_statefulset_pvcs, etc.)
+#
+# This file remains for:
+#   - Resource management (scaling, Galera-aware scaling)
+#   - HPA creation
+#   - Maintenance mode
+#   - Legacy compatibility
 
 # =============================================================================
-# CLUSTER HEALTH AND EVENT MONITORING FUNCTIONS
+# SCALING AND RESOURCE MANAGEMENT
 # =============================================================================
-
-# Function to check for critical cluster events that would prevent successful deployment
-check_cluster_health() {
-  local resource_type="$1"     # e.g., "pod", "deployment", "statefulset"
-  local resource_name="$2"     # e.g., "mariadb-galera", "maintenance-message"
-  local namespace="${3:-$DEPLOY_NAMESPACE}"
-  local check_duration="${4:-5m}"  # How far back to check events (5m, 10m, 1h)
-
-  log_debug "🔍 Checking cluster health for $resource_type/$resource_name..."
-
-  # Get recent events for the specific resource
-  local events_output
-  events_output=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name",involvedObject.kind="$resource_type" --sort-by='.lastTimestamp' -o json 2>/dev/null)
-
-  if [[ -z "$events_output" || "$events_output" == '{"items":[]}' ]]; then
-    # No specific events found, check for general cluster issues
-    events_output=$(oc get events -n "$namespace" --sort-by='.lastTimestamp' -o json 2>/dev/null)
-  fi
-
-  # Parse events and look for critical issues
-  local critical_issues=()
-  local pvc_issues=0
-  local csi_issues=0
-  local node_issues=0
-  local network_issues=0
-
-  if [[ -n "$events_output" && "$events_output" != '{"items":[]}' ]]; then
-    # Check for PVC/storage issues
-    if echo "$events_output" | grep -qi "AttachVolume.Attach failed\|timed out waiting for external-attacher\|CSI driver.*attach.*failed\|volume.*attach.*failed"; then
-      pvc_issues=$((pvc_issues + 1))
-      critical_issues+=("PVC_ATTACH_FAILURES")
-    fi
-
-    # Check for CSI/storage driver issues
-    if echo "$events_output" | grep -qi "csi.trident.netapp.io\|DeadlineExceeded.*attach\|context deadline exceeded.*volume"; then
-      csi_issues=$((csi_issues + 1))
-      critical_issues+=("CSI_DRIVER_ISSUES")
-    fi
-
-    # Check for node/scheduling issues
-    if echo "$events_output" | grep -qi "FailedScheduling\|InsufficientMemory\|InsufficientCPU\|NodeNotReady"; then
-      node_issues=$((node_issues + 1))
-      critical_issues+=("NODE_SCHEDULING_ISSUES")
-    fi
-
-    # Check for network issues
-    if echo "$events_output" | grep -qi "NetworkNotReady\|CNI.*failed\|network.*timeout"; then
-      network_issues=$((network_issues + 1))
-      critical_issues+=("NETWORK_ISSUES")
-    fi
-  fi
-
-  # Determine severity and recommended action
-  local total_issues=$((pvc_issues + csi_issues + node_issues + network_issues))
-
-  if [[ $total_issues -gt 0 ]]; then
-    log_warn "⚠️ Cluster health issues detected for $resource_type/$resource_name:"
-    [[ $pvc_issues -gt 0 ]] && log_warn "  - PVC attachment failures: $pvc_issues"
-    [[ $csi_issues -gt 0 ]] && log_warn "  - CSI driver issues: $csi_issues"
-    [[ $node_issues -gt 0 ]] && log_warn "  - Node/scheduling issues: $node_issues"
-    [[ $network_issues -gt 0 ]] && log_warn "  - Network issues: $network_issues"
-
-    # Return the most severe issue type
-    if [[ $pvc_issues -gt 0 || $csi_issues -gt 0 ]]; then
-      echo "STORAGE_CRITICAL"
-      return 2  # Critical storage issues
-    elif [[ $node_issues -gt 0 ]]; then
-      echo "NODE_CRITICAL"
-      return 1  # Node issues
-    elif [[ $network_issues -gt 0 ]]; then
-      echo "NETWORK_WARNING"
-      return 1  # Network issues
-    fi
-  else
-    log_debug "✅ No critical cluster health issues detected"
-    echo "HEALTHY"
-    return 0
-  fi
-}
-
-# Function to display detailed cluster events for troubleshooting
-show_cluster_events() {
-  local resource_type="$1"
-  local resource_name="$2"
-  local namespace="${3:-$DEPLOY_NAMESPACE}"
-
-  log_info "📋 Recent cluster events for $resource_type/$resource_name:"
-  echo "----------------------------------------"
-
-  # Show events for the specific resource
-  local specific_events
-  specific_events=$(oc get events -n "$namespace" --field-selector involvedObject.name="$resource_name" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | tail -10)
-
-  if [[ -n "$specific_events" ]]; then
-    echo "🎯 Specific events for $resource_name:"
-    echo "$specific_events"
-    echo ""
-  fi
-
-  # Show general cluster events that might be relevant
-  echo "🌐 General cluster events (last 10):"
-  oc get events -n "$namespace" --sort-by='.lastTimestamp' --no-headers 2>/dev/null | grep -E "(Failed|Error|Warning)" | tail -10 | head -5
-  echo "----------------------------------------"
-}
-
-# Function to wait with centralized cluster health monitoring
-wait_with_cluster_monitoring() {
-  local resource_type="$1"      # e.g., "deployment", "statefulset"
-  local resource_name="$2"      # e.g., "mariadb-galera"
-  local wait_function="$3"      # Function to call for actual waiting
-  local namespace="${4:-$DEPLOY_NAMESPACE}"
-  local max_wait_time="${5:-3600}"  # 60 minutes default
-
-  # Centralized cluster monitoring configuration
-  local cluster_monitoring_enabled="${CLUSTER_HEALTH_MONITORING:-YES}"
-  local last_health_check=0
-  local health_check_interval=300  # Check every 5 minutes
-  local consecutive_storage_failures=0
-  local max_storage_failures=3
-
-  local elapsed_time=0
-
-  # Show monitoring configuration
-  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
-    log_info "  Starting deployment wait with centralized cluster health monitoring..."
-    log_info "  Resource: $resource_type/$resource_name"
-    log_info "  Max wait time: ${max_wait_time}s"
-    log_info "  Health check interval: ${health_check_interval}s"
-    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
-  else
-    log_info "  Starting deployment wait (cluster monitoring disabled)..."
-    log_info "  Resource: $resource_type/$resource_name"
-    log_info "  Max wait time: ${max_wait_time}s"
-    log_info "  CLUSTER_HEALTH_MONITORING: $cluster_monitoring_enabled"
-  fi
-
-  while [[ $elapsed_time -lt $max_wait_time ]]; do
-    # Run the actual wait function (non-blocking check)
-    if $wait_function; then
-      log_success "Resource deployment completed successfully!"
-      return 0
-    fi
-
-    # Perform cluster health check if enabled
-    if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
-      if [[ $((elapsed_time - last_health_check)) -ge $health_check_interval ]]; then
-        log_debug "Performing centralized cluster health check for $resource_type/$resource_name..."
-
-        local health_status
-        health_status=$(check_cluster_health "$resource_type" "$resource_name" "$namespace")
-        local health_exit_code=$?
-
-        case "$health_status" in
-          "STORAGE_CRITICAL")
-            consecutive_storage_failures=$((consecutive_storage_failures + 1))
-            log_warn "Storage issues detected while waiting for $resource_type/$resource_name (attempt $consecutive_storage_failures/$max_storage_failures)"
-
-            if [[ $consecutive_storage_failures -ge $max_storage_failures ]]; then
-              log_warn "Extending wait time due to persistent storage issues..."
-              # Extend max_wait_time for storage issues
-              max_wait_time=$((max_wait_time + 900))  # Add 15 minutes
-              log_info "Showing cluster events for troubleshooting..."
-              show_cluster_events "$resource_type" "$resource_name" "$namespace"
-            fi
-            ;;
-          "NODE_CRITICAL"|"NETWORK_WARNING")
-            log_warn "Cluster infrastructure issues detected while waiting for $resource_type/$resource_name"
-            show_cluster_events "$resource_type" "$resource_name" "$namespace"
-            ;;
-          "HEALTHY")
-            consecutive_storage_failures=0
-            log_debug "Centralized cluster health check: Normal (waiting for $resource_type/$resource_name)"
-            ;;
-        esac
-
-        last_health_check=$elapsed_time
-      fi
-    fi
-
-    # Sleep and update elapsed time
-    sleep 10
-    elapsed_time=$((elapsed_time + 10))
-
-    # Provide periodic status updates
-    if [[ $((elapsed_time % 300)) -eq 0 ]]; then  # Every 5 minutes
-      local minutes_elapsed=$((elapsed_time / 60))
-      local minutes_remaining=$(((max_wait_time - elapsed_time) / 60))
-      log_info "⏳ Still waiting... ${minutes_elapsed}m elapsed, ${minutes_remaining}m remaining"
-    fi
-  done
-
-  log_error "Deployment wait timed out after ${max_wait_time} seconds"
-
-  # Show final cluster health check on timeout if monitoring enabled
-  if [[ "$cluster_monitoring_enabled" == "YES" ]]; then
-    log_info "📋 Final centralized cluster health check..."
-    show_cluster_events "$resource_type" "$resource_name" "$namespace"
-  fi
-
-  return 1
-}
-
-# =============================================================================
-# RESOURCE MANAGEMENT FUNCTIONS
-# =============================================================================
-
-# Function to dynamically determine expected replica count from Kubernetes resource
-get_expected_replica_count() {
-  local selector="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-
-  # Extract resource name from selector (e.g., "app.kubernetes.io/name=mariadb-galera" -> "mariadb-galera")
-  local resource_name
-  if [[ "$selector" =~ = ]]; then
-    resource_name="${selector##*=}"
-  else
-    resource_name="$selector"
-  fi
-
-  # Check StatefulSet first (most common for databases)
-  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    local replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    if [[ -n "$replicas" && "$replicas" =~ ^[0-9]+$ && "$replicas" -gt 0 ]]; then
-      echo "$replicas"
-      return 0
-    else
-      echo "❌ Error: StatefulSet $resource_name exists but has invalid replica count: '$replicas'" >&2
-      return 1
-    fi
-  fi
-
-  # Check Deployment as fallback
-  if oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    local replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    if [[ -n "$replicas" && "$replicas" =~ ^[0-9]+$ && "$replicas" -gt 0 ]]; then
-      echo "$replicas"
-      return 0
-    else
-      echo "❌ Error: Deployment $resource_name exists but has invalid replica count: '$replicas'" >&2
-      return 1
-    fi
-  fi
-
-  echo "❌ Error: No StatefulSet or Deployment found for resource name: $resource_name (from selector: $selector)" >&2
-  return 1
-}
-
-get_replicas() {
-  local selector="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-
-  local resource_name
-  if [[ "$selector" =~ = ]]; then
-    resource_name="${selector##*=}"
-  else
-    resource_name="$selector"
-  fi
-
-  # Determine resource type and get current replicas
-  local original_replicas=""
-
-  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    original_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
-  elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    original_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}')
-  else
-    echo "0"
-    return 1
-  fi
-
-  echo "${original_replicas:-0}"
-  return 0
-}
-
-# Function to check if StatefulSet/Deployment has all replicas available and ready
-check_resource_ready() {
-  local selector="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-
-  # Extract resource name from selector
-  local resource_name
-  if [[ "$selector" =~ = ]]; then
-    resource_name="${selector##*=}"
-  else
-    resource_name="$selector"
-  fi
-
-  # Check StatefulSet first
-  if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-    local spec_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    local ready_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
-    local available_replicas=$(oc get statefulset "$resource_name" -n "$namespace" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
-
-    if [[ -n "$spec_replicas" && "$spec_replicas" =~ ^[0-9]+$ &&
-          -n "$ready_replicas" && "$ready_replicas" =~ ^[0-9]+$ &&
-          -n "$available_replicas" && "$available_replicas" =~ ^[0-9]+$ ]]; then
-      if [[ "$spec_replicas" -eq "$ready_replicas" && "$spec_replicas" -eq "$available_replicas" ]]; then
-        echo "✅ StatefulSet $resource_name: $available_replicas/$spec_replicas replicas ready and available"
-        return 0
-      else
-        echo "⏳ StatefulSet $resource_name: $ready_replicas/$spec_replicas ready, $available_replicas available"
-        return 1
-      fi
-    else
-      echo "⏳ StatefulSet $resource_name: waiting for status to be available..."
-      return 1
-    fi
-  fi
-
-  # Check Deployment as fallback
-  if oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-    local spec_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-    local ready_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
-    local available_replicas=$(oc get deployment "$resource_name" -n "$namespace" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
-
-    if [[ -n "$spec_replicas" && "$spec_replicas" =~ ^[0-9]+$ &&
-          -n "$ready_replicas" && "$ready_replicas" =~ ^[0-9]+$ &&
-          -n "$available_replicas" && "$available_replicas" =~ ^[0-9]+$ ]]; then
-      if [[ "$spec_replicas" -eq "$ready_replicas" && "$spec_replicas" -eq "$available_replicas" ]]; then
-        echo "✅ Deployment $resource_name: $available_replicas/$spec_replicas replicas ready and available"
-        return 0
-      else
-        echo "⏳ Deployment $resource_name: $ready_replicas/$spec_replicas ready, $available_replicas available"
-        return 1
-      fi
-    else
-      echo "⏳ Deployment $resource_name: waiting for status to be available..."
-      return 1
-    fi
-  fi
-
-  echo "❌ Error: No StatefulSet or Deployment found for resource name: $resource_name (from selector: $selector)" >&2
-  return 1
-}
-
-# Function to wait for resource to be ready with configurable timeout
-wait_for_resource_ready() {
-  local selector="$1"
-  local namespace="${2:-$DEPLOY_NAMESPACE}"
-  local max_retries="${3:-30}"
-  local wait_time="${4:-10}"
-  local description="${5:-resource}"
-
-  echo "⏳ Waiting for $description to be ready (selector: $selector)..."
-
-  # Extract resource type and name for cluster monitoring (if available)
-  local resource_type=""
-  local resource_name=""
-  if [[ "$selector" =~ = ]]; then
-    resource_name="${selector##*=}"
-    # Try to determine resource type by checking what exists
-    if oc get statefulset "$resource_name" -n "$namespace" &> /dev/null; then
-      resource_type="statefulset"
-    elif oc get deployment "$resource_name" -n "$namespace" &> /dev/null; then
-      resource_type="deployment"
-    fi
-  fi
-
-  # Use cluster health monitoring if enabled and resource type is available
-  if [[ "${CLUSTER_HEALTH_MONITORING:-YES}" == "YES" && -n "$resource_type" ]]; then
-    log_debug "🔄 Using centralized cluster health monitoring for $description ($resource_type/$resource_name)..."
-
-    # Create a single-iteration wrapper function for the centralized monitoring
-    eval "
-    readiness_check_wrapper() {
-      check_resource_ready \"$selector\" \"$namespace\"
-      return \$?
-    }
-    "
-
-    # Calculate timeout in seconds (max_retries * wait_time)
-    local timeout_seconds=$((max_retries * wait_time))
-
-    # Use centralized cluster health monitoring
-    wait_with_cluster_monitoring "$resource_type" "$resource_name" "readiness_check_wrapper" "$namespace" "$timeout_seconds"
-    local result=$?
-
-    if [[ $result -eq 0 ]]; then
-      echo "✅ $description is ready"
-    else
-      echo "⚠️ Timeout: $description did not become ready after $timeout_seconds seconds"
-    fi
-
-    return $result
-  else
-    log_debug "🔄 Using traditional waiting for $description (CLUSTER_HEALTH_MONITORING=${CLUSTER_HEALTH_MONITORING:-NO} or resource type unavailable)..."
-
-    # Use traditional waiting without cluster monitoring
-    local retries=0
-    while [[ $retries -lt $max_retries ]]; do
-      if check_resource_ready "$selector" "$namespace"; then
-        echo "✅ $description is ready"
-        return 0
-      else
-        echo "    $description not ready yet... (retry $retries/$max_retries)"
-      fi
-
-      retries=$((retries + 1))
-      sleep $wait_time
-    done
-
-    echo "⚠️ Timeout: $description did not become ready after $((max_retries * wait_time)) seconds"
-    return 1
-  fi
-}
 
 # Define error handling functions
 delete_pod() {
@@ -519,6 +854,174 @@ scale_simple() {
   local timeout="${5:-300s}"
 
   scale_resource "$type" "$resource_name" "$target_replicas" "$target_replicas" "$namespace" "$timeout" "false"
+}
+
+# =============================================================================
+# Galera-Aware Scaling Function
+# =============================================================================
+# Scales Galera StatefulSets safely with:
+# - Pre-flight cluster address verification
+# - Incremental scale-up (1→2→3→...→N) with sync validation per node
+# - Safe scale-down (leverages OrderedReady for reverse shutdown)
+# - Split-brain prevention and health checks
+#
+# Parameters:
+#   $1 - sts_name: Name of the StatefulSet (e.g., "mariadb-galera")
+#   $2 - target_replicas: Desired number of replicas
+#   $3 - namespace: Kubernetes namespace (optional, defaults to $DEPLOY_NAMESPACE)
+#
+# Returns:
+#   0: Success
+#   1: Failure (cluster address invalid, scaling failed, or health check failed)
+#
+# Links: docs/galera-deployment-best-practices.md#solution-4
+# =============================================================================
+scale_galera_statefulset() {
+  local sts_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  log_header "Galera-Aware Scaling: $sts_name → $target_replicas replicas"
+
+  # ============================================================
+  # STEP 1: PRE-FLIGHT VERIFICATION
+  # ============================================================
+  log_info "Step 1/4: Pre-flight cluster address verification"
+
+  # Source Galera utilities if not already loaded
+  if ! command -v galera_verify_cluster_address &>/dev/null; then
+    local galera_utils
+    galera_utils="$(dirname "${BASH_SOURCE[0]}")/database.sh"
+    if [[ -f "$galera_utils" ]]; then
+      source "$galera_utils"
+    else
+      log_error "Cannot load Galera utilities from: $galera_utils"
+      return 1
+    fi
+  fi
+
+  # Verify cluster address before any scaling operations
+  if ! galera_verify_cluster_address "$sts_name" "$namespace" "fix"; then
+    log_error "Cluster address verification failed - aborting scale operation"
+    log_error "Run galera-fix-cluster-address.sh manually to diagnose"
+    return 1
+  fi
+
+  # ============================================================
+  # STEP 2: DETERMINE SCALING DIRECTION
+  # ============================================================
+  log_info "Step 2/4: Determine scaling strategy"
+
+  local current_replicas
+  current_replicas=$(oc get sts/"$sts_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+
+  if [[ -z "$current_replicas" ]]; then
+    log_error "StatefulSet not found: $sts_name"
+    return 1
+  fi
+
+  log_debug "  Current replicas: $current_replicas"
+  log_debug "  Target replicas:  $target_replicas"
+
+  if [[ "$current_replicas" -eq "$target_replicas" ]]; then
+    log_success "Already at target replica count ($target_replicas)"
+    return 0
+  fi
+
+  # ============================================================
+  # STEP 3: EXECUTE SCALING OPERATION
+  # ============================================================
+  if [[ "$current_replicas" -lt "$target_replicas" ]]; then
+    # ------------------------------------------------------
+    # SCALE-UP: Incremental with sync validation
+    # ------------------------------------------------------
+    log_info "Step 3/4: Incremental scale-up ($current_replicas → $target_replicas)"
+    log_warn "⚠️  This will add nodes one-by-one with Galera sync validation"
+
+    for i in $(seq $((current_replicas + 1)) "$target_replicas"); do
+      log_info "  ➤ Scaling to $i replicas..."
+
+      # Scale to next replica count
+      if ! oc scale sts/"$sts_name" --replicas="$i" -n "$namespace"; then
+        log_error "Failed to scale to $i replicas"
+        return 1
+      fi
+
+      # Wait for new pod to become Ready
+      local new_pod="${sts_name}-$((i - 1))"
+      log_debug "    Waiting for pod $new_pod to become Ready..."
+
+      if ! oc wait --for=condition=Ready pod/"$new_pod" -n "$namespace" --timeout=300s 2>/dev/null; then
+        log_error "Pod $new_pod failed to become Ready within 5 minutes"
+        log_error "Check pod logs: oc logs $new_pod -n $namespace"
+        return 1
+      fi
+
+      # Verify Galera cluster sync before continuing
+      log_debug "    Verifying Galera sync at $i nodes..."
+
+      if ! galera_wait_for_sync "$sts_name" 30 10 "$i"; then
+        log_error "Galera cluster failed to sync after adding pod $new_pod"
+        log_error "Cluster may be in split-brain or SST is failing"
+        log_error "Check Galera status: oc exec $new_pod -n $namespace -- mysql -e 'SHOW STATUS LIKE \"wsrep%\"'"
+        return 1
+      fi
+
+      log_success "  ✔️  Pod $new_pod joined cluster successfully"
+    done
+
+    log_success "Scale-up complete: $current_replicas → $target_replicas"
+
+  elif [[ "$current_replicas" -gt "$target_replicas" ]]; then
+    # ------------------------------------------------------
+    # SCALE-DOWN: Safe (OrderedReady handles reverse order)
+    # ------------------------------------------------------
+    log_info "Step 3/4: Scale-down ($current_replicas → $target_replicas)"
+    log_debug "  OrderedReady ensures pods shut down in reverse order (N→...→3→2→1)"
+    log_debug "  Pod-0 (primary) will remain untouched"
+
+    if ! oc scale sts/"$sts_name" --replicas="$target_replicas" -n "$namespace"; then
+      log_error "Failed to scale down to $target_replicas"
+      return 1
+    fi
+
+    # Wait for scale-down to complete
+    log_debug "  Waiting for excess pods to terminate..."
+    for i in $(seq "$target_replicas" $((current_replicas - 1))); do
+      local removing_pod="${sts_name}-${i}"
+      oc wait --for=delete pod/"$removing_pod" -n "$namespace" --timeout=300s 2>/dev/null || true
+    done
+
+    log_success "Scale-down complete: $current_replicas → $target_replicas"
+  fi
+
+  # ============================================================
+  # STEP 4: POST-SCALING HEALTH CHECK
+  # ============================================================
+  log_info "Step 4/4: Final health verification"
+
+  # Wait a moment for cluster to stabilize
+  sleep 5
+
+  # Verify all pods are Ready
+  local ready_pods
+  ready_pods=$(oc get pods -l "app.kubernetes.io/name=${sts_name}" -n "$namespace" -o jsonpath='{.items[?(@.status.conditions[?(@.type=="Ready" && @.status=="True")])].metadata.name}' | wc -w)
+
+  if [[ "$ready_pods" -ne "$target_replicas" ]]; then
+    log_error "Health check failed: Expected $target_replicas Ready pods, found $ready_pods"
+    return 1
+  fi
+
+  # Verify Galera cluster health
+  if ! check_galera_cluster_health "app.kubernetes.io/name=$sts_name" "$namespace" "$target_replicas"; then
+    log_error "Galera cluster health check failed after scaling"
+    log_error "Run: oc exec ${sts_name}-0 -n $namespace -- mysql -e 'SHOW STATUS LIKE \"wsrep%\"'"
+    return 1
+  fi
+
+  log_success "✅ Galera cluster scaled successfully to $target_replicas replicas"
+  log_success "   Cluster is healthy and all nodes are in sync"
+  return 0
 }
 
 # Function to check if a resource exists
@@ -905,18 +1408,21 @@ set_resources() {
   cpu_limit=$(validate_and_format_resource_value "$cpu_limit" "m")
   mem_limit=$(validate_and_format_resource_value "$mem_limit" "Mi")
 
-  # Safety: if memory request is set but limit is unmanaged (0/null), set
-  # limit = request. Memory is incompressible — exceeding limit = OOM kill.
+  # Resource limit philosophy (BC Gov Platform best practices):
   #
-  # CPU limits are intentionally NOT set when unmanaged (0 in CSV).
-  # BC Gov Platform recommendation: do not set CPU limits, allowing containers
-  # to burst when node capacity allows. CPU is compressible — the kernel
-  # throttles (not kills) when contended. Requests guarantee scheduling.
-  if [[ "$mem_request" != "null" && "$mem_request" != "0" && \
-        ( "$mem_limit" == "null" || "$mem_limit" == "0" ) ]]; then
-    log_debug "Memory limit unset for $type/$deployment -- setting limit to match request (${mem_request})"
-    mem_limit="$mem_request"
-  fi
+  # CPU LIMITS: Never set (0 in CSV = omit from spec)
+  #   - CPU is compressible: kernel throttles under contention, doesn't kill
+  #   - Bursting above request improves throughput when node has spare capacity
+  #   - Requests guarantee minimum CPU for scheduling
+  #
+  # MEMORY LIMITS: Optional (0 in CSV = omit from spec)
+  #   - Memory is incompressible: exceeding limit = OOMKill
+  #   - Setting limit = request creates HARD CAP (no burst) → OOMKills during spikes
+  #   - Omitting limit allows burst up to namespace quota (Burstable QoS)
+  #   - Workloads with variable memory (PHP cache ops) should use 0 limit
+  #   - Workloads with predictable memory can set explicit limits for safety
+  #
+  # When 0 is specified in CSV, it's treated as "intentionally unset" (not safety-forced to request).
 
   # Validate: request must not exceed limit when both are set.
   # If request > limit, auto-correct by raising the limit to match.
@@ -2231,33 +2737,172 @@ create_or_update_configmap() {
   eval $create_cmd
 }
 
-# Function to restart deployments when secrets change (renamed from restart_deployment_for_secrets)
+# Generic function to restart any Kubernetes resource (deployment, statefulset, daemonset)
+restart_resource() {
+  local resource_type="$1"   # e.g., "deployment", "statefulset", "daemonset"
+  local resource_name="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local timeout="${4:-300s}"
+  local reason="${5:-configuration changes}"
+
+  log_info "🔄 Restarting $resource_type '$resource_name' to pick up $reason..."
+
+  # Standardize resource type names
+  case "$resource_type" in
+    "sts") resource_type="statefulset" ;;
+    "deploy") resource_type="deployment" ;;
+    "ds") resource_type="daemonset" ;;
+  esac
+
+  # Check if resource exists
+  if ! oc get "$resource_type" "$resource_name" -n "$namespace" &> /dev/null; then
+    log_error "$resource_type '$resource_name' not found in namespace '$namespace'"
+    return 1
+  fi
+
+  # Initiate rollout restart
+  if oc rollout restart "$resource_type/$resource_name" -n "$namespace"; then
+    log_info "$resource_type '$resource_name' restart initiated"
+
+    # Wait for the rollout to complete
+    if oc rollout status "$resource_type/$resource_name" -n "$namespace" --timeout="$timeout"; then
+      log_success "$resource_type '$resource_name' restart completed successfully"
+      return 0
+    else
+      log_error "$resource_type '$resource_name' restart timed out or failed after $timeout"
+      return 1
+    fi
+  else
+    log_error "Failed to restart $resource_type '$resource_name'"
+    return 1
+  fi
+}
+
+# Utility function to ensure StatefulSet partition is set correctly for updates
+# Kubernetes won't restart pods if partition >= replica count
+ensure_statefulset_partition() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local target_partition="${3:-0}"  # Default to 0 for full updates
+
+  local current_partition
+  current_partition=$(oc get statefulset/"$statefulset_name" -n "$namespace" -o jsonpath='{.spec.updateStrategy.rollingUpdate.partition}' 2>/dev/null)
+
+  # If partition not set or null, it defaults to 0 (all pods update)
+  if [[ -z "$current_partition" || "$current_partition" == "null" ]]; then
+    log_debug "Partition not set for $statefulset_name - assuming 0"
+    return 0
+  fi
+
+  # If already at target, nothing to do
+  if [[ "$current_partition" -eq "$target_partition" ]]; then
+    log_debug "Partition already at $target_partition for $statefulset_name"
+    return 0
+  fi
+
+  # Reset partition to target value
+  log_warn "⚠️  StatefulSet partition is $current_partition - resetting to $target_partition to enable pod updates"
+  if oc patch statefulset/"$statefulset_name" -n "$namespace" --type=json -p "[{\"op\":\"replace\",\"path\":\"/spec/updateStrategy/rollingUpdate/partition\",\"value\":$target_partition}]"; then
+    log_success "✅ Partition reset to $target_partition - all pods can now be updated"
+    return 0
+  else
+    log_error "❌ Failed to reset partition for $statefulset_name"
+    return 1
+  fi
+}
+
+# Specialized function to restart StatefulSets with Galera-specific safety checks
+restart_statefulset() {
+  local statefulset_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local timeout="${3:-600s}"
+  local verify_galera="${4:-auto}"  # "auto", "true", "false"
+  local expected_replicas="${5:-}"  # Optional: for Galera health verification
+
+  log_info "🔄 Restarting StatefulSet '$statefulset_name' with safety checks..."
+
+  # Safety check: Verify updateStrategy is RollingUpdate
+  local update_strategy
+  update_strategy=$(oc get statefulset/"$statefulset_name" -n "$namespace" -o jsonpath='{.spec.updateStrategy.type}' 2>/dev/null)
+
+  if [[ "$update_strategy" != "RollingUpdate" ]]; then
+    log_error "❌ StatefulSet updateStrategy is '$update_strategy' (expected: RollingUpdate)"
+    log_error "   Restart may not be safe for StatefulSet. Aborting."
+    log_error "   Manual intervention recommended: verify configuration before restarting."
+    return 1
+  fi
+
+  log_info "✅ Verified updateStrategy: RollingUpdate (safe for StatefulSet restart)"
+
+  # Ensure partition is set to 0 - pods won't restart if partition >= replica count
+  if ! ensure_statefulset_partition "$statefulset_name" "$namespace" 0; then
+    log_error "Failed to ensure correct partition setting - aborting restart"
+    return 1
+  fi
+
+  # Auto-detect if this is a Galera StatefulSet
+  local is_galera="false"
+  if [[ "$verify_galera" == "auto" ]]; then
+    if [[ "$statefulset_name" == *"galera"* || "$statefulset_name" == *"mariadb"* ]]; then
+      is_galera="true"
+      log_info "🔍 Detected Galera StatefulSet - will verify cluster health after restart"
+    fi
+  elif [[ "$verify_galera" == "true" ]]; then
+    is_galera="true"
+  fi
+
+  # Perform the restart using generic function
+  if restart_resource "statefulset" "$statefulset_name" "$namespace" "$timeout" "configuration changes"; then
+    # Galera-specific: Re-verify cluster health after restart
+    if [[ "$is_galera" == "true" ]]; then
+      log_info "🔍 Re-verifying Galera cluster health after restart..."
+
+      # If expected_replicas not provided, get it from the StatefulSet
+      if [[ -z "$expected_replicas" ]]; then
+        expected_replicas=$(oc get statefulset/"$statefulset_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+      fi
+
+      # Use wait_for_galera_sync if available
+      if type -t wait_for_galera_sync >/dev/null 2>&1; then
+        if wait_for_galera_sync "$statefulset_name" "" "" "$expected_replicas"; then
+          log_success "✅ Galera cluster healthy after restart"
+
+          # Additional split-brain check if function is available
+          if type -t check_galera_cluster_health >/dev/null 2>&1; then
+            check_galera_cluster_health "app.kubernetes.io/name=$statefulset_name" "$namespace" "$expected_replicas"
+            local galera_health=$?
+            if [[ $galera_health -eq 2 ]]; then
+              log_error "🚨 SPLIT-BRAIN DETECTED after restart!"
+              return 1
+            elif [[ $galera_health -eq 1 ]]; then
+              log_warn "⚠️ Some Galera pods unhealthy after restart"
+              return 1
+            fi
+          fi
+
+          return 0
+        else
+          log_error "⚠️ Galera cluster health check failed after restart"
+          return 1
+        fi
+      else
+        log_warn "wait_for_galera_sync not available - skipping Galera health verification"
+        return 0
+      fi
+    else
+      return 0
+    fi
+  else
+    return 1
+  fi
+}
+
+# Backward compatibility wrapper: restart deployments when secrets change
 restart_deployment() {
   local deployment_name="$1"
   local namespace="${2:-$DEPLOY_NAMESPACE}"
 
-  log_info " 🔄 Restarting deployment '$deployment_name' to pick up secret changes..."
-
-  if oc get deployment "$deployment_name" -n "$namespace" &> /dev/null; then
-    if oc rollout restart deployment/"$deployment_name" -n "$namespace"; then
-      log_info "Deployment '$deployment_name' restart initiated"
-
-      # Wait for the rollout to complete
-      if oc rollout status deployment/"$deployment_name" -n "$namespace" --timeout=300s; then
-        log_success "Deployment '$deployment_name' restart completed successfully"
-        return 0
-      else
-        log_error "Deployment '$deployment_name' restart timed out or failed"
-        return 1
-      fi
-    else
-      log_error "Failed to restart deployment '$deployment_name'"
-      return 1
-    fi
-  else
-    log_error "Deployment '$deployment_name' not found"
-    return 1
-  fi
+  restart_resource "deployment" "$deployment_name" "$namespace" "300s" "secret changes"
 }
 
 # =============================================================================
@@ -2724,3 +3369,410 @@ ensure_artifactory_access() {
   log_info "Processing ${#existing_resources[@]} existing resources..."
   ensure_image_pull_secrets_batch "$namespace" "${existing_resources[@]}"
 }
+
+# =============================================================================
+# PVC MANAGEMENT AND EXPANSION FUNCTIONS
+# =============================================================================
+
+# Function to check if a StorageClass supports volume expansion
+check_storage_class_expansion() {
+  local pvc_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  # Get the StorageClass name from the PVC
+  local storage_class
+  storage_class=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
+
+  if [[ -z "$storage_class" ]]; then
+    log_error "❌ Could not determine StorageClass for PVC: $pvc_name"
+    return 1
+  fi
+
+  # Check if the StorageClass allows volume expansion
+  local allows_expansion
+  allows_expansion=$(oc get storageclass "$storage_class" -o jsonpath='{.allowVolumeExpansion}' 2>/dev/null)
+
+  if [[ "$allows_expansion" == "true" ]]; then
+    log_debug "✅ StorageClass '$storage_class' supports volume expansion"
+    return 0
+  else
+    log_warn "⚠️ StorageClass '$storage_class' does not support volume expansion"
+    log_warn "   PVC: $pvc_name"
+    log_warn "   This may require manual intervention or StorageClass update"
+    return 1
+  fi
+}
+
+# Function to convert PVC capacity to consistent units (MiB)
+convert_capacity_to_mib() {
+  local capacity="$1"
+
+  # Remove whitespace
+  capacity=$(echo "$capacity" | tr -d '[:space:]')
+
+  # Extract number and unit
+  local value unit
+  if [[ "$capacity" =~ ^([0-9]+)([A-Za-z]*)$ ]]; then
+    value="${BASH_REMATCH[1]}"
+    unit="${BASH_REMATCH[2]}"
+  else
+    log_error "❌ Invalid capacity format: $capacity"
+    return 1
+  fi
+
+  # Convert to MiB
+  case "${unit^^}" in
+    ""|"MIB"|"MI")
+      echo "$value"
+      ;;
+    "GIB"|"GI"|"G")
+      echo $((value * 1024))
+      ;;
+    "TIB"|"TI"|"T")
+      echo $((value * 1024 * 1024))
+      ;;
+    "KIB"|"KI"|"K")
+      echo $((value / 1024))
+      ;;
+    *)
+      log_error "❌ Unsupported capacity unit: $unit"
+      return 1
+      ;;
+  esac
+}
+
+# Function to get current PVC capacity in MiB
+get_pvc_capacity_mib() {
+  local pvc_name="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+
+  local capacity
+  capacity=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.status.capacity.storage}' 2>/dev/null)
+
+  if [[ -z "$capacity" ]]; then
+    log_error "❌ Could not get capacity for PVC: $pvc_name"
+    return 1
+  fi
+
+  convert_capacity_to_mib "$capacity"
+}
+
+# Function to expand a single PVC
+expand_pvc() {
+  local pvc_name="$1"
+  local target_size_mib="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+  local dry_run="${4:-false}"
+
+  log_info "🔍 Checking PVC: $pvc_name"
+
+  # Check if PVC exists
+  if ! oc get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+    log_warn "⚠️ PVC not found: $pvc_name (may be created by StatefulSet later)"
+    return 0  # Not an error - PVC might not exist yet
+  fi
+
+  # Check StorageClass supports expansion
+  if ! check_storage_class_expansion "$pvc_name" "$namespace"; then
+    log_warn "⚠️ Skipping PVC expansion (StorageClass limitation): $pvc_name"
+    return 1
+  fi
+
+  # Get current capacity
+  local current_size_mib
+  current_size_mib=$(get_pvc_capacity_mib "$pvc_name" "$namespace")
+  if [[ $? -ne 0 ]]; then
+    log_error "❌ Failed to get current capacity for: $pvc_name"
+    return 1
+  fi
+
+  log_debug "   Current: ${current_size_mib}Mi, Target: ${target_size_mib}Mi"
+
+  # Compare sizes
+  if [[ $target_size_mib -eq $current_size_mib ]]; then
+    log_debug "   ✅ PVC already at target size"
+    return 0
+  elif [[ $target_size_mib -lt $current_size_mib ]]; then
+    log_warn "   ⚠️ Target size (${target_size_mib}Mi) is smaller than current (${current_size_mib}Mi)"
+    log_warn "   PVC shrinking is not supported in Kubernetes - skipping"
+    return 0
+  fi
+
+  # Expansion needed
+  local size_increase=$((target_size_mib - current_size_mib))
+  log_info "   📈 Expanding PVC from ${current_size_mib}Mi to ${target_size_mib}Mi (+${size_increase}Mi)"
+
+  if [[ "$dry_run" == "true" ]]; then
+    log_info "   🔍 DRY RUN: Would expand PVC to ${target_size_mib}Mi"
+    return 0
+  fi
+
+  # Perform the expansion
+  if oc patch pvc "$pvc_name" -n "$namespace" -p "{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"${target_size_mib}Mi\"}}}}" &>/dev/null; then
+    log_success "   ✅ PVC expansion initiated: $pvc_name"
+
+    # Wait for expansion to complete (with timeout)
+    local attempts=0
+    local max_attempts=30  # 5 minutes
+    local expanded=false
+
+    while [[ $attempts -lt $max_attempts ]]; do
+      local new_size_mib
+      new_size_mib=$(get_pvc_capacity_mib "$pvc_name" "$namespace")
+
+      if [[ $new_size_mib -ge $target_size_mib ]]; then
+        log_success "   ✅ PVC expansion completed: ${new_size_mib}Mi"
+        expanded=true
+        break
+      fi
+
+      log_debug "   ⏳ Waiting for expansion... (${attempts}0s)"
+      sleep 10
+      ((attempts++))
+    done
+
+    if [[ "$expanded" == "false" ]]; then
+      log_warn "   ⚠️ PVC expansion timeout - may still be in progress"
+      log_warn "   Check: oc get pvc $pvc_name -n $namespace"
+    fi
+
+    return 0
+  else
+    log_error "   ❌ Failed to expand PVC: $pvc_name"
+    return 1
+  fi
+}
+
+# Function to expand PVCs for a StatefulSet based on CSV sizing
+expand_statefulset_pvcs() {
+  local statefulset_name="$1"
+  local target_pvc_size_mib="$2"
+  local expected_replica_count="$3"
+  local namespace="${4:-$DEPLOY_NAMESPACE}"
+  local dry_run="${5:-false}"
+
+  log_info "🗄️ PVC Expansion Check for StatefulSet: $statefulset_name"
+  log_info "   Target PVC Size: ${target_pvc_size_mib}Mi"
+  log_info "   Expected Replicas: $expected_replica_count"
+
+  # Verify StatefulSet exists
+  if ! oc get statefulset "$statefulset_name" -n "$namespace" &>/dev/null; then
+    log_error "❌ StatefulSet not found: $statefulset_name"
+    return 1
+  fi
+
+  # Get current replica count
+  local current_replicas
+  current_replicas=$(oc get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+
+  if [[ -n "$current_replicas" && "$current_replicas" -ne 0 ]]; then
+    log_warn "⚠️ StatefulSet has $current_replicas active replicas"
+    log_warn "   PVC expansion is safer when replicas=0"
+    log_warn "   Consider scaling down first to avoid sync issues during expansion"
+  else
+    log_success "✅ StatefulSet is scaled to 0 - safe for PVC expansion"
+  fi
+
+  # Find all PVCs for this StatefulSet
+  local pvc_pattern="data-${statefulset_name}-"
+  local pvcs
+  pvcs=$(oc get pvc -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep "^${pvc_pattern}")
+
+  if [[ -z "$pvcs" ]]; then
+    log_warn "⚠️ No PVCs found matching pattern: ${pvc_pattern}*"
+    log_info "   PVCs will be created when StatefulSet scales up"
+    return 0
+  fi
+
+  local pvc_count=0
+  local expansion_count=0
+  local failed_count=0
+
+  for pvc in $pvcs; do
+    ((pvc_count++))
+
+    if expand_pvc "$pvc" "$target_pvc_size_mib" "$namespace" "$dry_run"; then
+      ((expansion_count++))
+    else
+      ((failed_count++))
+    fi
+  done
+
+  log_info "📊 PVC Expansion Summary:"
+  log_info "   Total PVCs: $pvc_count"
+  log_info "   Expanded/Verified: $expansion_count"
+
+  if [[ $failed_count -gt 0 ]]; then
+    log_warn "   Failed: $failed_count"
+    return 1
+  fi
+
+  log_success "✅ All PVCs ready for StatefulSet scaling"
+  return 0
+}
+
+# Function to read CSV and expand PVCs for all StatefulSets
+# WARNING: This function is deprecated and should NOT be called from right-sizing.sh
+# It can break deployments where PVCs are preserved but pods are recreated (e.g., Redis)
+# Use expand_mariadb_galera_pvcs() instead for specific MariaDB workflow
+expand_pvcs_from_csv() {
+  local csv_file="$1"
+  local namespace="${2:-$DEPLOY_NAMESPACE}"
+  local dry_run="${3:-false}"
+
+  log_warn "⚠️ expand_pvcs_from_csv() is deprecated"
+  log_warn "   This function should only be used for specific StatefulSet deployments"
+  log_warn "   NOT for general right-sizing operations"
+
+  if [[ ! -f "$csv_file" ]]; then
+    log_error "❌ CSV file not found: $csv_file"
+    return 1
+  fi
+
+  log_info "📋 Reading PVC sizing from: $csv_file"
+
+  local total_sts=0
+  local processed_sts=0
+  local failed_sts=0
+
+  # Read CSV and process StatefulSets (skip header)
+  while IFS=, read -r deployment type pod_count max_pods pvc_count pvc_capacity cpu_req cpu_lim mem_req mem_lim cpu_scale; do
+    # Skip header
+    [[ "$deployment" == "Deployment" ]] && continue
+
+    # Only process StatefulSets with PVCs
+    if [[ "$type" == "sts" && "$pvc_capacity" -gt 0 ]]; then
+      ((total_sts++))
+      log_info ""
+      log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      if expand_statefulset_pvcs "$deployment" "$pvc_capacity" "$pod_count" "$namespace" "$dry_run"; then
+        ((processed_sts++))
+      else
+        ((failed_sts++))
+      fi
+    fi
+  done < <(tail -n +2 "$csv_file")
+
+  log_info ""
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "📊 CSV-Based PVC Expansion Complete"
+  log_info "   StatefulSets Found: $total_sts"
+  log_info "   Successfully Processed: $processed_sts"
+
+  if [[ $failed_sts -gt 0 ]]; then
+    log_warn "   Failed: $failed_sts"
+    return 1
+  fi
+
+  log_success "✅ All StatefulSet PVCs verified/expanded"
+  return 0
+}
+
+# =============================================================================
+# MARIADB GALERA SPECIFIC PVC EXPANSION
+# =============================================================================
+
+# Function to expand MariaDB Galera PVCs during scale-up
+# Monitors for new PVCs as StatefulSet scales up and expands each to target size
+#
+# This function is specifically designed for MariaDB Galera's deployment workflow:
+# 1. StatefulSet scaled to 0, replica PVCs deleted
+# 2. Helm upgrade applied with replicas=0
+# 3. StatefulSet scaled up to target replicas
+# 4. This function watches for PVC creation and expands each immediately
+#
+# NOTE: This should NOT be used for other StatefulSets without careful consideration
+expand_mariadb_galera_pvcs() {
+  local statefulset_name="$1"
+  local target_replicas="$2"
+  local namespace="${3:-$DEPLOY_NAMESPACE}"
+
+  # Get target PVC size from CSV
+  local csv_file="./openshift/${namespace}-sizing.csv"
+  if [[ ! -f "$csv_file" ]]; then
+    log_warn "⚠️ CSV file not found: $csv_file"
+    return 1
+  fi
+
+  local target_pvc_size=$(grep "^${statefulset_name}," "$csv_file" | cut -d',' -f6)
+
+  if [[ -z "$target_pvc_size" || "$target_pvc_size" -eq 0 ]]; then
+    log_debug "No PVC size specified in CSV - skipping expansion"
+    return 0
+  fi
+
+  # Convert MiB to Gi for oc patch command
+  local target_pvc_size_gi=$(( (target_pvc_size + 1023) / 1024 ))
+
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "Monitoring PVCs during scale-up"
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_info "   Watching for PVCs: data-${statefulset_name}-{0..${target_replicas}}"
+  log_info "   Will expand to: ${target_pvc_size_gi}Gi"
+  echo ""
+
+  # Process each expected PVC (0 through target_replicas-1)
+  for i in $(seq 0 $((target_replicas - 1))); do
+    local pvc_name="data-${statefulset_name}-${i}"
+
+    log_info "   [${i}/${target_replicas}] Waiting for PVC: $pvc_name"
+
+    # Wait for PVC to be created (max 2 minutes per PVC)
+    local wait_attempts=0
+    local max_wait_attempts=24  # 2 minutes (24 * 5 seconds)
+
+    while [[ $wait_attempts -lt $max_wait_attempts ]]; do
+      if oc get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+        log_success "   PVC created: $pvc_name"
+
+        # Get current PVC size
+        local current_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.resources.requests.storage}')
+        log_debug "      Current size: $current_size"
+
+        # Patch PVC to target size
+        log_info "      Patching PVC to ${target_pvc_size_gi}Gi..."
+        if oc patch pvc "$pvc_name" -n "$namespace" -p "{\"spec\": {\"resources\": {\"requests\": {\"storage\": \"${target_pvc_size_gi}Gi\"}}}}" &>/dev/null; then
+          # Verify the patch
+          local new_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.spec.resources.requests.storage}')
+          local status_size=$(oc get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.status.capacity.storage}' 2>/dev/null || echo "pending")
+
+          log_success "      PVC patched successfully"
+          log_debug "         Requested: $new_size"
+          log_debug "         Status: $status_size"
+
+          # Note: We don't wait for expansion to complete to reduce deployment time
+          # Storage expansion happens asynchronously and typically completes quickly
+          # The request is patched immediately, actual expansion happens in background
+          if [[ "$status_size" == "pending" || "$status_size" != "${target_pvc_size_gi}Gi" ]]; then
+            log_info "      PVC expansion will complete asynchronously"
+          fi
+        else
+          log_warn "      Failed to patch PVC (may already be at target size)"
+          log_warn "         Current: $current_size, Target: ${target_pvc_size_gi}Gi"
+        fi
+
+        break
+      fi
+
+      sleep 5
+      ((wait_attempts++))
+    done
+
+    if [[ $wait_attempts -eq $max_wait_attempts ]]; then
+      log_error "   Timeout waiting for PVC: $pvc_name"
+      log_error "      This may indicate StatefulSet scaling issues"
+      break
+    fi
+
+    echo ""
+  done
+
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log_success "PVC expansion phase complete"
+  log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  return 0
+}
+

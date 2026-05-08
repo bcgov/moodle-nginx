@@ -47,6 +47,7 @@ ENV REPORT_ALL_BACKUPS_DIR=$MOODLE_APP_DIR/report/allbackups
 RUN echo "Building Moodle version: $MOODLE_BRANCH_VERSION for $PHP_INI_ENVIRONMENT environment for a $DEPLOY_ENVIRONMENT deployment"
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
+    bash \
     dos2unix \
     git \
     zlib1g-dev \
@@ -146,9 +147,18 @@ COPY ./config/dependencies/dependency-config.json ./config/dependencies/
 COPY ./openshift/scripts/populate-dependency-manifests.sh ./openshift/scripts/
 
 # Generate ephemeral composer.json using the populate-dependency-manifests.sh script
-RUN chmod +x ./openshift/scripts/populate-dependency-manifests.sh && \
+# Use bash explicitly since the script requires bash features
+RUN echo "=== DEBUG: Verifying bash installation ===" && \
+    which bash && \
+    bash --version && \
+    echo "=== DEBUG: Verifying required tools ===" && \
+    which jq && jq --version && \
+    echo "=== DEBUG: Verifying dependency files ===" && \
+    ls -la ./example.versions.env && \
+    ls -la ./config/dependencies/dependency-config.json && \
+    ls -la ./openshift/scripts/populate-dependency-manifests.sh && \
     echo "=== DEBUG: Running dependency manifest generation ===" && \
-    ./openshift/scripts/populate-dependency-manifests.sh && \
+    bash ./openshift/scripts/populate-dependency-manifests.sh && \
     echo "=== DEBUG: Generated composer.json content ===" && \
     cat ./config/moodle/composer.json && \
     echo "=== DEBUG: Copying to Moodle directory ===" && \

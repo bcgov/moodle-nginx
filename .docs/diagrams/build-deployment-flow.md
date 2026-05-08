@@ -586,15 +586,25 @@ stateDiagram-v2
 - **Environment**: `example.env`, `example.versions.env`
 - **Security**: `.docs/security-scanning.md`
 - **Dependencies**: `.docs/centralized-dependency-management.md`
+- **Right-Sizing**: `openshift/<namespace>-sizing.csv`
+- **Database Config**: `config/mariadb/<namespace>.cnf`
 
 ---
 
 ## Related Documentation
 
+### CI/CD Pipeline
 - **[Security Scanning Flow](./security-scanning-flow.md)** - Detailed security architecture
 - **[Security Scanning Guide](../security-scanning.md)** - Quick reference
 - **[Security Best Practices](../security-scanning-best-practices.md)** - Strategic guidance
 - **[Vulnerability Exceptions](../vulnerability-exceptions.md)** - Exception management
+
+### Operations & Development
+- **[Developer Tools](../developer/README.md)** - PowerShell tools and in-cluster automation
+- **[Right-Sizing Integration](../developer/right-sizing-galera-integration.md)** - Unified CSV + my.cnf workflow
+- **[Split-Brain Resolution](../developer/split-brain/README.md)** - Galera timeout configuration
+- **[Pod Health Monitor](../galera-monitoring-solution.md)** - Auto-healing and monitoring
+- **[Project Progress](../project/progress.md)** - Milestones and timeline
 
 ---
 

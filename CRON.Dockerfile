@@ -16,7 +16,7 @@ ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/do
 RUN chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions pdo pdo_mysql mysqli gd soap intl zip xsl opcache ldap
 
-RUN apt-get update && apt-get install -y --no-install-recommends dos2unix cron supervisor zlib1g-dev libpng-dev libxml2-dev libzip-dev libxslt-dev wget libfcgi-bin \
+RUN apt-get update && apt-get install -y --no-install-recommends bash dos2unix cron supervisor zlib1g-dev libpng-dev libxml2-dev libzip-dev libxslt-dev wget libfcgi-bin \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 

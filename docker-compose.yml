@@ -5,10 +5,6 @@ include:
   # Comment the line below to disable the Moodle intermediate upgrade service (3x moodle instances)
   # - docker-upgrade-moodle.yml
 
-# Read environment variables directly from example.versions.env
-env_file:
-  - example.versions.env
-
 services:
   build-0:
     extends:
@@ -21,6 +17,8 @@ services:
       # Use environment variables from example.versions.env
       PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       MOODLE_BRANCH_VERSION: ${MOODLE_BRANCH_VERSION:-MOODLE_401_STABLE}
+    env_file:
+      - example.versions.env
     build:
       args:
         DOCKER_FROM_IMAGE: ${IMAGE_REPO}${PHP_IMAGE:-php:8.3-fpm}
@@ -28,6 +26,7 @@ services:
     volumes:
       - ./temp/docker/build-0/var/www/html:/var/www/html:delegated
       - ./openshift/scripts/migrate-build-files.sh:/usr/local/bin/migrate-build-files.sh:delegated
+      # _utils.sh path matches OpenShift Job initContainers (see migrate-build-files.yml, moodle-upgrade.yml)
       - ./openshift/scripts/_utils.sh:/usr/local/bin/_utils.sh:delegated
       - ./openshift/scripts/moodle-upgrade.sh:/usr/local/bin/moodle-upgrade.sh:delegated
       - ./openshift/scripts/moodle-mojibake-replace.sh:/usr/local/bin/moodle-mojibake-replace.sh:delegated
@@ -66,6 +65,8 @@ services:
       PHP_IMAGE: ${PHP_IMAGE:-php:8.3-fpm}
       DB_HOST: db-0
       IMAGE_REPO: ""
+    env_file:
+      - example.versions.env
     build:
       args:
         IMAGE_REPO: ""
@@ -101,6 +102,8 @@ services:
       DB_DEPLOYMENT_NAME: db-0
       DB_HOST: db-0
       IMAGE_REPO: ""
+    env_file:
+      - example.versions.env
     deploy:
       replicas: 1
     depends_on:

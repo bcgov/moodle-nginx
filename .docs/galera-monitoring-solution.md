@@ -68,12 +68,21 @@ Finds StatefulSet name using label selector instead of pod name parsing.
 sts_name=$(find_statefulset_by_selector "app.kubernetes.io/name=mariadb-galera" "$DEPLOY_NAMESPACE")
 ```
 
+#### `check_galera_pod_ready(pod_name, namespace)`
+Individual pod health check. A pod is healthy if `wsrep_local_state_comment=Synced` and `wsrep_cluster_status=Primary`. Cluster size is **not** validated here — a node can be individually healthy even when another node is disconnected (size < expected). Cluster-wide size convergence is verified separately by `wait_for_galera_sync`.
+
 #### `check_galera_cluster_health(selector, namespace, expected_size)`
-Comprehensive health check using existing utility functions.
-- Return codes: 0=healthy, 1=some unhealthy, 2=split-brain
+Comprehensive cluster-level health check with split-brain detection.
+- Return codes: 0=healthy, 1=some unhealthy, 2=split-brain (multiple UUIDs)
 
 #### `auto_heal_galera_cluster(selector, namespace)`
 Performs StatefulSet scaling auto-heal with proper verification.
+
+#### `wait_for_galera_sync(galera_name, max_retries, wait_time, expected_pods)`
+Waits for all pods to reach Synced/Primary state with matching cluster_size.
+Includes **IST failure auto-recovery**: after 3 retries, detects pods stuck in
+`Initialized/Disconnected` state (common after IST write set gaps) and
+auto-deletes them for a clean SST rejoin.
 
 #### `check_and_heal_galera_cluster(selector, namespace, expected_size, auto_heal)`
 Combined function that checks health and optionally performs auto-heal.

@@ -192,8 +192,8 @@ function Get-VersionFromImage {
     param([string]$ImageTag)
 
     # Extract version from image tags like:
-    # bitnami/php-fpm:8.1.31-debian-12 → 8.1
-    # node:22.19.1-alpine → 22
+    # bitnami/php-fpm:8.1.31-debian-12 > 8.1
+    # node:22.19.1-alpine > 22
     if ($ImageTag -match '(\d+\.\d+)') {
         return $matches[1]
     }
@@ -208,10 +208,10 @@ function Get-MinVersionFromConstraint {
     param([string]$Constraint)
 
     # Extract minimum version from constraints:
-    # ">=8.1" → 8.1
-    # "^8.1.0" → 8.1
-    # "~8.1.0" → 8.1
-    # ">=22.0.0" → 22
+    # ">=8.1" > 8.1
+    # "^8.1.0" > 8.1
+    # "~8.1.0" > 8.1
+    # ">=22.0.0" > 22
     if ($Constraint -match '(\d+\.\d+|\d+)') {
         return $matches[1]
     }

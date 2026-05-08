@@ -17,6 +17,7 @@ RUN echo "Building PHP version: $DOCKER_FROM_IMAGE for $PHP_INI_ENVIRONMENT envi
 
 # Update and install additional tools
 RUN apt-get update && apt-get install --no-install-recommends -y \
+    bash \
     dos2unix \
     zlib1g-dev \
     libssl-dev \

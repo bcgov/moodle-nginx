@@ -9,21 +9,63 @@ parameters:
   - name: OPENSHIFT_SERVER
     description: The OpenShift server URL
     required: true
-  - name: OPENSHIFT_SA_TOKEN_NAME
-    description: The name of the secret containing the service account token
-    required: true
   - name: DEPLOY_NAMESPACE
     description: The namespace where the deployment is located
     required: true
+  - name: OPENSHIFT_SA_TOKEN_NAME
+    description: Name of the secret containing the service account token
+    value: "github-actions-sa-token"
   - name: ROCKETCHAT_WEBHOOK_URL
     description: Rocket.Chat webhook URL for notifications
     value: ""
   - name: MONITORING_INTERVAL
     description: Interval between health checks in seconds
     value: "60"
+  - name: GALERA_CHECK_INTERVAL
+    description: Interval between Galera health checks in seconds
+    value: "300"
+  - name: ERROR_THRESHOLD
+    description: Consecutive log error threshold before pod restart
+    value: "3"
+  - name: STATUS_REPORT_INTERVAL
+    description: Interval for healthy status summary logs in seconds
+    value: "600"
+  - name: MANUAL_MODE
+    description: Set true to disable all auto-healing actions
+    value: "false"
+  - name: AUTO_APPLY_GALERA_TIMEOUTS
+    description: Auto-apply Galera timeout settings during recovery
+    value: "true"
+  - name: GALERA_AUTO_HEAL_LOCK_TTL_SECONDS
+    description: Lock TTL to prevent overlapping auto-heal runs
+    value: "1800"
+  - name: GALERA_AUTO_HEAL_FAILURE_COOLDOWN_SECONDS
+    description: Cooldown after failed auto-heal before retrying
+    value: "900"
+  - name: GALERA_AUTO_HEAL_ENABLE_FAILSAFE
+    description: On failed auto-heal, activate failsafe lockdown
+    value: "true"
+  - name: GALERA_AUTO_HEAL_FAILSAFE_SCALE_REPLICAS
+    description: Replica target when failsafe activates (0 recommended)
+    value: "0"
+  - name: GALERA_AUTO_HEAL_FAILSAFE_SET_MANUAL_MODE
+    description: Set pod-health-monitor MANUAL_MODE=true during failsafe
+    value: "true"
+  - name: AUTO_ENABLE_MAINTENANCE
+    description: Auto-enable maintenance mode when auto-heal failsafe activates
+    value: "true"
+  - name: AUTO_ENABLE_MOODLE_MAINTENANCE
+    description: Enable Moodle maintenance mode when AUTO_ENABLE_MAINTENANCE triggers
+    value: "YES"
+  - name: AUTO_ENABLE_OPENSHIFT_MAINTENANCE
+    description: Redirect OpenShift routes to maintenance page when AUTO_ENABLE_MAINTENANCE triggers
+    value: "YES"
+  - name: AUTO_MAINTENANCE_TIMEOUT_MINUTES
+    description: Timeout window for emergency maintenance MANUAL_MODE lock
+    value: "240"
   - name: MONITOR_IMAGE
-    description: Full container image reference for the pod health monitor
-    required: true
+    description: Full container image reference for the pod health monitor (oc CLI image)
+    value: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
 objects:
   - apiVersion: v1
     kind: Secret
@@ -54,10 +96,11 @@ objects:
           labels:
             app: pod-health-monitor
         spec:
+          serviceAccountName: github-actions-sa
           containers:
           - name: health-monitor
             image: ${MONITOR_IMAGE}
-            command: ["/bin/bash", "/opt/monitor/monitor-pods.sh"]
+            command: ["/bin/bash", "/scripts/monitor-pods.sh"]
             resources:
               requests:
                 cpu: 25m
@@ -66,17 +109,46 @@ objects:
                 cpu: 100m
                 memory: 256Mi
             env:
+            - name: OPENSHIFT_SERVER
+              value: ${OPENSHIFT_SERVER}
+            - name: DEPLOY_NAMESPACE
+              value: ${DEPLOY_NAMESPACE}
             - name: OPENSHIFT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: ${OPENSHIFT_SA_TOKEN_NAME}
                   key: token
-            - name: OPENSHIFT_SERVER
-              value: ${OPENSHIFT_SERVER}
-            - name: DEPLOY_NAMESPACE
-              value: ${DEPLOY_NAMESPACE}
             - name: MONITORING_INTERVAL
               value: ${MONITORING_INTERVAL}
+            - name: GALERA_CHECK_INTERVAL
+              value: ${GALERA_CHECK_INTERVAL}
+            - name: ERROR_THRESHOLD
+              value: ${ERROR_THRESHOLD}
+            - name: STATUS_REPORT_INTERVAL
+              value: ${STATUS_REPORT_INTERVAL}
+            # Manual mode override - set to 'true' to disable auto-healing during manual intervention
+            - name: MANUAL_MODE
+              value: ${MANUAL_MODE}
+            - name: AUTO_APPLY_GALERA_TIMEOUTS
+              value: ${AUTO_APPLY_GALERA_TIMEOUTS}
+            - name: GALERA_AUTO_HEAL_LOCK_TTL_SECONDS
+              value: ${GALERA_AUTO_HEAL_LOCK_TTL_SECONDS}
+            - name: GALERA_AUTO_HEAL_FAILURE_COOLDOWN_SECONDS
+              value: ${GALERA_AUTO_HEAL_FAILURE_COOLDOWN_SECONDS}
+            - name: GALERA_AUTO_HEAL_ENABLE_FAILSAFE
+              value: ${GALERA_AUTO_HEAL_ENABLE_FAILSAFE}
+            - name: GALERA_AUTO_HEAL_FAILSAFE_SCALE_REPLICAS
+              value: ${GALERA_AUTO_HEAL_FAILSAFE_SCALE_REPLICAS}
+            - name: GALERA_AUTO_HEAL_FAILSAFE_SET_MANUAL_MODE
+              value: ${GALERA_AUTO_HEAL_FAILSAFE_SET_MANUAL_MODE}
+            - name: AUTO_ENABLE_MAINTENANCE
+              value: ${AUTO_ENABLE_MAINTENANCE}
+            - name: AUTO_ENABLE_MOODLE_MAINTENANCE
+              value: ${AUTO_ENABLE_MOODLE_MAINTENANCE}
+            - name: AUTO_ENABLE_OPENSHIFT_MAINTENANCE
+              value: ${AUTO_ENABLE_OPENSHIFT_MAINTENANCE}
+            - name: AUTO_MAINTENANCE_TIMEOUT_MINUTES
+              value: ${AUTO_MAINTENANCE_TIMEOUT_MINUTES}
             - name: ROCKET_CHAT_WEBHOOK
               valueFrom:
                 secretKeyRef:
@@ -103,13 +175,10 @@ objects:
                   key: database-name
                   optional: true
             volumeMounts:
-            - name: script-volume
+            - name: openshift-scripts
               mountPath: /scripts
-            - name: monitor-script
-              mountPath: /opt/monitor/monitor-pods.sh
-              subPath: monitor-pods.sh
-            - name: migrate-courses
-              mountPath: /var/www/html/migrate-courses
+            - name: openshift-resources
+              mountPath: /openshift
             livenessProbe:
               exec:
                 command:
@@ -123,22 +192,20 @@ objects:
                 command:
                 - /bin/bash
                 - -c
-                - "oc whoami >/dev/null 2>&1"
-              initialDelaySeconds: 10
-              periodSeconds: 30
+                - "ps aux | grep -v grep | grep monitor-pods.sh"
+              initialDelaySeconds: 30
+              periodSeconds: 60
+              timeoutSeconds: 5
+              failureThreshold: 3
           volumes:
-          - name: script-volume
+          - name: openshift-scripts
             configMap:
-              name: check-pod-logs-script
+              name: openshift-scripts
               defaultMode: 0755
-          - name: monitor-script
+          - name: openshift-resources
             configMap:
-              name: pod-health-monitor-script
-              defaultMode: 0755
-          - name: migrate-courses
-            configMap:
-              name: migrate-courses
-              defaultMode: 0755
+              name: openshift-resources
+              defaultMode: 0644
           restartPolicy: Always
 
   - apiVersion: v1

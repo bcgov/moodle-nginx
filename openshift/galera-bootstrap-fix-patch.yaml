@@ -1,0 +1,47 @@
+## Galera Bootstrap Fix - Init Container Patch
+## Applied by galera_safe_upgrade() Step 3.5 during auto-heal recovery.
+## Can also be applied manually to fix safe_to_bootstrap issues:
+##
+##   oc patch statefulset/mariadb-galera -n $NAMESPACE --type=strategic --patch-file openshift/galera-bootstrap-fix-patch.yaml
+##
+## The init container runs BEFORE MariaDB starts and:
+##   1. Sets safe_to_bootstrap: 1 in grastate.dat (allows bootstrap)
+##   2. Removes gvwstate.dat (prevents stale view state conflicts)
+##
+## Remove after recovery with:
+##   oc patch statefulset/mariadb-galera -n $NAMESPACE --type=json -p '[{"op":"remove","path":"/spec/template/spec/initContainers"}]'
+##
+## Note: The image below must match your cluster's registry. The automated
+## galera_safe_upgrade() script detects the correct image from the StatefulSet.
+## For manual use, update the image to match your environment:
+##   artifacts.developer.gov.bc.ca/m950-learning/bitnamilegacy/mariadb-galera:10.6  (BCGov Artifactory)
+##   docker.io/bitnami/mariadb-galera:10.6                                          (Docker Hub)
+##
+## See: docs/manual-galera-troubleshooting.md
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: bootstrap-fix
+        image: artifacts.developer.gov.bc.ca/m950-learning/bitnamilegacy/mariadb-galera:10.6
+        command:
+        - bash
+        - -c
+        - |
+          f="/bitnami/mariadb/data/grastate.dat"
+          gv="/bitnami/mariadb/data/gvwstate.dat"
+          echo "=== bootstrap-fix init container ==="
+          if [ -f "$f" ]; then
+            echo "BEFORE:"
+            cat "$f"
+            sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' "$f"
+            rm -f "$gv" 2>/dev/null
+            echo "---"
+            echo "AFTER:"
+            cat "$f"
+          else
+            echo "No grastate.dat found (fresh PVC - will bootstrap normally)"
+          fi
+        volumeMounts:
+        - name: data
+          mountPath: /bitnami/mariadb

@@ -750,14 +750,57 @@ manage_maintenance_mode() {
   local action=$1
   local deployment_name=$2
   local route_name=$3
-  local max_retries=${4:-5} # Default to 5 retries for maintenance mode operation
+  local max_retries=${4:-10} # Increased from 5 to 10 for production (5 Galera replicas take longer)
   local wait_time=${5:-30} # Default to 30 seconds between retries
   local retry_count=0
 
+  # =========================================================================
+  # REDIS PROXY HEALTH CHECK AND AUTO-RESTART
+  # =========================================================================
+  # Check for stuck redis-proxy pods BEFORE attempting maintenance mode.
+  # redis-proxy can get "stuck" during MariaDB startup if it can't establish
+  # initial connections. Restarting the pod resolves the connection state.
+  # =========================================================================
+  echo "🔍 Checking Redis Proxy health before maintenance mode operation..."
+
+  # Get redis-proxy pods
+  local redis_proxy_pods=$(oc get pods -l deployment=redis-proxy --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+  if [[ -n "$redis_proxy_pods" ]]; then
+    local stuck_pods_found=false
+
+    for pod in $redis_proxy_pods; do
+      # Check for connection errors in recent logs
+      local error_logs=$(oc logs "$pod" --tail=50 2>/dev/null | grep -E "err:|error|failed|refused" || true)
+
+      if [[ -n "$error_logs" ]]; then
+        echo "⚠️ Redis Proxy pod $pod shows connection errors:"
+        echo "$error_logs" | head -5
+        stuck_pods_found=true
+
+        echo "🔄 Restarting stuck Redis Proxy pod: $pod"
+        if oc delete pod "$pod" --grace-period=10 2>/dev/null; then
+          echo "✅ Initiated restart of $pod"
+        else
+          echo "⚠️ Failed to restart $pod (may already be terminating)"
+        fi
+      fi
+    done
+
+    if [[ "$stuck_pods_found" == "true" ]]; then
+      echo "⏳ Waiting 20 seconds for Redis Proxy pods to restart and stabilize..."
+      sleep 20
+    else
+      echo "✅ Redis Proxy pods appear healthy"
+    fi
+  else
+    echo "⚠️ No running Redis Proxy pods found - deployment may still be starting"
+  fi
+
   # Ensure Redis Proxy is ready before proceeding
-  echo "Ensuring Redis Proxy is ready..."
-  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 30 10; then
-    echo "❌ Redis Proxy is not ready. Exiting..."
+  echo "⏳ Ensuring Redis Proxy is ready..."
+  if ! wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 60 10; then
+    echo "❌ Redis Proxy is not ready after health checks. Exiting..."
     exit 1
   fi
   echo "✔️ Redis Proxy is ready."
@@ -795,6 +838,8 @@ manage_maintenance_mode() {
   echo "Using pod: $cron_pod"
 
   # Retry logic for the maintenance mode operation
+  local consecutive_redis_errors=0
+
   while true; do
     maintenance_output=$(oc exec -n $DEPLOY_NAMESPACE $cron_pod -- bash -c "php /var/www/html/admin/cli/maintenance.php $script_action" 2>&1)
 
@@ -804,21 +849,58 @@ manage_maintenance_mode() {
     elif echo "$maintenance_output" | grep -q "$expected_output_first_run"; then
       echo "⚠️ Maintenance cannot be set on first run, skipping."
       break
+    elif echo "$maintenance_output" | grep -q "== Maintenance mode" && ! echo "$maintenance_output" | grep -qE "Exception|Error|Fatal"; then
+      # Moodle CLI header present with no errors — maintenance.php ran successfully.
+      # Some Moodle versions output only the header (e.g., "== Maintenance mode (/var/www/html) ==")
+      # without the expected status line. Accept this as success.
+      echo "✔️ Maintenance mode ${action}d (confirmed by CLI header)."
+      break
+    elif echo "$maintenance_output" | grep -qE "Exception|Error" && echo "$maintenance_output" | grep -q "redis-proxy"; then
+      echo "❌ Redis connection error detected: $maintenance_output"
+      consecutive_redis_errors=$((consecutive_redis_errors + 1))
+
+      # After 2 consecutive Redis errors, try restarting redis-proxy pods
+      if [[ $consecutive_redis_errors -ge 2 ]]; then
+        echo "⚠️ Multiple consecutive Redis errors - attempting to restart redis-proxy pods..."
+        local redis_pods=$(oc get pods -l deployment=redis-proxy --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+        if [[ -n "$redis_pods" ]]; then
+          for pod in $redis_pods; do
+            echo "🔄 Restarting redis-proxy pod: $pod"
+            oc delete pod "$pod" --grace-period=10 2>/dev/null || true
+          done
+
+          echo "⏳ Waiting 30 seconds for redis-proxy to restart..."
+          sleep 30
+
+          # Wait for redis-proxy to be ready
+          if wait_for_redis_proxy_ready "redis-proxy" "$DEPLOY_NAMESPACE" 60 5; then
+            echo "✅ Redis Proxy restarted successfully"
+            consecutive_redis_errors=0  # Reset counter after successful restart
+          else
+            echo "⚠️ Redis Proxy may not be fully ready, but continuing..."
+          fi
+        fi
+      fi
     elif echo "$maintenance_output" | grep -q "Exception"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+      consecutive_redis_errors=0  # Reset counter for non-redis errors
     elif echo "$maintenance_output" | grep -q "Error"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
+      consecutive_redis_errors=0  # Reset counter for non-redis errors
     elif echo "$maintenance_output" | grep -q "level=error"; then
       echo "❌ Failed to ${action} maintenance mode. Error message: $maintenance_output"
       exit 1
     else
       echo "Unexpected output while attempting to ${action} maintenance mode:"
       echo "$maintenance_output"
+      consecutive_redis_errors=0  # Reset counter for unexpected output
     fi
 
     retry_count=$((retry_count + 1))
     if [[ $retry_count -ge $max_retries ]]; then
-      echo "❌ Max retries reached. Failed to ${action} maintenance mode. Exiting..."
+      echo "❌ Max retries ($max_retries) reached. Failed to ${action} maintenance mode."
+      echo "💡 Tip: For production with 5 Galera replicas, consider increasing retries or wait time."
       exit 1
     fi
 
@@ -850,63 +932,6 @@ manage_maintenance_mode() {
   fi
 
   return 0
-}
-
-# Function to enable/disable Moodle maintenance mode
-manage_moodle_maintenance() {
-  local action="$1"      # enable, disable, status
-  local moodle_pod="$2"
-  local message="${3:-System maintenance in progress}"
-
-  echo "🔧 Managing Moodle maintenance mode: $action"
-
-  if [[ -z "$action" || -z "$moodle_pod" ]]; then
-    echo "❌ Usage: manage_moodle_maintenance <enable|disable|status> <moodle_pod> [message]"
-    return 1
-  fi
-
-  case "$action" in
-    "enable")
-      echo "  Enabling maintenance mode with message: $message"
-      oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
-        define('CLI_SCRIPT', true);
-        require_once('/var/www/html/config.php');
-        set_config('maintenance_enabled', 1);
-        set_config('maintenance_message', '$message');
-        echo 'Maintenance mode enabled\n';
-      "
-      ;;
-    "disable")
-      echo "  Disabling maintenance mode..."
-      oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
-        define('CLI_SCRIPT', true);
-        require_once('/var/www/html/config.php');
-        set_config('maintenance_enabled', 0);
-        unset_config('maintenance_message');
-        echo 'Maintenance mode disabled\n';
-      "
-      ;;
-    "status")
-      echo "  Checking maintenance mode status..."
-      oc exec -n "$DEPLOY_NAMESPACE" "$moodle_pod" -- php -r "
-        define('CLI_SCRIPT', true);
-        require_once('/var/www/html/config.php');
-        \$enabled = get_config('core', 'maintenance_enabled');
-        \$message = get_config('core', 'maintenance_message');
-        echo 'Maintenance mode: ' . (\$enabled ? 'ENABLED' : 'DISABLED') . '\n';
-        if (\$enabled && \$message) {
-            echo 'Message: ' . \$message . '\n';
-        }
-      "
-      ;;
-    *)
-      echo "❌ Unknown action: $action"
-      echo "Available actions: enable, disable, status"
-      return 1
-      ;;
-  esac
-
-  echo "✅ Maintenance mode operation completed: $action"
 }
 
 # Legacy function names for backward compatibility
