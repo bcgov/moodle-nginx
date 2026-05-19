@@ -5,7 +5,7 @@
   "private": true,
   "dependencies": {
     "lighthouse": "^13.0.1",
-    "puppeteer": "^24.40.0"
+    "puppeteer": "^25.0.4"
   },
   "devDependencies": {
     "jest": "^30.0.0"
