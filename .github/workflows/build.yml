@@ -290,7 +290,7 @@ jobs:
       # job skips npm install + security scan entirely — it just restores and runs Lighthouse.
       - name: 📦 Cache Lighthouse node_modules
         id: lighthouse-modules
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
@@ -358,7 +358,7 @@ jobs:
       # 🗄️ Restore Trivy cache using stable branch prefix
       - name: 🗄️ Restore Trivy Database Cache
         id: trivy-cache-restore-checkenv
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-bootstrap
@@ -390,7 +390,7 @@ jobs:
         # continue-on-error: cache/save fails harmlessly when the key already exists
         # (restore found the same versioned key via prefix match — DB unchanged)
         continue-on-error: true
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db-${{ github.base_ref || github.ref_name }}-v${{ steps.trivy-db-meta-checkenv.outputs.trivy_version }}-db${{ steps.trivy-db-meta-checkenv.outputs.db_updated_at }}
@@ -412,7 +412,7 @@ jobs:
 
       # 🔒 Cache security scan results based on dependency versions
       - name: 🔒 Cache Security Scan Results
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             tmp/comprehensive-security-summary.json
@@ -428,7 +428,7 @@ jobs:
 
       # 🐘 Cache Composer vendor directory for faster PHP scans
       - name: 🐘 Cache Composer Dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.composer/cache
@@ -783,7 +783,7 @@ jobs:
       # 📦 Restore Lighthouse node_modules (installed + scanned by checkEnv)
       - name: 📦 Restore Lighthouse node_modules
         id: lighthouse-modules
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: config/lighthouse/node_modules
           key: ${{ runner.os }}-lh-modules-${{ hashFiles('config/lighthouse/package-lock.json') }}
