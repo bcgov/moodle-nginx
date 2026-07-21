@@ -270,19 +270,26 @@ jobs:
           echo "High/critical vulnerabilities detected in Lighthouse dependencies."
           echo "Attempting automatic remediation with npm audit fix --package-lock-only..."
 
-          # npm audit fix exits non-zero when ANY vulns remain (even moderate).
-          # Always re-audit with --audit-level=high regardless of fix exit code.
-          npm audit fix --package-lock-only --no-fund || true
+          # npm audit fix plans fixes against the pre-fix tree, so multi-level
+          # fixes (e.g. a parent bump that unlocks a patched transitive dep)
+          # need more than one pass. Loop until the audit is clean or 3 attempts.
+          # npm audit fix also exits non-zero when ANY vulns remain (even
+          # moderate), so always re-audit with --audit-level=high instead of
+          # trusting its exit code.
+          for attempt in 1 2 3; do
+            echo "Auto-remediation attempt $attempt..."
+            npm audit fix --package-lock-only --no-fund || true
 
-          echo "Re-running preflight audit after auto-remediation..."
-          if npm audit --audit-level=high --package-lock-only; then
-            echo "Preflight passed after auto-remediation."
-            echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
-            exit 0
-          fi
+            echo "Re-running preflight audit after attempt $attempt..."
+            if npm audit --audit-level=high --package-lock-only; then
+              echo "Preflight passed after auto-remediation."
+              echo "NOTE: Commit the updated config/lighthouse/package-lock.json to keep CI stable."
+              exit 0
+            fi
+          done
 
           echo "Preflight still failing after auto-remediation."
-          echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse and commit package-lock.json."
+          echo "Action: run 'npm audit fix --package-lock-only' in config/lighthouse (repeat until clean) and commit package-lock.json."
           exit 1
 
       # 📦 Front-load ALL Lighthouse dependencies so the Audit job is cache-hit only.
