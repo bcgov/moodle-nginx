@@ -612,8 +612,11 @@ set_resources() {
   # on every container. This ensures stale limits from prior Helm deploys or
   # manual patches are removed. Uses "add" op which creates-or-replaces.
   local num_containers
+  # grep -c already prints "0" on empty input while exiting non-zero, so a
+  # pipeline fallback of `|| echo "0"` produces the two-line string "0\n0" and
+  # breaks the arithmetic below. Recover via assignment fallback instead.
   num_containers=$(oc get "$type/$deployment" -n "$DEPLOY_NAMESPACE" \
-    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c . || echo "0")
+    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c .) || num_containers=0
 
   if [[ "$num_containers" -eq 0 ]]; then
     log_warn "No containers found for $type/$deployment — skipping resource update"
@@ -1501,8 +1504,11 @@ set_resources() {
   # on every container. This ensures stale limits from prior Helm deploys or
   # manual patches are removed. Uses "add" op which creates-or-replaces.
   local num_containers
+  # grep -c already prints "0" on empty input while exiting non-zero, so a
+  # pipeline fallback of `|| echo "0"` produces the two-line string "0\n0" and
+  # breaks the arithmetic below. Recover via assignment fallback instead.
   num_containers=$(oc get "$type/$deployment" -n "$DEPLOY_NAMESPACE" \
-    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c . || echo "0")
+    -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null | grep -c .) || num_containers=0
 
   if [[ "$num_containers" -eq 0 ]]; then
     log_warn "No containers found for $type/$deployment — skipping resource update"

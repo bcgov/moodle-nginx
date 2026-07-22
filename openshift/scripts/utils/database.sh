@@ -1739,6 +1739,13 @@ PROBEPATCH
   done
   if [[ $ready_wait -ge 600 ]]; then
     echo "   ${sts_name}-0 failed to bootstrap within 600s"
+    echo "   --- Diagnostics: pod status / events / logs / grastate ---"
+    oc get pod "${sts_name}-0" -n "$namespace" -o wide || true
+    oc get events -n "$namespace" --field-selector "involvedObject.name=${sts_name}-0" \
+      --sort-by=.lastTimestamp 2>/dev/null | tail -10 || true
+    oc logs "${sts_name}-0" -n "$namespace" --tail=40 --all-containers=true || true
+    oc exec "${sts_name}-0" -n "$namespace" -c mariadb-galera -- \
+      cat /bitnami/mariadb/data/grastate.dat 2>/dev/null || true
 
     # Conditional fallback for stale primary component recovery state.
     # Only apply during single-node recovery when logs indicate NON-PRIMARY loop.

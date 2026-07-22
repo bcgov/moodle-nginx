@@ -428,6 +428,17 @@ if helm list -q | grep -q "^$DB_DEPLOYMENT_NAME$"; then
     done
     if [[ $READY_ATTEMPTS -eq $MAX_READY_ATTEMPTS ]]; then
       echo "${DB_DEPLOYMENT_NAME}-0 failed to bootstrap within 600s"
+      echo "--- Diagnostics: pod status ---"
+      oc get pod "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" -o wide || true
+      echo "--- Diagnostics: recent pod events ---"
+      oc get events -n "$DEPLOY_NAMESPACE" \
+        --field-selector "involvedObject.name=${DB_DEPLOYMENT_NAME}-0" \
+        --sort-by=.lastTimestamp 2>/dev/null | tail -10 || true
+      echo "--- Diagnostics: last 40 container log lines ---"
+      oc logs "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" --tail=40 --all-containers=true || true
+      echo "--- Diagnostics: grastate.dat ---"
+      oc exec "${DB_DEPLOYMENT_NAME}-0" -n "$DEPLOY_NAMESPACE" -c mariadb-galera -- \
+        cat /bitnami/mariadb/data/grastate.dat 2>/dev/null || true
       exit 1
     fi
 

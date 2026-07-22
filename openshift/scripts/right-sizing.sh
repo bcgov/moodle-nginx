@@ -199,7 +199,10 @@ do
       # By this point, resource-based restarts have completed, so triggering
       # another restart will pick up any ConfigMap modifications.
       echo "🔄 Restarting $Deployment to apply configuration changes..."
-      if restart_statefulset "$Deployment" "$DEPLOY_NAMESPACE" "600s" "true" "$PodCount"; then
+      # A rolling restart of an N-node Galera cluster needs ~2.5min per pod
+      # (stop, rejoin, IST sync, readiness). 600s times out at 4/5 pods on the
+      # 5-node dev cluster; 1800s covers 5 pods with margin.
+      if restart_statefulset "$Deployment" "$DEPLOY_NAMESPACE" "1800s" "true" "$PodCount"; then
         echo "✅ $Deployment restarted successfully with verified Galera health"
       else
         echo "⚠️ $Deployment restart failed or health check failed"
