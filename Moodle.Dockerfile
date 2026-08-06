@@ -102,9 +102,13 @@ RUN git fetch --unshallow
 RUN git pull --all
 
 COPY ./config/moodle/$DEPLOY_ENVIRONMENT.config.php "$MOODLE_APP_DIR/config.php"
-# Add PHP info (debugging)
+# info.php was `<?php phpinfo();`. phpinfo() renders the Environment and $_SERVER
+# sections, and config/moodle/remote.config.php reads $CFG->dbpass from
+# $_SERVER['DB_PASSWORD'] (injected via secretKeyRef), so an unauthenticated GET
+# of /info/info.php disclosed the database password in plaintext. Removed from all
+# environments; the source file is deleted so it cannot be reintroduced by a COPY.
+# The directory itself stays -- phpconfigcheck.php below still lives there.
 RUN mkdir $MOODLE_APP_DIR/info
-COPY ./config/php/info.php "$MOODLE_APP_DIR/info/info.php"
 # Add PHP config check (security)
 COPY ./config/php/phpconfigcheck.php "$MOODLE_APP_DIR/info/phpconfigcheck.php"
 
@@ -135,6 +139,14 @@ RUN git clone --depth=1 --recurse-submodules --jobs 8 --branch $PSAELMSYNC_BRANC
     echo "GITHUBSYNC commit: $(git -C $GITHUBSYNC_DIR rev-parse HEAD)" && \
     echo "HVP commit: $(git -C $HVP_DIR rev-parse HEAD)" && \
     echo "REPORT_ALL_BACKUPS commit: $(git -C $REPORT_ALL_BACKUPS_DIR rev-parse HEAD)"
+
+# Drop VCS metadata now that the commit SHAs above have been recorded in the build log.
+# Must stay after those `git -C ... rev-parse` calls, which are the last consumers of it.
+# Core is cloned then `git fetch --unshallow`d, so its .git holds the complete Moodle
+# history -- several hundred MB copied onto the runtime volume for no reason.
+RUN find $MOODLE_APP_DIR -type d -name .git -prune -exec rm -rf {} + && \
+    find $MOODLE_APP_DIR -type f -name .gitignore -delete && \
+    echo "Removed VCS metadata from $MOODLE_APP_DIR"
 
 # Install Composer (if not already present)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
