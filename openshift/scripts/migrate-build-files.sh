@@ -185,7 +185,10 @@ cp /tmp/moodle_index_during_maintenance.php ${dest_dir}/index.php
 log_info "Copying files..."
 # Copy all files, including hidden ones, preserving directory structure
 # rsync -a --no-perms --no-owner --no-times ${src_dir}/ ${dest_dir}/
-rsync -a --no-perms --no-owner --omit-dir-times --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ${src_dir}/ ${dest_dir}/
+# --exclude: VCS metadata is never needed at runtime. Nothing in this repo reads it
+# (version comparison uses version.php), and serving it leaks the full source history.
+rsync -a --no-perms --no-owner --omit-dir-times --exclude='.git' --exclude='.git/**' \
+  --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ${src_dir}/ ${dest_dir}/
 
 log_debug "Restore moodledata/muc/config.php..."
 cp /tmp/moodle.config.php /var/www/moodledata/muc/config.php
