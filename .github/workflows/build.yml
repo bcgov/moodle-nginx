@@ -352,14 +352,27 @@ jobs:
 
       # 🔧 Install Trivy (lightweight, fast install - caching not needed)
       - name: 🛡️ Install Trivy
+        env:
+          # Pinned to an immutable version and verified by checksum.
+          #
+          # Do NOT revert this to the apt repo or to contrib/install.sh. Both resolve
+          # "latest" at run time, which is exactly how the 2026-03-19 TeamPCP
+          # supply-chain compromise executed a poisoned scanner inside this workflow
+          # with the job's secrets in scope (reported by CloudSEK, 2026-08-20).
+          #
+          # To bump: take the version and its matching Linux-64bit sha256 TOGETHER from
+          # https://github.com/aquasecurity/trivy/releases — never one without the other.
+          TRIVY_VERSION: "0.74.0"
+          TRIVY_SHA256: "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
         run: |
-          # Trivy installation is fast (~5-10s), no need to cache
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy
+          set -euo pipefail
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL \
+            -o "/tmp/${tarball}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  /tmp/${tarball}" | sha256sum -c -
+          sudo tar -xzf "/tmp/${tarball}" -C /usr/local/bin trivy
+          rm -f "/tmp/${tarball}"
           trivy --version
 
       # 🗄️ Restore Trivy cache using stable branch prefix
