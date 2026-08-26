@@ -108,8 +108,14 @@ jobs:
       - name: 🛠️ Setup Security Tools
         if: steps.cache-check.outputs.cache-hit != 'true'
         run: |
-          # Install latest Trivy (primary container scanning tool)
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          # NOTE (2026-08-26): Trivy was installed here via
+          #   curl -sfL .../aquasecurity/trivy/main/contrib/install.sh | sh
+          # — an install script piped to a shell from a MUTABLE branch, on a daily
+          # cron, unattended. That is the same class of vector as the 2026-03-19
+          # TeamPCP compromise of this repo's build pipeline (CloudSEK, 2026-08-20).
+          # Removed rather than pinned: container scanning here was advisory only and
+          # duplicated the scan in build.yml, which now installs Trivy pinned by
+          # version and sha256. Do not reintroduce an unpinned installer.
 
           # Setup Node.js for NPM scanning
           curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
@@ -117,37 +123,6 @@ jobs:
 
           # Setup PHP for Composer scanning
           sudo apt-get update && sudo apt-get install -y php-cli php-json composer
-
-      - name: 🐳 Scan Container Images
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p security-results/containers
-
-          # Extract image versions from example.versions.env
-          source example.versions.env
-
-          # Create array of images to scan
-          declare -a images=(
-            "$PHP_IMAGE"
-            "$CRON_IMAGE"
-            "$DB_IMAGE"
-            "$WEB_IMAGE"
-            "$REDIS_IMAGE"
-            "$REDIS_SENTINEL_IMAGE"
-            "$BACKUP_IMAGE"
-            "$GOLANG_IMAGE"
-            "$UBUNTU_IMAGE"
-          )
-
-          echo "🔍 Scanning ${#images[@]} container images with Trivy..."
-
-          for image in "${images[@]}"; do
-            echo "Scanning: $image"
-            image_safe=$(echo "$image" | tr '/:' '_')
-
-            # Trivy scan (comprehensive)
-            trivy image --format json --output "security-results/containers/trivy-$image_safe.json" "$image" || true
-          done
 
       - name: 📦 Scan NPM Dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
@@ -197,8 +172,8 @@ jobs:
           # Scan Helm charts for known vulnerabilities
           helm template . > ../../security-results/helm/manifests.yaml
 
-          # Trivy scan on generated manifests
-          trivy config --format json ../../security-results/helm/manifests.yaml > ../../security-results/helm/trivy-helm.json || true
+          # Trivy manifest scan removed 2026-08-26 along with the unpinned installer
+          # above. helm template output is still archived for review.
 
       - name: 🎯 Custom Version Analysis
         if: steps.cache-check.outputs.cache-hit != 'true'
