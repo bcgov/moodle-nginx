@@ -27,6 +27,77 @@ get_mariadb_env_vars() {
 # GALERA CLUSTER HEALTH AND MONITORING
 # =============================================================================
 
+# =============================================================================
+# GALERA STATUS QUERY WITH TRANSPORT RETRY
+# =============================================================================
+# Runs a wsrep status query inside a Galera pod, tolerating transient stalls
+# between the CI runner and the OpenShift API.
+#
+# Why: `oc exec` has no built-in timeout. On 2026-08-31 two consecutive
+# 950003-test deploys failed here, each blaming a DIFFERENT pod
+# (mariadb-galera-3, then mariadb-galera-1), while the runner logged
+# `dial tcp 142.34.194.119:6443: i/o timeout` and the same pods answered the
+# same query in under a second from a workstation. A single stalled exec hung
+# the check for 2-4 minutes and then failed the entire deploy on a cluster that
+# was fully Synced. The caller compounds it: check_galera_pod_ready runs one
+# exec, then the split-brain block immediately runs a second against the same
+# pod, so a stall in either produced the contradictory output
+# "[ERROR] unhealthy" followed by "size=5, state=Synced" for the same pod.
+#
+# Only TRANSPORT failures are retried: a non-zero exit or empty output. A query
+# that succeeds and reports a pod as not Synced is returned unchanged, so a
+# genuine cluster fault still fails the deploy exactly as before. This makes the
+# check more reliable, not more permissive.
+#
+# Tunable via GALERA_EXEC_TIMEOUT, GALERA_EXEC_RETRIES, GALERA_EXEC_RETRY_DELAY.
+# Requires MARIADB_USER / MARIADB_PASSWORD, set by get_mariadb_env_vars.
+galera_exec_status() {
+  local namespace="$1"
+  local pod_name="$2"
+  local query="$3"
+  local attempts="${GALERA_EXEC_RETRIES:-3}"
+  local exec_timeout="${GALERA_EXEC_TIMEOUT:-30}"
+  local retry_delay="${GALERA_EXEC_RETRY_DELAY:-5}"
+  local out rc attempt
+
+  # `timeout` is GNU coreutils. It is present on the CI runners and in BusyBox
+  # images, but NOT on macOS, and these utils are also sourced by
+  # pod-health-monitor and run from workstations. Degrade to no timeout rather
+  # than failing every health check where it is absent; the retry loop still
+  # provides most of the benefit.
+  local timeout_cmd=""
+  if command -v timeout >/dev/null 2>&1; then
+    timeout_cmd="timeout $exec_timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    timeout_cmd="gtimeout $exec_timeout"
+  fi
+
+  for (( attempt=1; attempt<=attempts; attempt++ )); do
+    # Assign inside `if` so a failure cannot trip `set -e` in a calling script.
+    # $timeout_cmd is intentionally unquoted: it is either empty or two words.
+    if out=$($timeout_cmd oc exec -n "$namespace" "$pod_name" -- \
+               mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" -e "$query" 2>/dev/null); then
+      rc=0
+    else
+      rc=$?
+    fi
+
+    if [[ $rc -eq 0 && -n "$out" ]]; then
+      printf '%s' "$out"
+      return 0
+    fi
+
+    # rc 124 is `timeout` killing a stalled exec; anything else is a transport
+    # or auth failure. Both are worth another try, neither is a health verdict.
+    if [[ $attempt -lt $attempts ]]; then
+      echo "    [WARN] $pod_name: wsrep status query attempt ${attempt}/${attempts} failed (rc=${rc}), retrying in ${retry_delay}s" >&2
+      sleep "$retry_delay"
+    fi
+  done
+
+  return 1
+}
+
   # Function to check if a Galera pod is ready and synced
 check_galera_pod_ready() {
   local pod_name="$1"
@@ -54,13 +125,12 @@ check_galera_pod_ready() {
     return 1
   fi
 
-  # Check Galera cluster status
+  # Check Galera cluster status. Retries transport stalls only; a successful
+  # query reporting an unhealthy state is still treated as unhealthy.
   local galera_status
-  galera_status=$(oc exec -n "$namespace" "$pod_name" -- \
-    mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
-    -e "SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_status'; SHOW STATUS LIKE 'wsrep_cluster_size';" \
-    2>/dev/null) || {
-    echo "    [ERROR] MySQL connection failed for pod $pod_name"
+  galera_status=$(galera_exec_status "$namespace" "$pod_name" \
+    "SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_status'; SHOW STATUS LIKE 'wsrep_cluster_size';") || {
+    echo "    [ERROR] MySQL connection failed for pod $pod_name after ${GALERA_EXEC_RETRIES:-3} attempts"
     return 1
   }
 
@@ -311,10 +381,8 @@ check_galera_cluster_health() {
     # Get detailed status for split-brain detection
     local status_output
     get_mariadb_env_vars "$pod"
-    status_output=$(oc exec -n "$namespace" "$pod" -- \
-      mysql -u "$MARIADB_USER" -p"$MARIADB_PASSWORD" \
-      -e "SHOW STATUS LIKE 'wsrep_cluster_state_uuid'; SHOW STATUS LIKE 'wsrep_cluster_size'; SHOW STATUS LIKE 'wsrep_local_state_comment';" \
-      2>/dev/null) || continue
+    status_output=$(galera_exec_status "$namespace" "$pod" \
+      "SHOW STATUS LIKE 'wsrep_cluster_state_uuid'; SHOW STATUS LIKE 'wsrep_cluster_size'; SHOW STATUS LIKE 'wsrep_local_state_comment';") || continue
 
     local uuid=$(echo "$status_output" | awk '/wsrep_cluster_state_uuid/ {print $2}')
     local size=$(echo "$status_output" | awk '/wsrep_cluster_size/ {print $2}')
