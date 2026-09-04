@@ -288,5 +288,84 @@ else
   fail "focused credential guard test is wired into CI"
 fi
 
+# Regression coverage for the Galera false-negative seen in dev on 2026-09-03.
+# The old cluster check queried every pod twice. A transport timeout in the
+# first query could mark a pod unhealthy even when the second query immediately
+# proved that the same pod was Synced and in the Primary component.
+GALERA_HEALTH_MODE="all-healthy"
+GALERA_STATUS_QUERY_LOG="$TEST_TMP/galera-status-queries"
+GALERA_LEGACY_PROBE_LOG="$TEST_TMP/galera-legacy-probes"
+: >"$GALERA_STATUS_QUERY_LOG"
+: >"$GALERA_LEGACY_PROBE_LOG"
+
+oc() {
+  if [[ "$1" == "get" && "$2" == "pods" ]]; then
+    printf '%s\n' 'mariadb-galera-0 mariadb-galera-1 mariadb-galera-2'
+    return 0
+  fi
+
+  printf 'Unexpected Galera health-test oc call: %s\n' "$*" >&2
+  return 1
+}
+
+get_mariadb_env_vars() {
+  MARIADB_USER="root"
+  MARIADB_PASSWORD="same"
+  export MARIADB_USER MARIADB_PASSWORD
+  return 0
+}
+
+# This represents the obsolete first snapshot. Pod 2 appears unreachable here,
+# while the complete status query below succeeds for every pod.
+check_galera_pod_ready() {
+  printf '%s\n' "$1" >>"$GALERA_LEGACY_PROBE_LOG"
+  [[ "$1" != "mariadb-galera-2" ]]
+}
+
+galera_exec_status() {
+  local pod_name="$2"
+  local local_state="Synced"
+  printf '%s\n' "$pod_name" >>"$GALERA_STATUS_QUERY_LOG"
+
+  if [[ "$GALERA_HEALTH_MODE" == "one-unsynced" && "$pod_name" == "mariadb-galera-2" ]]; then
+    local_state="Donor/Desynced"
+  fi
+
+  printf 'wsrep_cluster_state_uuid\ttest-cluster-uuid\n'
+  printf 'wsrep_cluster_size\t3\n'
+  printf 'wsrep_local_state_comment\t%s\n' "$local_state"
+  printf 'wsrep_cluster_status\tPrimary\n'
+}
+
+send_notification() { :; }
+
+DB_PASSWORD="same"
+if check_galera_cluster_health \
+    'app.kubernetes.io/name=mariadb-galera' test-namespace 3 \
+    >"$TEST_TMP/galera-healthy.stdout" 2>"$TEST_TMP/galera-healthy.stderr"; then
+  galera_health_rc=0
+else
+  galera_health_rc=$?
+fi
+
+galera_query_count=$(wc -l <"$GALERA_STATUS_QUERY_LOG" | tr -d ' ')
+galera_legacy_probe_count=$(wc -l <"$GALERA_LEGACY_PROBE_LOG" | tr -d ' ')
+if [[ "$galera_health_rc" -eq 0 && "$galera_query_count" -eq 3 && "$galera_legacy_probe_count" -eq 0 ]]; then
+  pass "Galera cluster health uses one coherent status snapshot per pod"
+else
+  fail "Galera cluster health uses one coherent status snapshot per pod"
+fi
+
+GALERA_HEALTH_MODE="one-unsynced"
+: >"$GALERA_STATUS_QUERY_LOG"
+: >"$GALERA_LEGACY_PROBE_LOG"
+if check_galera_cluster_health \
+    'app.kubernetes.io/name=mariadb-galera' test-namespace 3 \
+    >"$TEST_TMP/galera-unsynced.stdout" 2>"$TEST_TMP/galera-unsynced.stderr"; then
+  fail "Galera cluster health rejects a genuinely unsynced pod"
+else
+  pass "Galera cluster health rejects a genuinely unsynced pod"
+fi
+
 printf '1..%d\n' "$tests_run"
 exit "$tests_failed"

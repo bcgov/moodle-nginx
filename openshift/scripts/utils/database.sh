@@ -369,29 +369,40 @@ check_galera_cluster_health() {
   local states=()
   local detailed_status=""
 
-  # Check each pod using existing utility function
+  # Query each pod once and use that single status snapshot for both health and
+  # split-brain detection. Previously this loop called check_galera_pod_ready
+  # first and then immediately queried the same pod again for details. If the
+  # first oc exec timed out but the second succeeded, the pod stayed counted as
+  # unhealthy even though the displayed details proved it was Synced.
   for pod in "${pods[@]}"; do
-    if check_galera_pod_ready "$pod" "$namespace" "$expected_size"; then
-      healthy_pods=$((healthy_pods + 1))
-      echo "    [OK] $pod: healthy and synced"
-    else
-      echo "    [ERROR] $pod: unhealthy or not synced"
+    if ! get_mariadb_env_vars "$pod"; then
+      echo "    [ERROR] $pod: database credentials unavailable"
+      continue
     fi
 
-    # Get detailed status for split-brain detection
     local status_output
-    get_mariadb_env_vars "$pod"
     status_output=$(galera_exec_status "$namespace" "$pod" \
-      "SHOW STATUS LIKE 'wsrep_cluster_state_uuid'; SHOW STATUS LIKE 'wsrep_cluster_size'; SHOW STATUS LIKE 'wsrep_local_state_comment';") || continue
+      "SHOW STATUS LIKE 'wsrep_cluster_state_uuid'; SHOW STATUS LIKE 'wsrep_cluster_size'; SHOW STATUS LIKE 'wsrep_local_state_comment'; SHOW STATUS LIKE 'wsrep_cluster_status';") || {
+      echo "    [ERROR] $pod: status query failed after ${GALERA_EXEC_RETRIES:-3} attempts"
+      continue
+    }
 
     local uuid=$(echo "$status_output" | awk '/wsrep_cluster_state_uuid/ {print $2}')
     local size=$(echo "$status_output" | awk '/wsrep_cluster_size/ {print $2}')
     local state=$(echo "$status_output" | awk '/wsrep_local_state_comment/ {print $2}')
+    local cluster_status=$(echo "$status_output" | awk '/wsrep_cluster_status/ {print $2}')
 
     uuids+=("$uuid")
     sizes+=("$size")
     states+=("$state")
-    detailed_status+="$pod: uuid=$uuid, size=$size, state=$state; "
+    detailed_status+="$pod: uuid=$uuid, size=$size, state=$state, component=$cluster_status; "
+
+    if [[ "$state" == "Synced" && "$cluster_status" == "Primary" ]]; then
+      healthy_pods=$((healthy_pods + 1))
+      echo "    [OK] $pod: healthy and synced"
+    else
+      echo "    [ERROR] $pod: unhealthy or not synced (state=$state, component=$cluster_status)"
+    fi
   done
 
   # Analyze cluster consistency
