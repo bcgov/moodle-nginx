@@ -181,6 +181,14 @@ else
   log_warn "Logging module not found - using fallback functions"
 fi
 
+# Load API connectivity utilities (depends on logging)
+if [[ -f "$UTILS_DIR/${UTILS_PREFIX}connectivity.sh" ]]; then
+  source "$UTILS_DIR/${UTILS_PREFIX}connectivity.sh"
+  log_debug "Loaded API connectivity utilities module"
+else
+  log_warn "Connectivity module not found - transient API retries unavailable"
+fi
+
 # Load validation utilities (depends on logging)
 if [[ -f "$UTILS_DIR/${UTILS_PREFIX}validation.sh" ]]; then
   source "$UTILS_DIR/${UTILS_PREFIX}validation.sh"

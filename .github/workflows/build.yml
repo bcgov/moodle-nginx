@@ -187,6 +187,9 @@ jobs:
           # For push events, checkout the pushed branch (github.ref)
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Test database credential deployment guard
+        run: bash ./openshift/scripts/tests/test-credential-guard.sh
+
       # Dependabot PRs cannot access secrets (ARTIFACTORY_URL, etc.) and should
       # not trigger full builds. Skip builds/deploy; keep preflight audits only.
       - name: 🤖 Dependabot — skip builds and deploy

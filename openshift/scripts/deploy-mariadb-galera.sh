@@ -221,11 +221,37 @@ echo "TIER 1.5: Credentials Secret"
 echo "======================================================================="
 
 echo "Ensuring ${DB_DEPLOYMENT_NAME} credentials secret..."
-oc create secret generic "$DB_DEPLOYMENT_NAME" \
+if ! galera_guard_credentials_unchanged \
+    "$DB_DEPLOYMENT_NAME" "${APP:-moodle}-secrets" "$DEPLOY_NAMESPACE" \
+    "$DB_PASSWORD" "$DB_PASSWORD" "$DB_PASSWORD"; then
+  echo "Refusing to overwrite database credentials for an initialized cluster." >&2
+  echo "Rotate MariaDB accounts and both Kubernetes Secrets together before deploying." >&2
+  exit 1
+fi
+
+credentials_manifest=$(mktemp "${TMPDIR:-/tmp}/moodle-db-credentials.XXXXXX") || {
+  echo "Failed to create a protected temporary file for the credentials Secret" >&2
+  exit 1
+}
+chmod 600 "$credentials_manifest"
+
+if ! oc create secret generic "$DB_DEPLOYMENT_NAME" \
   --from-literal=mariadb-root-password="$DB_PASSWORD" \
   --from-literal=mariadb-password="$DB_PASSWORD" \
   --from-literal=mariadb-galera-mariabackup-password="$DB_PASSWORD" \
-  --dry-run=client --save-config -o yaml | oc apply -f -
+  --dry-run=client -o json >"$credentials_manifest"; then
+  rm -f "$credentials_manifest"
+  echo "Failed to build the credentials Secret manifest; no Secret was changed" >&2
+  exit 1
+fi
+
+if ! run_with_api_retry "Apply MariaDB credentials Secret" \
+    oc apply -f "$credentials_manifest"; then
+  rm -f "$credentials_manifest"
+  echo "Failed to apply the credentials Secret" >&2
+  exit 1
+fi
+rm -f "$credentials_manifest"
 
 # Prevent Helm from deleting this secret during uninstall/upgrade
 oc annotate secret "$DB_DEPLOYMENT_NAME" helm.sh/resource-policy=keep --overwrite 2>/dev/null || true

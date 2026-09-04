@@ -1105,6 +1105,152 @@ galera_verify_timeouts() {
 # Secondary PVCs are expendable -- secondaries rebuild via SST from primary.
 # =============================================================================
 
+# Refuse to let an ordinary deployment change credentials for an initialized
+# Galera cluster. The Bitnami chart consumes an existing Secret, but changing
+# that Secret does not ALTER the accounts stored on an existing database PVC.
+# Its probes then begin reading the new root password while MariaDB still
+# expects the old one, which can make every pod fail health checks.
+#
+# The caller supplies the exact values it intends to render. Values are encoded
+# before comparison and are never printed. A StatefulSet or primary PVC counts
+# as durable cluster state; when either exists, both active Secrets must exist
+# and match before an idempotent reapply is allowed.
+#
+# Arguments:
+#   $1 - Galera StatefulSet / credentials Secret name
+#   $2 - Moodle application Secret name
+#   $3 - Namespace
+#   $4 - Desired MariaDB root password
+#   $5 - Desired MariaDB application password
+#   $6 - Desired MariaBackup password
+#
+# Returns:
+#   0 = verified fresh cluster, or all existing credentials match
+#   1 = state is unreadable/incomplete, or any credential differs
+galera_guard_credentials_unchanged() {
+  local sts_name="$1"
+  local app_secret_name="$2"
+  local namespace="$3"
+  local desired_root_password="$4"
+  local desired_app_password="$5"
+  local desired_backup_password="$6"
+  local existing_sts
+  local primary_pvc
+
+  if [[ -z "$sts_name" || -z "$app_secret_name" || -z "$namespace" \
+      || -z "$desired_root_password" || -z "$desired_app_password" \
+      || -z "$desired_backup_password" ]]; then
+    log_error "Galera credential validation requires resource names, namespace, and all desired credentials"
+    return 1
+  fi
+
+  if ! existing_sts=$(run_with_api_retry "Check Galera StatefulSet before credential update" \
+      oc get statefulset "$sts_name" -n "$namespace" \
+      --ignore-not-found -o name); then
+    log_error "Could not determine whether the Galera StatefulSet exists"
+    return 1
+  fi
+
+  if ! primary_pvc=$(run_with_api_retry "Check primary Galera PVC before credential update" \
+      oc get pvc "data-${sts_name}-0" -n "$namespace" \
+      --ignore-not-found -o name); then
+    log_error "Could not determine whether the primary Galera PVC exists"
+    return 1
+  fi
+
+  if [[ -z "$existing_sts" && -z "$primary_pvc" ]]; then
+    log_info "No StatefulSet or primary PVC exists; initial Galera credentials may be created"
+    return 0
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_error "jq is required to validate existing Galera credentials"
+    return 1
+  fi
+
+  local db_secret_json
+  local app_secret_json
+  if ! db_secret_json=$(run_with_api_retry "Read existing Galera credentials Secret" \
+      oc get secret "$sts_name" -n "$namespace" \
+      --ignore-not-found -o json); then
+    log_error "Could not read the existing Galera credentials Secret"
+    return 1
+  fi
+  if [[ -z "$db_secret_json" ]]; then
+    log_error "Initialized Galera state exists but Secret '$sts_name' is missing"
+    return 1
+  fi
+
+  if ! app_secret_json=$(run_with_api_retry "Read existing Moodle database Secret" \
+      oc get secret "$app_secret_name" -n "$namespace" \
+      --ignore-not-found -o json); then
+    log_error "Could not read the existing Moodle database Secret"
+    return 1
+  fi
+  if [[ -z "$app_secret_json" ]]; then
+    log_error "Initialized Galera state exists but Secret '$app_secret_name' is missing"
+    return 1
+  fi
+
+  local live_root_encoded
+  local live_app_encoded
+  local live_backup_encoded
+  local live_moodle_encoded
+  if ! live_root_encoded=$(printf '%s' "$db_secret_json" \
+      | jq -er '.data["mariadb-root-password"] | strings | select(length > 0)'); then
+    log_error "Existing Galera Secret has no readable root credential"
+    return 1
+  fi
+  if ! live_app_encoded=$(printf '%s' "$db_secret_json" \
+      | jq -er '.data["mariadb-password"] | strings | select(length > 0)'); then
+    log_error "Existing Galera Secret has no readable application credential"
+    return 1
+  fi
+  if ! live_backup_encoded=$(printf '%s' "$db_secret_json" \
+      | jq -er '.data["mariadb-galera-mariabackup-password"] | strings | select(length > 0)'); then
+    log_error "Existing Galera Secret has no readable MariaBackup credential"
+    return 1
+  fi
+  if ! live_moodle_encoded=$(printf '%s' "$app_secret_json" \
+      | jq -er '.data["database-password"] | strings | select(length > 0)'); then
+    log_error "Existing Moodle Secret has no readable database credential"
+    return 1
+  fi
+
+  local desired_root_encoded
+  local desired_app_encoded
+  local desired_backup_encoded
+  desired_root_encoded=$(printf '%s' "$desired_root_password" | base64 | tr -d '\r\n')
+  desired_app_encoded=$(printf '%s' "$desired_app_password" | base64 | tr -d '\r\n')
+  desired_backup_encoded=$(printf '%s' "$desired_backup_password" | base64 | tr -d '\r\n')
+
+  local mismatch=false
+  if [[ "$live_root_encoded" != "$desired_root_encoded" ]]; then
+    log_error "Desired MariaDB root credential differs from the initialized cluster Secret"
+    mismatch=true
+  fi
+  if [[ "$live_app_encoded" != "$desired_app_encoded" ]]; then
+    log_error "Desired MariaDB application credential differs from the initialized cluster Secret"
+    mismatch=true
+  fi
+  if [[ "$live_backup_encoded" != "$desired_backup_encoded" ]]; then
+    log_error "Desired MariaBackup credential differs from the initialized cluster Secret"
+    mismatch=true
+  fi
+  if [[ "$live_moodle_encoded" != "$desired_app_encoded" ]]; then
+    log_error "Desired Moodle application credential differs from its active Secret"
+    mismatch=true
+  fi
+
+  if [[ "$mismatch" == "true" ]]; then
+    log_error "Ordinary deployment cannot rotate database credentials; use the coordinated rotation procedure"
+    return 1
+  fi
+
+  log_success "Existing database credentials match the deployment inputs"
+  return 0
+}
+
 # Verify galera-0 is safe to bootstrap from.
 # Checks wsrep state to confirm galera-0 has authoritative data.
 #

@@ -172,6 +172,20 @@ jobs:
           fi
           oc project ${{ inputs.DEPLOY_NAMESPACE }}
 
+      - name: Guard database credentials before maintenance
+        if: success()
+        run: |
+          source ./openshift/scripts/_utils.sh
+          galera_guard_credentials_unchanged \
+            "$DB_DEPLOYMENT_NAME" "${APP}-secrets" "$DEPLOY_NAMESPACE" \
+            "$DB_PASSWORD" "$DB_PASSWORD" "$DB_PASSWORD"
+        env:
+          DEBUG_LEVEL: ${{ inputs.DEBUG_LEVEL }}
+          APP: ${{ inputs.APP }}
+          DEPLOY_NAMESPACE: ${{ inputs.DEPLOY_NAMESPACE }}
+          DB_DEPLOYMENT_NAME: ${{ inputs.DB_DEPLOYMENT_NAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
       - name: Deploy/Enable Maintenance Messaging
         if: success()
         run: bash ./openshift/scripts/deploy-maintenance-message.sh
@@ -304,4 +318,3 @@ jobs:
         if: steps.deploy_pod_health_monitor.outcome == 'failure'
         run: |
           echo "Warning: Health monitor deployment failed, continuing with deployment..."
-
