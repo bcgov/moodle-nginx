@@ -258,6 +258,12 @@ else
   fail "workflow guard runs before maintenance-mode mutation"
 fi
 
+if grep -Fq 'name: Deploy Backups via Helm' "$DEPLOY_WORKFLOW"; then
+  fail "deprecated backup deployment is absent from the application workflow"
+else
+  pass "deprecated backup deployment is absent from the application workflow"
+fi
+
 if grep -q 'connectivity.sh' "$SCRIPTS_DIR/_utils.sh"; then
   pass "deployment utility loader includes the retry dependency"
 else
