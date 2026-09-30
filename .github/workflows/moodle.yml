@@ -147,7 +147,7 @@ jobs:
 
       # 🗄️ Cache Trivy vulnerability database (refreshed daily)
       - name: 🗄️ Cache Trivy Database
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db-${{ github.run_id }}
