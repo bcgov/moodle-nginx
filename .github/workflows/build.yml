@@ -15,8 +15,14 @@
 #     → If someone accidentally leaves "main" selected, this file catches it,
 #       dispatches the build to the correct target branch, and exits cleanly.
 #
-#   workflow_call:
-#     → Used by scheduled-rebuild.yml to trigger builds on target branches.
+#   schedule:
+#     → None. The weekly scheduled-rebuild.yml was removed in November 2026:
+#       every run failed against the platform firewall's connection-rate limit
+#       and left the dev Galera StatefulSet broken.
+#     → GitHub runs schedule triggers ONLY from the default branch (main).
+#       The 950003-* branches still carry a dormant `schedule:` block in their
+#       build.yml. Remove it before making one of them the default branch,
+#       or weekly deploys will start again.
 # ============================================================================
 name: 🚀 Build and Deploy to OpenShift
 
